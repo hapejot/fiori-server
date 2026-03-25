@@ -8,6 +8,8 @@ pub struct FieldDef {
     pub max_length: Option<u32>,
     pub precision: Option<u32>,
     pub scale: Option<u32>,
+    /// Feld ist nicht editierbar (Key, berechnete Werte etc.)
+    pub immutable: bool,
 }
 
 /// LineItem-Referenz mit Annotation-spezifischen Attributen.
@@ -286,7 +288,63 @@ pub fn build_annotations_xml(
     x
 }
 
+/// Erzeugt Capabilities-Annotations fuer ein EntitySet (UpdateRestrictions, DraftRoot).
+pub fn build_capabilities_annotations(
+    entity_set_name: &str,
+    entity_type_name: &str,
+    fields: &[FieldDef],
+) -> String {
+    let mut x = String::new();
+
+    // UpdateRestrictions + DraftRoot auf dem EntitySet
+    x.push_str(&format!(
+        "<Annotations Target=\"{ns}.EntityContainer/{set}\">",
+        ns = NAMESPACE,
+        set = entity_set_name
+    ));
+    x.push_str("<Annotation Term=\"Org.OData.Capabilities.V1.UpdateRestrictions\">");
+    x.push_str("<Record>");
+    x.push_str("<PropertyValue Property=\"Updatable\" Bool=\"true\"/>");
+    x.push_str("</Record>");
+    x.push_str("</Annotation>");
+    // DraftRoot – aktiviert den Edit-Button in Fiori Elements V4
+    x.push_str("<Annotation Term=\"Common.DraftRoot\">");
+    x.push_str("<Record Type=\"Common.DraftRootType\">");
+    x.push_str(&format!(
+        "<PropertyValue Property=\"ActivationAction\" String=\"{ns}.draftActivate\"/>",
+        ns = NAMESPACE
+    ));
+    x.push_str(&format!(
+        "<PropertyValue Property=\"EditAction\" String=\"{ns}.draftEdit\"/>",
+        ns = NAMESPACE
+    ));
+    x.push_str(&format!(
+        "<PropertyValue Property=\"PreparationAction\" String=\"{ns}.draftPrepare\"/>",
+        ns = NAMESPACE
+    ));
+    x.push_str("</Record>");
+    x.push_str("</Annotation>");
+    x.push_str("</Annotations>");
+
+    // Immutable-Annotations auf Properties -> Felder im Edit-Mode readonly
+    let immutable_fields: Vec<&FieldDef> = fields.iter().filter(|f| f.immutable).collect();
+    for f in &immutable_fields {
+        x.push_str(&format!(
+            "<Annotations Target=\"{ns}.{ty}/{prop}\">",
+            ns = NAMESPACE,
+            ty = entity_type_name,
+            prop = f.name
+        ));
+        x.push_str("<Annotation Term=\"Org.OData.Core.V1.Immutable\" Bool=\"true\"/>");
+        x.push_str("</Annotations>");
+    }
+
+    x
+}
+
 /// Erzeugt das EntityType-XML aus Typ-Name, Schluesselfeld und Property-Definitionen.
+/// Fuegt automatisch Draft-Properties (IsActiveEntity, HasActiveEntity, HasDraftEntity)
+/// sowie Draft-NavigationProperties (SiblingEntity, DraftAdministrativeData) hinzu.
 pub fn build_entity_type_xml(type_name: &str, key_field: &str, props: &[FieldDef]) -> String {
     let mut x = format!("<EntityType Name=\"{}\">", type_name);
     x.push_str("<Key>");
@@ -294,6 +352,7 @@ pub fn build_entity_type_xml(type_name: &str, key_field: &str, props: &[FieldDef
         "<PropertyRef Name=\"{}\"/>",
         key_field
     ));
+    x.push_str("<PropertyRef Name=\"IsActiveEntity\"/>");
     x.push_str("</Key>");
     for p in props {
         let mut attr = format!("Type=\"{}\"", p.edm_type);
@@ -320,7 +379,67 @@ pub fn build_entity_type_xml(type_name: &str, key_field: &str, props: &[FieldDef
             p.name, pad, attr
         ));
     }
+    // Draft-Properties
+    x.push_str("<Property Name=\"IsActiveEntity\"   Type=\"Edm.Boolean\" Nullable=\"false\" DefaultValue=\"true\"/>");
+    x.push_str("<Property Name=\"HasActiveEntity\"  Type=\"Edm.Boolean\" Nullable=\"false\" DefaultValue=\"false\"/>");
+    x.push_str("<Property Name=\"HasDraftEntity\"   Type=\"Edm.Boolean\" Nullable=\"false\" DefaultValue=\"false\"/>");
+    // Draft-NavigationProperties
+    x.push_str(&format!(
+        "<NavigationProperty Name=\"SiblingEntity\" Type=\"{ns}.{ty}\"/>",
+        ns = NAMESPACE, ty = type_name
+    ));
+    x.push_str(&format!(
+        "<NavigationProperty Name=\"DraftAdministrativeData\" Type=\"{ns}.DraftAdministrativeData\" ContainsTarget=\"true\"/>",
+        ns = NAMESPACE
+    ));
     x.push_str("</EntityType>");
+    x
+}
+
+/// Erzeugt das DraftAdministrativeData EntityType-XML.
+pub fn build_draft_admin_type_xml() -> String {
+    let mut x = String::from("<EntityType Name=\"DraftAdministrativeData\">");
+    x.push_str("<Key><PropertyRef Name=\"DraftUUID\"/></Key>");
+    x.push_str("<Property Name=\"DraftUUID\"              Type=\"Edm.Guid\" Nullable=\"false\"/>");
+    x.push_str("<Property Name=\"CreationDateTime\"       Type=\"Edm.DateTimeOffset\" Precision=\"7\"/>");
+    x.push_str("<Property Name=\"CreatedByUser\"          Type=\"Edm.String\" MaxLength=\"256\"/>");
+    x.push_str("<Property Name=\"DraftIsCreatedByMe\"     Type=\"Edm.Boolean\"/>");
+    x.push_str("<Property Name=\"LastChangeDateTime\"     Type=\"Edm.DateTimeOffset\" Precision=\"7\"/>");
+    x.push_str("<Property Name=\"LastChangedByUser\"      Type=\"Edm.String\" MaxLength=\"256\"/>");
+    x.push_str("<Property Name=\"InProcessByUser\"        Type=\"Edm.String\" MaxLength=\"256\"/>");
+    x.push_str("<Property Name=\"DraftIsProcessedByMe\"   Type=\"Edm.Boolean\"/>");
+    x.push_str("</EntityType>");
+    x
+}
+
+/// Erzeugt die gebundenen Draft-Actions (draftEdit, draftActivate, draftPrepare)
+/// fuer einen Entity-Typ.
+pub fn build_draft_actions_xml(type_name: &str) -> String {
+    let fqn = format!("{}.{}", NAMESPACE, type_name);
+    let mut x = String::new();
+    // draftEdit
+    x.push_str(&format!(
+        "<Action Name=\"draftEdit\" IsBound=\"true\" EntitySetPath=\"in\">\
+         <Parameter Name=\"in\" Type=\"{fqn}\"/>\
+         <Parameter Name=\"PreserveChanges\" Type=\"Edm.Boolean\"/>\
+         <ReturnType Type=\"{fqn}\"/>\
+         </Action>"
+    ));
+    // draftActivate
+    x.push_str(&format!(
+        "<Action Name=\"draftActivate\" IsBound=\"true\" EntitySetPath=\"in\">\
+         <Parameter Name=\"in\" Type=\"{fqn}\"/>\
+         <ReturnType Type=\"{fqn}\"/>\
+         </Action>"
+    ));
+    // draftPrepare
+    x.push_str(&format!(
+        "<Action Name=\"draftPrepare\" IsBound=\"true\" EntitySetPath=\"in\">\
+         <Parameter Name=\"in\" Type=\"{fqn}\"/>\
+         <Parameter Name=\"SideEffectsQualifier\" Type=\"Edm.String\"/>\
+         <ReturnType Type=\"{fqn}\"/>\
+         </Action>"
+    ));
     x
 }
 

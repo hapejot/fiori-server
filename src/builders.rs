@@ -1,5 +1,6 @@
 use serde_json::{json, Value};
 
+use crate::annotations::{build_draft_actions_xml, build_draft_admin_type_xml};
 use crate::entity::ODataEntity;
 use crate::settings::Settings;
 use crate::{BASE_PATH, NAMESPACE};
@@ -23,6 +24,16 @@ pub fn build_metadata_xml(entities: &[&dyn ODataEntity]) -> String {
         .collect::<Vec<_>>()
         .join("\n");
 
+    // DraftAdministrativeData EntityType
+    let draft_admin_type = build_draft_admin_type_xml();
+
+    // Bound draft actions fuer jede Entitaet
+    let draft_actions: String = entities
+        .iter()
+        .map(|e| build_draft_actions_xml(e.type_name()))
+        .collect::<Vec<_>>()
+        .join("\n");
+
     println!("entity types: {}", entity_types.len());
     println!("entity sets: {}", entity_sets.len());
     println!("annotations: {}", annotations.len());
@@ -34,6 +45,9 @@ pub fn build_metadata_xml(entities: &[&dyn ODataEntity]) -> String {
   <edmx:Reference Uri="https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Capabilities.V1.xml">
     <edmx:Include Namespace="Org.OData.Capabilities.V1" Alias="Capabilities"/>
   </edmx:Reference>
+  <edmx:Reference Uri="https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Core.V1.xml">
+    <edmx:Include Namespace="Org.OData.Core.V1" Alias="Core"/>
+  </edmx:Reference>
   <edmx:Reference Uri="https://sap.github.io/odata-vocabularies/vocabularies/UI.xml">
     <edmx:Include Namespace="com.sap.vocabularies.UI.v1" Alias="UI"/>
   </edmx:Reference>
@@ -44,8 +58,11 @@ pub fn build_metadata_xml(entities: &[&dyn ODataEntity]) -> String {
   <edmx:DataServices>
     <Schema Namespace="{ns}" xmlns="http://docs.oasis-open.org/odata/ns/edm">
 {entity_types}
+{draft_admin_type}
+{draft_actions}
       <EntityContainer Name="EntityContainer">
 {entity_sets}
+        <EntitySet Name="DraftAdministrativeData" EntityType="{ns}.DraftAdministrativeData"/>
       </EntityContainer>
 {annotations}
     </Schema>
@@ -53,6 +70,8 @@ pub fn build_metadata_xml(entities: &[&dyn ODataEntity]) -> String {
 </edmx:Edmx>"#,
         ns = NAMESPACE,
         entity_types = entity_types,
+        draft_admin_type = draft_admin_type,
+        draft_actions = draft_actions,
         entity_sets = entity_sets,
         annotations = annotations,
     )

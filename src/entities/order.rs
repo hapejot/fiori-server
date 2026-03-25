@@ -71,17 +71,17 @@ impl ODataEntity for OrderEntity {
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
-            FieldDef { name: "OrderID",           label: "Bestell-Nr.",   edm_type: "Edm.String",          max_length: Some(10),  precision: None,     scale: None },
-            FieldDef { name: "ProductID",         label: "Produkt-ID",    edm_type: "Edm.String",          max_length: Some(10),  precision: None,     scale: None },
-            FieldDef { name: "CustomerName",      label: "Kunde",         edm_type: "Edm.String",          max_length: Some(80),  precision: None,     scale: None },
-            FieldDef { name: "Quantity",          label: "Menge",         edm_type: "Edm.Int32",           max_length: None,      precision: None,     scale: None },
-            FieldDef { name: "TotalAmount",       label: "Gesamtbetrag",  edm_type: "Edm.Decimal",         max_length: None,      precision: Some(15), scale: Some(2) },
-            FieldDef { name: "Currency",          label: "Waehrung",      edm_type: "Edm.String",          max_length: Some(3),   precision: None,     scale: None },
-            FieldDef { name: "Status",            label: "Status",        edm_type: "Edm.String",          max_length: Some(1),   precision: None,     scale: None },
-            FieldDef { name: "StatusCriticality", label: "Kritikalitaet", edm_type: "Edm.Byte",            max_length: None,      precision: None,     scale: None },
-            FieldDef { name: "OrderDate",         label: "Bestelldatum",  edm_type: "Edm.DateTimeOffset",  max_length: None,      precision: None,     scale: None },
-            FieldDef { name: "DeliveryDate",      label: "Lieferdatum",   edm_type: "Edm.DateTimeOffset",  max_length: None,      precision: None,     scale: None },
-            FieldDef { name: "Note",              label: "Notiz",         edm_type: "Edm.String",          max_length: Some(500), precision: None,     scale: None },
+            FieldDef { name: "OrderID",           label: "Bestell-Nr.",   edm_type: "Edm.String",          max_length: Some(10),  precision: None,     scale: None, immutable: true },
+            FieldDef { name: "ProductID",         label: "Produkt-ID",    edm_type: "Edm.String",          max_length: Some(10),  precision: None,     scale: None, immutable: true },
+            FieldDef { name: "CustomerName",      label: "Kunde",         edm_type: "Edm.String",          max_length: Some(80),  precision: None,     scale: None, immutable: false },
+            FieldDef { name: "Quantity",          label: "Menge",         edm_type: "Edm.Int32",           max_length: None,      precision: None,     scale: None, immutable: false },
+            FieldDef { name: "TotalAmount",       label: "Gesamtbetrag",  edm_type: "Edm.Decimal",         max_length: None,      precision: Some(15), scale: Some(2), immutable: false },
+            FieldDef { name: "Currency",          label: "Waehrung",      edm_type: "Edm.String",          max_length: Some(3),   precision: None,     scale: None, immutable: false },
+            FieldDef { name: "Status",            label: "Status",        edm_type: "Edm.String",          max_length: Some(1),   precision: None,     scale: None, immutable: false },
+            FieldDef { name: "StatusCriticality", label: "Kritikalitaet", edm_type: "Edm.Byte",            max_length: None,      precision: None,     scale: None, immutable: true },
+            FieldDef { name: "OrderDate",         label: "Bestelldatum",  edm_type: "Edm.DateTimeOffset",  max_length: None,      precision: None,     scale: None, immutable: true },
+            FieldDef { name: "DeliveryDate",      label: "Lieferdatum",   edm_type: "Edm.DateTimeOffset",  max_length: None,      precision: None,     scale: None, immutable: false },
+            FieldDef { name: "Note",              label: "Notiz",         edm_type: "Edm.String",          max_length: Some(500), precision: None,     scale: None, immutable: false },
         ];
         Some(FIELDS)
     }
@@ -95,7 +95,11 @@ impl ODataEntity for OrderEntity {
 
     fn entity_set(&self) -> String {
         format!(
-            "<EntitySet Name=\"Orders\" EntityType=\"{ns}.Order\"><NavigationPropertyBinding Path=\"Product\" Target=\"Products\"/></EntitySet>",
+            "<EntitySet Name=\"Orders\" EntityType=\"{ns}.Order\">\n\
+             <NavigationPropertyBinding Path=\"Product\" Target=\"Products\"/>\n\
+             <NavigationPropertyBinding Path=\"SiblingEntity\" Target=\"Orders\"/>\n\
+             <NavigationPropertyBinding Path=\"DraftAdministrativeData\" Target=\"DraftAdministrativeData\"/>\n\
+             </EntitySet>",
             ns = NAMESPACE
         )
     }

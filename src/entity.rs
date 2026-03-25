@@ -48,11 +48,20 @@ pub trait ODataEntity: Sync {
     }
     /// EDMX Annotations-XML – wird automatisch aus annotations_def() erzeugt.
     fn annotations(&self) -> String {
-        match (self.annotations_def(), self.fields_def()) {
+        let mut xml = match (self.annotations_def(), self.fields_def()) {
             (Some(def), Some(fields)) => build_annotations_xml(self.type_name(), def, fields),
             (Some(def), None) => build_annotations_xml(self.type_name(), def, &[]),
             _ => String::new(),
+        };
+        // UpdateRestrictions + Immutable-Annotations
+        if let Some(fields) = self.fields_def() {
+            xml.push_str(&build_capabilities_annotations(
+                self.set_name(),
+                self.type_name(),
+                fields,
+            ));
         }
+        xml
     }
     /// $expand-Logik auf einen einzelnen Datensatz anwenden (optional).
     fn expand_record(

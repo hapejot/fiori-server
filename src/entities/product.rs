@@ -49,26 +49,29 @@ impl ODataEntity for ProductEntity {
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
-            FieldDef { name: "ProductID",         label: "Produkt-ID",    edm_type: "Edm.String",          max_length: Some(10),  precision: None,     scale: None },
-            FieldDef { name: "ProductName",       label: "Produktname",   edm_type: "Edm.String",          max_length: Some(80),  precision: None,     scale: None },
-            FieldDef { name: "Category",          label: "Kategorie",     edm_type: "Edm.String",          max_length: Some(40),  precision: None,     scale: None },
-            FieldDef { name: "Supplier",          label: "Lieferant",     edm_type: "Edm.String",          max_length: Some(80),  precision: None,     scale: None },
-            FieldDef { name: "Status",            label: "Status",        edm_type: "Edm.String",          max_length: Some(1),   precision: None,     scale: None },
-            FieldDef { name: "StatusCriticality", label: "Kritikalitaet", edm_type: "Edm.Byte",            max_length: None,      precision: None,     scale: None },
-            FieldDef { name: "Price",             label: "Preis",         edm_type: "Edm.Decimal",         max_length: None,      precision: Some(15), scale: Some(2) },
-            FieldDef { name: "Currency",          label: "Waehrung",      edm_type: "Edm.String",          max_length: Some(3),   precision: None,     scale: None },
-            FieldDef { name: "UnitsInStock",      label: "Lagerbestand",  edm_type: "Edm.Int32",           max_length: None,      precision: None,     scale: None },
-            FieldDef { name: "Rating",            label: "Bewertung",     edm_type: "Edm.Byte",            max_length: None,      precision: None,     scale: None },
-            FieldDef { name: "CreatedAt",         label: "Erstellt am",   edm_type: "Edm.DateTimeOffset",  max_length: None,      precision: None,     scale: None },
-            FieldDef { name: "Description",       label: "Beschreibung",  edm_type: "Edm.String",          max_length: Some(500), precision: None,     scale: None },
+            FieldDef { name: "ProductID",         label: "Produkt-ID",    edm_type: "Edm.String",          max_length: Some(10),  precision: None,     scale: None, immutable: true },
+            FieldDef { name: "ProductName",       label: "Produktname",   edm_type: "Edm.String",          max_length: Some(80),  precision: None,     scale: None, immutable: false },
+            FieldDef { name: "Category",          label: "Kategorie",     edm_type: "Edm.String",          max_length: Some(40),  precision: None,     scale: None, immutable: false },
+            FieldDef { name: "Supplier",          label: "Lieferant",     edm_type: "Edm.String",          max_length: Some(80),  precision: None,     scale: None, immutable: false },
+            FieldDef { name: "Status",            label: "Status",        edm_type: "Edm.String",          max_length: Some(1),   precision: None,     scale: None, immutable: false },
+            FieldDef { name: "StatusCriticality", label: "Kritikalitaet", edm_type: "Edm.Byte",            max_length: None,      precision: None,     scale: None, immutable: true },
+            FieldDef { name: "Price",             label: "Preis",         edm_type: "Edm.Decimal",         max_length: None,      precision: Some(15), scale: Some(2), immutable: false },
+            FieldDef { name: "Currency",          label: "Waehrung",      edm_type: "Edm.String",          max_length: Some(3),   precision: None,     scale: None, immutable: false },
+            FieldDef { name: "UnitsInStock",      label: "Lagerbestand",  edm_type: "Edm.Int32",           max_length: None,      precision: None,     scale: None, immutable: false },
+            FieldDef { name: "Rating",            label: "Bewertung",     edm_type: "Edm.Byte",            max_length: None,      precision: None,     scale: None, immutable: false },
+            FieldDef { name: "CreatedAt",         label: "Erstellt am",   edm_type: "Edm.DateTimeOffset",  max_length: None,      precision: None,     scale: None, immutable: true },
+            FieldDef { name: "Description",       label: "Beschreibung",  edm_type: "Edm.String",          max_length: Some(500), precision: None,     scale: None, immutable: false },
         ];
         Some(FIELDS)
     }
 
     fn entity_set(&self) -> String {
         format!(
-            r#"<EntitySet Name="Products" EntityType="{}.Product"/>"#,
-            NAMESPACE
+            "<EntitySet Name=\"Products\" EntityType=\"{ns}.Product\">\n\
+             <NavigationPropertyBinding Path=\"SiblingEntity\" Target=\"Products\"/>\n\
+             <NavigationPropertyBinding Path=\"DraftAdministrativeData\" Target=\"DraftAdministrativeData\"/>\n\
+             </EntitySet>",
+            ns = NAMESPACE
         )
     }
 
