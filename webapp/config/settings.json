@@ -1,0 +1,18 @@
+{
+  "ui5": {
+    "version": "1.139.0",
+    "theme": "sap_horizon",
+    "language": "de",
+    "compatVersion": "edge",
+    "libs": ["sap.m", "sap.ushell", "sap.fe.templates", "sap.f"]
+  },
+  "shell": {
+    "renderer": "fiori2",
+    "rootIntent": "Shell-home",
+    "enableSearch": false
+  },
+  "component": {
+    "id": "products.demo",
+    "resourceRoot": "./"
+  }
+}

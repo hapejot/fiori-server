@@ -1,0 +1,173 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "applicationVersion": {
+      "version": "1.0.0"
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Orders-display": {
+          "action": "display",
+          "semanticObject": "Orders",
+          "signature": {
+            "additionalParameters": "allowed",
+            "parameters": {}
+          }
+        },
+        "Products-display": {
+          "action": "display",
+          "semanticObject": "Products",
+          "signature": {
+            "additionalParameters": "allowed",
+            "parameters": {}
+          }
+        }
+      }
+    },
+    "dataSources": {
+      "mainService": {
+        "settings": {
+          "odataVersion": "4.0"
+        },
+        "type": "OData",
+        "uri": "/odata/v4/ProductsService/"
+      }
+    },
+    "description": "Fiori Elements List Report + Object Page",
+    "id": "products.demo",
+    "title": "Produkte",
+    "type": "application"
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "libs": {
+        "sap.f": {},
+        "sap.fe.templates": {},
+        "sap.m": {},
+        "sap.ui.core": {}
+      },
+      "minUI5Version": "1.136.0"
+    },
+    "flexEnabled": true,
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "settings": {
+          "autoExpandSelect": true,
+          "earlyRequests": true,
+          "operationMode": "Server"
+        }
+      }
+    },
+    "rootView": {
+      "viewName": "sap.fe.core.rootView.Fcl",
+      "type": "XML",
+      "id": "appRootView"
+    },
+    "routing": {
+      "config": {
+        "routerClass": "sap.f.routing.Router",
+        "controlAggregation": "beginColumnPages",
+        "controlId": "appContent",
+        "flexibleColumnLayout": {
+          "defaultTwoColumnLayoutType": "TwoColumnsMidExpanded",
+          "defaultThreeColumnLayoutType": "ThreeColumnsMidExpanded"
+        }
+      },
+      "routes": [
+        {
+          "name": "ProductsList",
+          "pattern": "Products:?query:",
+          "target": "ProductsList"
+        },
+        {
+          "name": "ProductsObjectPage",
+          "pattern": "Products({key}):?query:",
+          "target": [
+            "ProductsList",
+            "ProductsObjectPage"
+          ]
+        },
+        {
+          "name": "OrdersList",
+          "pattern": "Orders:?query:",
+          "target": "OrdersList"
+        },
+        {
+          "name": "OrdersObjectPage",
+          "pattern": "Orders({key}):?query:",
+          "target": [
+            "OrdersList",
+            "OrdersObjectPage"
+          ]
+        }
+      ],
+      "targets": {
+        "OrdersList": {
+          "contextPattern": "",
+          "id": "OrdersList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/Orders",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "Orders": {
+                  "detail": {
+                    "route": "OrdersObjectPage"
+                  }
+                }
+              },
+              "variantManagement": "Page"
+            }
+          },
+          "type": "Component"
+        },
+        "OrdersObjectPage": {
+          "contextPattern": "/Orders({key})",
+          "controlAggregation": "midColumnPages",
+          "id": "OrdersObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/Orders"
+            }
+          },
+          "type": "Component"
+        },
+        "ProductsList": {
+          "contextPattern": "",
+          "id": "ProductsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/Products",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "Products": {
+                  "detail": {
+                    "route": "ProductsObjectPage"
+                  }
+                }
+              },
+              "variantManagement": "Page"
+            }
+          },
+          "type": "Component"
+        },
+        "ProductsObjectPage": {
+          "contextPattern": "/Products({key})",
+          "controlAggregation": "midColumnPages",
+          "id": "ProductsObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/Products"
+            }
+          },
+          "type": "Component"
+        }
+      }
+    }
+  }
+}
