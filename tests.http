@@ -108,3 +108,48 @@ Content-Type: application/json
 Accept: application/json
 
 {}
+
+### ============================================================
+### Draft Discard (Verwerfen) – DELETE
+### ============================================================
+
+### 20. Draft erstellen für P003
+POST http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P003',IsActiveEntity=true)/ProductsService.draftEdit HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{"PreserveChanges": true}
+
+### 21. Prüfen: Aktives Entity hat HasDraftEntity=true
+GET http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P003',IsActiveEntity=true) HTTP/1.1
+Accept: application/json
+
+### 22. Draft verwerfen (DELETE) – gibt 204 No Content zurück
+DELETE http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P003',IsActiveEntity=false) HTTP/1.1
+Accept: application/json
+
+### 23. Prüfen: Aktives Entity hat HasDraftEntity=false, Daten unverändert
+GET http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P003',IsActiveEntity=true) HTTP/1.1
+Accept: application/json
+
+### 24. Orders – Draft erstellen und verwerfen
+POST http://localhost:8000/odata/v4/ProductsService/Orders(OrderID='O002',IsActiveEntity=true)/ProductsService.draftEdit HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{"PreserveChanges": true}
+
+### 25. Orders – Draft patchen
+PATCH http://localhost:8000/odata/v4/ProductsService/Orders(OrderID='O002',IsActiveEntity=false) HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{"CustomerName": "Wird verworfen GmbH"}
+
+### 26. Orders – Draft verwerfen (DELETE)
+DELETE http://localhost:8000/odata/v4/ProductsService/Orders(OrderID='O002',IsActiveEntity=false) HTTP/1.1
+Accept: application/json
+
+### 27. Orders – Prüfen dass aktives Entity unverändert ist
+GET http://localhost:8000/odata/v4/ProductsService/Orders(OrderID='O002',IsActiveEntity=true) HTTP/1.1
+Accept: application/json

@@ -5,6 +5,7 @@ mod entities;
 mod entity;
 mod handlers;
 mod query;
+mod routing;
 mod settings;
 
 use actix_web::{web, App, HttpServer};

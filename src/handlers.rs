@@ -3,8 +3,8 @@ use serde_json::{json, Value};
 use std::path::Path;
 
 use crate::app_state::AppState;
-use crate::entity::extract_set_name;
-use crate::query::{parse_query_string, query_collection, query_collection_from};
+use crate::query::{parse_expand_names, parse_query_string, query_collection, query_collection_from};
+use crate::routing::{resolve_odata_path, ODataPath};
 use crate::BASE_PATH;
 
 fn cors_headers() -> Vec<(&'static str, &'static str)> {
@@ -79,139 +79,96 @@ pub async fn service_document(data: web::Data<AppState>) -> HttpResponse {
 
 /// Generischer Collection-Handler fuer beliebige EntitySets.
 pub async fn collection_handler(req: HttpRequest, data: web::Data<AppState>) -> HttpResponse {
-    if let Some(set_name) = extract_set_name(req.path()) {
-        if let Some(entity) = data.find_entity(set_name) {
-            let qs = parse_query_string(req.query_string());
-            let store = data.data_store.read().unwrap();
-            if let Some(records) = store.get(set_name) {
-                return json_response(query_collection_from(entity, records, &qs, &data.entities));
-            }
-            return json_response(query_collection(entity, &qs, &data.entities));
+    let parsed = resolve_odata_path(req.path(), &data.entities);
+    if let ODataPath::Collection { entity } = parsed.path {
+        let qs = parse_query_string(req.query_string());
+        let store = data.data_store.read().unwrap();
+        if let Some(records) = store.get(entity.set_name()) {
+            return json_response(query_collection_from(entity, records, &qs, &data.entities));
         }
+        return json_response(query_collection(entity, &qs, &data.entities));
     }
     error_response(404, "Entity set not found")
 }
 
 /// Generischer $count-Handler fuer beliebige EntitySets.
 pub async fn count_handler(req: HttpRequest, data: web::Data<AppState>) -> HttpResponse {
-    if let Some(set_name) = extract_set_name(req.path()) {
-        if data.find_entity(set_name).is_some() {
-            let store = data.data_store.read().unwrap();
-            let count = store.get(set_name).map(|v| v.len()).unwrap_or(0);
-            let mut builder = HttpResponse::Ok();
-            builder.insert_header(("Content-Type", "text/plain;charset=utf-8"));
-            builder.insert_header(("OData-Version", "4.0"));
-            for (k, v) in cors_headers() {
-                builder.insert_header((k, v));
-            }
-            return builder.body(count.to_string());
+    let parsed = resolve_odata_path(req.path(), &data.entities);
+    if let ODataPath::Count { entity } = parsed.path {
+        let store = data.data_store.read().unwrap();
+        let count = store.get(entity.set_name()).map(|v| v.len()).unwrap_or(0);
+        let mut builder = HttpResponse::Ok();
+        builder.insert_header(("Content-Type", "text/plain;charset=utf-8"));
+        builder.insert_header(("OData-Version", "4.0"));
+        for (k, v) in cors_headers() {
+            builder.insert_header((k, v));
         }
+        return builder.body(count.to_string());
     }
     error_response(404, "Entity set not found")
 }
 
 /// Generischer Single-Entity-Handler: /SetName('key') or /SetName(Key='val',IsActiveEntity=true)
 pub async fn single_entity_handler(req: HttpRequest, state: web::Data<AppState>) -> HttpResponse {
-    let path = req.path();
-    let qs = parse_query_string(req.query_string());
-    let store = state.data_store.read().unwrap();
-
-    for entity in state.entities.iter() {
-        let prefix = format!("{}/{}", BASE_PATH, entity.set_name());
-        if let Some(rest) = path.strip_prefix(&prefix) {
-            // Parse the key part: ('val') or (Key='val',IsActiveEntity=true)
-            if let Some(keys) = parse_entity_key(rest, entity.key_field()) {
-                let key_value = &keys.key_value;
-                let is_active = keys.is_active;
-                let records = store.get(entity.set_name());
-                let data = records.map(|r| r.as_slice());
-                if let Some(record) = data.and_then(|d| {
-                    d.iter().find(|r| {
-                        r.get(entity.key_field()).and_then(|v| v.as_str()) == Some(key_value)
-                            && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(is_active)
-                    })
-                }) {
-                    let mut result = record.clone();
-                    if let Some(obj) = result.as_object_mut() {
-                        obj.insert(
-                            "@odata.context".to_string(),
-                            json!(format!(
-                                "{}/$metadata#{}/$entity",
-                                BASE_PATH,
-                                entity.set_name()
-                            )),
-                        );
-                    }
-                    // $expand
-                    if let Some(expand) = qs.get("$expand") {
-                        if !expand.is_empty() {
-                            let nav_names: Vec<&str> =
-                                expand.split(',').map(|s| s.trim()).collect();
-                            entity.expand_record(&mut result, &nav_names, &state.entities);
-                        }
-                    }
-                    return json_response(result);
-                }
-                return error_response(
-                    404,
-                    &format!(
-                        "Entity with {}='{}' not found.",
-                        entity.key_field(),
-                        key_value
-                    ),
+    let parsed = resolve_odata_path(req.path(), &state.entities);
+    if let ODataPath::Entity { entity, key } = parsed.path {
+        let qs = parse_query_string(req.query_string());
+        let store = state.data_store.read().unwrap();
+        let records = store.get(entity.set_name());
+        let data = records.map(|r| r.as_slice());
+        if let Some(record) = data.and_then(|d| {
+            d.iter().find(|r| {
+                r.get(entity.key_field()).and_then(|v| v.as_str()) == Some(&key.key_value)
+                    && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(key.is_active)
+            })
+        }) {
+            let mut result = record.clone();
+            if let Some(obj) = result.as_object_mut() {
+                obj.insert(
+                    "@odata.context".to_string(),
+                    json!(format!(
+                        "{}/$metadata#{}/$entity",
+                        BASE_PATH,
+                        entity.set_name()
+                    )),
                 );
             }
-        }
-    }
-    error_response(404, "Entity not found.")
-}
-
-/// Parsed entity key information aus dem URL-Rest nach dem SetName.
-struct EntityKeyInfo {
-    key_value: String,
-    is_active: bool,
-}
-
-/// Parst den Key-Teil aus dem URL: ('val'), (Key='val',IsActiveEntity=true), etc.
-/// Gibt None zurueck wenn das Format nicht passt.
-fn parse_entity_key(rest: &str, key_field: &str) -> Option<EntityKeyInfo> {
-    // Strip optional action suffix: /Namespace.actionName
-    let key_part = rest.split('/').next().unwrap_or(rest);
-
-    if key_part.starts_with("('") && key_part.ends_with("')") {
-        // Simple key: ('P001')
-        let key_value = key_part[2..key_part.len() - 2].to_string();
-        return Some(EntityKeyInfo {
-            key_value,
-            is_active: true,
-        });
-    }
-    if key_part.starts_with('(') && key_part.ends_with(')') {
-        // Composite key: (ProductID='P001',IsActiveEntity=true)
-        let inner = &key_part[1..key_part.len() - 1];
-        let mut key_value = String::new();
-        let mut is_active = true;
-        for part in inner.split(',') {
-            let part = part.trim();
-            if let Some((k, v)) = part.split_once('=') {
-                let k = k.trim();
-                let v = v.trim();
-                if k == key_field {
-                    // Strip quotes
-                    key_value = v.trim_matches('\'').to_string();
-                } else if k == "IsActiveEntity" {
-                    is_active = v.eq_ignore_ascii_case("true");
+            // $expand
+            if let Some(expand) = qs.get("$expand") {
+                if !expand.is_empty() {
+                    let nav_names = parse_expand_names(expand);
+                    let nav_refs: Vec<&str> = nav_names.iter().map(|s| s.as_str()).collect();
+                    entity.expand_record(&mut result, &nav_refs, &state.entities);
+                    // DraftAdministrativeData injection
+                    if nav_refs.iter().any(|n| *n == "DraftAdministrativeData") {
+                        if let Some(obj) = result.as_object_mut() {
+                            let is_draft = obj.get("IsActiveEntity")
+                                .and_then(|v| v.as_bool()) == Some(false);
+                            if is_draft {
+                                obj.insert("DraftAdministrativeData".to_string(), json!({
+                                    "DraftUUID": format!("draft-{}", obj.get(entity.key_field()).and_then(|v| v.as_str()).unwrap_or("unknown")),
+                                    "InProcessByUser": ""
+                                }));
+                            } else {
+                                obj.entry("DraftAdministrativeData".to_string())
+                                    .or_insert(Value::Null);
+                            }
+                        }
+                    }
                 }
             }
+            return json_response(result);
         }
-        if !key_value.is_empty() {
-            return Some(EntityKeyInfo {
-                key_value,
-                is_active,
-            });
-        }
+        return error_response(
+            404,
+            &format!(
+                "Entity with {}='{}' not found.",
+                entity.key_field(),
+                &key.key_value
+            ),
+        );
     }
-    None
+    error_response(404, "Entity not found.")
 }
 
 /// Generischer PATCH-Handler: /SetName(key) – aktualisiert Felder in-memory.
@@ -220,63 +177,107 @@ pub async fn patch_entity_handler(
     body: web::Json<Value>,
     state: web::Data<AppState>,
 ) -> HttpResponse {
-    let path = req.path();
+    let parsed = resolve_odata_path(req.path(), &state.entities);
+    if let ODataPath::Entity { entity, key } = parsed.path {
+        let mut store = state.data_store.write().unwrap();
+        if let Some(records) = store.get_mut(entity.set_name()) {
+            if let Some(record) = records.iter_mut().find(|r| {
+                r.get(entity.key_field()).and_then(|v| v.as_str()) == Some(&key.key_value)
+                    && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(key.is_active)
+            }) {
+                // Nur nicht-immutable Felder aktualisieren
+                let immutable_fields: Vec<&str> = entity
+                    .fields_def()
+                    .unwrap_or(&[])
+                    .iter()
+                    .filter(|f| f.immutable)
+                    .map(|f| f.name)
+                    .collect();
 
-    for entity in state.entities.iter() {
-        let prefix = format!("{}/{}", BASE_PATH, entity.set_name());
-        if let Some(rest) = path.strip_prefix(&prefix) {
-            if let Some(keys) = parse_entity_key(rest, entity.key_field()) {
-                let key_value = &keys.key_value;
-                let is_active = keys.is_active;
-                let mut store = state.data_store.write().unwrap();
-                if let Some(records) = store.get_mut(entity.set_name()) {
-                    if let Some(record) = records.iter_mut().find(|r| {
-                        r.get(entity.key_field()).and_then(|v| v.as_str()) == Some(key_value)
-                            && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(is_active)
-                    }) {
-                        // Nur nicht-immutable Felder aktualisieren
-                        let immutable_fields: Vec<&str> = entity
-                            .fields_def()
-                            .unwrap_or(&[])
-                            .iter()
-                            .filter(|f| f.immutable)
-                            .map(|f| f.name)
-                            .collect();
-
-                        if let Some(patch_obj) = body.as_object() {
-                            if let Some(rec_obj) = record.as_object_mut() {
-                                for (key, value) in patch_obj {
-                                    // Draft-keys und immutable Felder nicht aendern
-                                    if key == "IsActiveEntity" || key == "HasActiveEntity" || key == "HasDraftEntity" {
-                                        continue;
-                                    }
-                                    if !immutable_fields.contains(&key.as_str()) {
-                                        rec_obj.insert(key.clone(), value.clone());
-                                    }
-                                }
+                if let Some(patch_obj) = body.as_object() {
+                    if let Some(rec_obj) = record.as_object_mut() {
+                        for (k, value) in patch_obj {
+                            // Draft-keys und immutable Felder nicht aendern
+                            if k == "IsActiveEntity" || k == "HasActiveEntity" || k == "HasDraftEntity" {
+                                continue;
+                            }
+                            if !immutable_fields.contains(&k.as_str()) {
+                                rec_obj.insert(k.clone(), value.clone());
                             }
                         }
-
-                        let mut result = record.clone();
-                        if let Some(obj) = result.as_object_mut() {
-                            obj.insert(
-                                "@odata.context".to_string(),
-                                json!(format!(
-                                    "{}/$metadata#{}/$entity",
-                                    BASE_PATH,
-                                    entity.set_name()
-                                )),
-                            );
-                        }
-                        return json_response(result);
                     }
-                    return error_response(
-                        404,
-                        &format!("Entity with {}='{}' not found.", entity.key_field(), key_value),
+                }
+
+                let mut result = record.clone();
+                if let Some(obj) = result.as_object_mut() {
+                    obj.insert(
+                        "@odata.context".to_string(),
+                        json!(format!(
+                            "{}/$metadata#{}/$entity",
+                            BASE_PATH,
+                            entity.set_name()
+                        )),
                     );
                 }
+                return json_response(result);
+            }
+            return error_response(
+                404,
+                &format!("Entity with {}='{}' not found.", entity.key_field(), &key.key_value),
+            );
+        }
+    }
+    error_response(404, "Entity not found.")
+}
+
+/// Handler fuer DELETE: Draft verwerfen (Discard).
+/// DELETE /SetName(key) – entfernt Draft und setzt HasDraftEntity=false am aktiven Entity.
+pub async fn delete_entity_handler(
+    req: HttpRequest,
+    state: web::Data<AppState>,
+) -> HttpResponse {
+    let parsed = resolve_odata_path(req.path(), &state.entities);
+    if let ODataPath::Entity { entity, key } = parsed.path {
+        let mut store = state.data_store.write().unwrap();
+        if let Some(records) = store.get_mut(entity.set_name()) {
+            let found = records.iter().any(|r| {
+                r.get(entity.key_field()).and_then(|v| v.as_str())
+                    == Some(&key.key_value)
+                    && r.get("IsActiveEntity").and_then(|v| v.as_bool())
+                        == Some(key.is_active)
+            });
+            if found {
+                // Draft entfernen
+                records.retain(|r| {
+                    !(r.get(entity.key_field()).and_then(|v| v.as_str())
+                        == Some(&key.key_value)
+                        && r.get("IsActiveEntity").and_then(|v| v.as_bool())
+                            == Some(key.is_active))
+                });
+                // Falls ein Draft geloescht wurde: HasDraftEntity=false am aktiven Entity
+                if !key.is_active {
+                    if let Some(active) = records.iter_mut().find(|r| {
+                        r.get(entity.key_field()).and_then(|v| v.as_str())
+                            == Some(&key.key_value)
+                            && r.get("IsActiveEntity").and_then(|v| v.as_bool())
+                                == Some(true)
+                    }) {
+                        if let Some(obj) = active.as_object_mut() {
+                            obj.insert(
+                                "HasDraftEntity".to_string(),
+                                Value::Bool(false),
+                            );
+                        }
+                    }
+                }
+                let mut builder = HttpResponse::NoContent();
+                for (k, v) in cors_headers() {
+                    builder.insert_header((k, v));
+                }
+                return builder.finish();
             }
         }
+        return error_response(404, "Entity not found.");
     }
     error_response(404, "Entity not found.")
 }
@@ -288,167 +289,153 @@ pub async fn draft_action_handler(
     _body: web::Bytes,
     state: web::Data<AppState>,
 ) -> HttpResponse {
-    let path = req.path().trim_end_matches('/');
-    for entity in state.entities.iter() {
-        let set_prefix = format!("{}/{}(", BASE_PATH, entity.set_name());
-        if let Some(rest) = path.strip_prefix(&set_prefix) {
-            if let Some(paren_end) = rest.find(")/") {
-                let key_str = &rest[..paren_end];
-                let action_part = &rest[paren_end + 2..];
-                let key_info = match parse_entity_key(
-                    &format!("({})", key_str),
-                    entity.key_field(),
-                ) {
-                    Some(k) => k,
-                    None => return error_response(400, "Invalid entity key"),
-                };
-                // action_part is like "ProductsService.draftEdit"
-                let action_name = action_part
-                    .rsplit('.')
-                    .next()
-                    .unwrap_or(action_part);
-                let key_value = &key_info.key_value;
-                let key_field = entity.key_field();
-                let set_name = entity.set_name();
+    let parsed = resolve_odata_path(req.path(), &state.entities);
+    if let ODataPath::Action {
+        entity,
+        key,
+        action,
+    } = parsed.path
+    {
+        let key_value = &key.key_value;
+        let key_field = entity.key_field();
+        let set_name = entity.set_name();
 
-                match action_name {
-                    "draftEdit" => {
-                        let mut store = state.data_store.write().unwrap();
-                        if let Some(records) = store.get_mut(set_name) {
-                            let active_record = records.iter_mut().find(|r| {
-                                r.get(key_field).and_then(|v| v.as_str()) == Some(key_value)
-                                    && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                                        == Some(true)
-                            });
-                            if let Some(active) = active_record {
-                                if let Some(obj) = active.as_object_mut() {
-                                    obj.insert(
-                                        "HasDraftEntity".to_string(),
-                                        Value::Bool(true),
-                                    );
-                                }
-                                let mut draft = active.clone();
-                                if let Some(obj) = draft.as_object_mut() {
-                                    obj.insert(
-                                        "IsActiveEntity".to_string(),
-                                        Value::Bool(false),
-                                    );
-                                    obj.insert(
-                                        "HasActiveEntity".to_string(),
-                                        Value::Bool(true),
-                                    );
-                                    obj.insert(
-                                        "HasDraftEntity".to_string(),
-                                        Value::Bool(false),
-                                    );
-                                    obj.insert(
-                                        "@odata.context".to_string(),
-                                        json!(format!(
-                                            "{}/$metadata#{}/$entity",
-                                            BASE_PATH, set_name
-                                        )),
-                                    );
-                                }
-                                let result = draft.clone();
-                                records.push(draft);
-                                return json_response(result);
-                            }
-                            return error_response(404, "Active entity not found.");
+        match action.as_str() {
+            "draftEdit" => {
+                let mut store = state.data_store.write().unwrap();
+                if let Some(records) = store.get_mut(set_name) {
+                    let active_record = records.iter_mut().find(|r| {
+                        r.get(key_field).and_then(|v| v.as_str()) == Some(key_value)
+                            && r.get("IsActiveEntity").and_then(|v| v.as_bool())
+                                == Some(true)
+                    });
+                    if let Some(active) = active_record {
+                        if let Some(obj) = active.as_object_mut() {
+                            obj.insert(
+                                "HasDraftEntity".to_string(),
+                                Value::Bool(true),
+                            );
                         }
-                        return error_response(404, "Entity set not found.");
+                        let mut draft = active.clone();
+                        if let Some(obj) = draft.as_object_mut() {
+                            obj.insert(
+                                "IsActiveEntity".to_string(),
+                                Value::Bool(false),
+                            );
+                            obj.insert(
+                                "HasActiveEntity".to_string(),
+                                Value::Bool(true),
+                            );
+                            obj.insert(
+                                "HasDraftEntity".to_string(),
+                                Value::Bool(false),
+                            );
+                            obj.insert(
+                                "@odata.context".to_string(),
+                                json!(format!(
+                                    "{}/$metadata#{}/$entity",
+                                    BASE_PATH, set_name
+                                )),
+                            );
+                        }
+                        let result = draft.clone();
+                        records.push(draft);
+                        return json_response(result);
                     }
-                    "draftActivate" => {
-                        let mut store = state.data_store.write().unwrap();
-                        if let Some(records) = store.get_mut(set_name) {
-                            let draft_data = records
-                                .iter()
-                                .find(|r| {
-                                    r.get(key_field).and_then(|v| v.as_str())
-                                        == Some(key_value)
-                                        && r.get("IsActiveEntity")
-                                            .and_then(|v| v.as_bool())
-                                            == Some(false)
-                                })
-                                .cloned();
-                            if let Some(draft) = draft_data {
-                                if let Some(active) = records.iter_mut().find(|r| {
-                                    r.get(key_field).and_then(|v| v.as_str())
-                                        == Some(key_value)
-                                        && r.get("IsActiveEntity")
-                                            .and_then(|v| v.as_bool())
-                                            == Some(true)
-                                }) {
-                                    if let (Some(draft_obj), Some(active_obj)) =
-                                        (draft.as_object(), active.as_object_mut())
+                    return error_response(404, "Active entity not found.");
+                }
+                return error_response(404, "Entity set not found.");
+            }
+            "draftActivate" => {
+                let mut store = state.data_store.write().unwrap();
+                if let Some(records) = store.get_mut(set_name) {
+                    let draft_data = records
+                        .iter()
+                        .find(|r| {
+                            r.get(key_field).and_then(|v| v.as_str())
+                                == Some(key_value)
+                                && r.get("IsActiveEntity")
+                                    .and_then(|v| v.as_bool())
+                                    == Some(false)
+                        })
+                        .cloned();
+                    if let Some(draft) = draft_data {
+                        if let Some(active) = records.iter_mut().find(|r| {
+                            r.get(key_field).and_then(|v| v.as_str())
+                                == Some(key_value)
+                                && r.get("IsActiveEntity")
+                                    .and_then(|v| v.as_bool())
+                                    == Some(true)
+                        }) {
+                            if let (Some(draft_obj), Some(active_obj)) =
+                                (draft.as_object(), active.as_object_mut())
+                            {
+                                for (k, v) in draft_obj {
+                                    if k != "IsActiveEntity"
+                                        && k != "HasActiveEntity"
+                                        && k != "HasDraftEntity"
+                                        && !k.starts_with("@odata")
                                     {
-                                        for (k, v) in draft_obj {
-                                            if k != "IsActiveEntity"
-                                                && k != "HasActiveEntity"
-                                                && k != "HasDraftEntity"
-                                                && !k.starts_with("@odata")
-                                            {
-                                                active_obj.insert(k.clone(), v.clone());
-                                            }
-                                        }
-                                        active_obj.insert(
-                                            "HasDraftEntity".to_string(),
-                                            Value::Bool(false),
-                                        );
+                                        active_obj.insert(k.clone(), v.clone());
                                     }
-                                    let mut result = active.clone();
-                                    if let Some(obj) = result.as_object_mut() {
-                                        obj.insert(
-                                            "@odata.context".to_string(),
-                                            json!(format!(
-                                                "{}/$metadata#{}/$entity",
-                                                BASE_PATH, set_name
-                                            )),
-                                        );
-                                    }
-                                    records.retain(|r| {
-                                        !(r.get(key_field).and_then(|v| v.as_str())
-                                            == Some(key_value)
-                                            && r.get("IsActiveEntity")
-                                                .and_then(|v| v.as_bool())
-                                                == Some(false))
-                                    });
-                                    return json_response(result);
                                 }
+                                active_obj.insert(
+                                    "HasDraftEntity".to_string(),
+                                    Value::Bool(false),
+                                );
                             }
-                            return error_response(404, "Draft entity not found.");
-                        }
-                        return error_response(404, "Entity set not found.");
-                    }
-                    "draftPrepare" => {
-                        let store = state.data_store.read().unwrap();
-                        if let Some(records) = store.get(set_name) {
-                            if let Some(record) = records.iter().find(|r| {
-                                r.get(key_field).and_then(|v| v.as_str()) == Some(key_value)
-                                    && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                                        == Some(key_info.is_active)
-                            }) {
-                                let mut result = record.clone();
-                                if let Some(obj) = result.as_object_mut() {
-                                    obj.insert(
-                                        "@odata.context".to_string(),
-                                        json!(format!(
-                                            "{}/$metadata#{}/$entity",
-                                            BASE_PATH, set_name
-                                        )),
-                                    );
-                                }
-                                return json_response(result);
+                            let mut result = active.clone();
+                            if let Some(obj) = result.as_object_mut() {
+                                obj.insert(
+                                    "@odata.context".to_string(),
+                                    json!(format!(
+                                        "{}/$metadata#{}/$entity",
+                                        BASE_PATH, set_name
+                                    )),
+                                );
                             }
+                            records.retain(|r| {
+                                !(r.get(key_field).and_then(|v| v.as_str())
+                                    == Some(key_value)
+                                    && r.get("IsActiveEntity")
+                                        .and_then(|v| v.as_bool())
+                                        == Some(false))
+                            });
+                            return json_response(result);
                         }
-                        return error_response(404, "Entity not found for draftPrepare.");
                     }
-                    _ => {
-                        return error_response(
-                            400,
-                            &format!("Unknown action: {}", action_name),
-                        );
+                    return error_response(404, "Draft entity not found.");
+                }
+                return error_response(404, "Entity set not found.");
+            }
+            "draftPrepare" => {
+                let store = state.data_store.read().unwrap();
+                if let Some(records) = store.get(set_name) {
+                    if let Some(record) = records.iter().find(|r| {
+                        r.get(key_field).and_then(|v| v.as_str()) == Some(key_value)
+                            && r.get("IsActiveEntity").and_then(|v| v.as_bool())
+                                == Some(key.is_active)
+                    }) {
+                        let mut result = record.clone();
+                        if let Some(obj) = result.as_object_mut() {
+                            obj.insert(
+                                "@odata.context".to_string(),
+                                json!(format!(
+                                    "{}/$metadata#{}/$entity",
+                                    BASE_PATH, set_name
+                                )),
+                            );
+                        }
+                        return json_response(result);
                     }
                 }
+                return error_response(404, "Entity not found for draftPrepare.");
+            }
+            _ => {
+                return error_response(
+                    400,
+                    &format!("Unknown action: {}", action),
+                );
             }
         }
     }
@@ -521,6 +508,7 @@ pub async fn batch_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
                             "GET" => (200, handle_batch_get(cs_rel_url, &data)),
                             "PATCH" => handle_batch_patch(cs_rel_url, &cs_body, &data),
                             "POST" => handle_batch_post(cs_rel_url, &cs_body, &data),
+                            "DELETE" => handle_batch_delete(cs_rel_url, &data),
                             _ => (200, json!({})),
                         };
                         let cs_resp_body = serde_json::to_string(&cs_resp_json).unwrap_or_default();
@@ -571,7 +559,7 @@ pub async fn batch_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
         let lines: Vec<&str> = segment.lines().collect();
         // Finde die Request-Zeile (GET, POST, PATCH, etc.)
         let request_line = lines.iter().find(|l| {
-            l.starts_with("GET ") || l.starts_with("POST ") || l.starts_with("PATCH ")
+            l.starts_with("GET ") || l.starts_with("POST ") || l.starts_with("PATCH ") || l.starts_with("DELETE ")
         });
         if let Some(request_line) = request_line {
             let parts: Vec<&str> = request_line.split_whitespace().collect();
@@ -585,6 +573,7 @@ pub async fn batch_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
                 "GET" => (200, handle_batch_get(rel_url, &data)),
                 "PATCH" => handle_batch_patch(rel_url, &segment_body, &data),
                 "POST" => handle_batch_post(rel_url, &segment_body, &data),
+                "DELETE" => handle_batch_delete(rel_url, &data),
                 _ => (200, handle_batch_get(rel_url, &data)),
             };
 
@@ -651,203 +640,205 @@ fn extract_batch_body(segment: &str) -> String {
 
 /// Batch-PATCH: aktualisiert ein einzelnes Entity im data_store.
 fn handle_batch_patch(rel_url: &str, body: &str, state: &web::Data<AppState>) -> (u16, Value) {
-    let entities = &state.entities;
-    let full_path = if rel_url.starts_with('/') {
-        rel_url.to_string()
-    } else {
-        format!("{}/{}", BASE_PATH, rel_url)
-    };
-    let path = full_path.split('?').next().unwrap_or(&full_path).trim_end_matches('/');
-
-    let patch_data: Value = serde_json::from_str(body).unwrap_or(json!({}));
-
-    for entity in entities.iter() {
-        let set_prefix = format!("{}/{}(", BASE_PATH, entity.set_name());
-        if let Some(rest) = path.strip_prefix(&set_prefix) {
-            if let Some(key_str) = rest.strip_suffix(')') {
-                let key_info = match parse_entity_key(&format!("({})", key_str), entity.key_field()) {
-                    Some(k) => k,
-                    None => return (400, json!({"error": {"code": "400", "message": "Invalid key"}})),
-                };
-                let mut store = state.data_store.write().unwrap();
-                if let Some(records) = store.get_mut(entity.set_name()) {
-                    if let Some(record) = records.iter_mut().find(|r| {
-                        let key_match = r.get(entity.key_field()).and_then(|v| v.as_str())
-                            == Some(&key_info.key_value);
-                        let active_match = r
-                            .get("IsActiveEntity")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(true)
-                            == key_info.is_active;
-                        key_match && active_match
-                    }) {
-                        if let (Some(rec_obj), Some(patch_obj)) =
-                            (record.as_object_mut(), patch_data.as_object())
+    let parsed = resolve_odata_path(rel_url, &state.entities);
+    if let ODataPath::Entity { entity, key } = parsed.path {
+        let patch_data: Value = serde_json::from_str(body).unwrap_or(json!({}));
+        let mut store = state.data_store.write().unwrap();
+        if let Some(records) = store.get_mut(entity.set_name()) {
+            if let Some(record) = records.iter_mut().find(|r| {
+                let key_match = r.get(entity.key_field()).and_then(|v| v.as_str())
+                    == Some(&key.key_value);
+                let active_match = r
+                    .get("IsActiveEntity")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true)
+                    == key.is_active;
+                key_match && active_match
+            }) {
+                if let (Some(rec_obj), Some(patch_obj)) =
+                    (record.as_object_mut(), patch_data.as_object())
+                {
+                    for (k, v) in patch_obj {
+                        if k == "IsActiveEntity"
+                            || k == "HasActiveEntity"
+                            || k == "HasDraftEntity"
                         {
-                            for (k, v) in patch_obj {
-                                if k == "IsActiveEntity"
-                                    || k == "HasActiveEntity"
-                                    || k == "HasDraftEntity"
-                                {
-                                    continue;
-                                }
-                                rec_obj.insert(k.clone(), v.clone());
-                            }
+                            continue;
                         }
-                        return (200, record.clone());
+                        rec_obj.insert(k.clone(), v.clone());
                     }
                 }
-                return (404, json!({"error": {"code": "404", "message": "Not found"}}));
+                return (200, record.clone());
             }
         }
+        return (404, json!({"error": {"code": "404", "message": "Not found"}}));
+    }
+    (404, json!({"error": {"code": "404", "message": format!("Unknown: {}", rel_url)}}))
+}
+
+/// Batch-DELETE: Draft verwerfen innerhalb von $batch.
+fn handle_batch_delete(rel_url: &str, state: &web::Data<AppState>) -> (u16, Value) {
+    let parsed = resolve_odata_path(rel_url, &state.entities);
+    if let ODataPath::Entity { entity, key } = parsed.path {
+        let mut store = state.data_store.write().unwrap();
+        if let Some(records) = store.get_mut(entity.set_name()) {
+            let found = records.iter().any(|r| {
+                r.get(entity.key_field()).and_then(|v| v.as_str())
+                    == Some(&key.key_value)
+                    && r.get("IsActiveEntity").and_then(|v| v.as_bool())
+                        == Some(key.is_active)
+            });
+            if found {
+                records.retain(|r| {
+                    !(r.get(entity.key_field()).and_then(|v| v.as_str())
+                        == Some(&key.key_value)
+                        && r.get("IsActiveEntity").and_then(|v| v.as_bool())
+                            == Some(key.is_active))
+                });
+                if !key.is_active {
+                    if let Some(active) = records.iter_mut().find(|r| {
+                        r.get(entity.key_field()).and_then(|v| v.as_str())
+                            == Some(&key.key_value)
+                            && r.get("IsActiveEntity").and_then(|v| v.as_bool())
+                                == Some(true)
+                    }) {
+                        if let Some(obj) = active.as_object_mut() {
+                            obj.insert(
+                                "HasDraftEntity".to_string(),
+                                json!(false),
+                            );
+                        }
+                    }
+                }
+                return (204, json!(null));
+            }
+        }
+        return (404, json!({"error": {"code": "404", "message": "Not found"}}));
     }
     (404, json!({"error": {"code": "404", "message": format!("Unknown: {}", rel_url)}}))
 }
 
 /// Batch-POST: behandelt Aktionen (draftEdit, draftActivate, draftPrepare) innerhalb von $batch.
 fn handle_batch_post(rel_url: &str, _body: &str, state: &web::Data<AppState>) -> (u16, Value) {
-    let entities = &state.entities;
-    let full_path = if rel_url.starts_with('/') {
-        rel_url.to_string()
-    } else {
-        format!("{}/{}", BASE_PATH, rel_url)
-    };
-    let path = full_path.split('?').next().unwrap_or(&full_path).trim_end_matches('/');
+    let parsed = resolve_odata_path(rel_url, &state.entities);
+    if let ODataPath::Action {
+        entity,
+        key,
+        action,
+    } = parsed.path
+    {
+        let mut store = state.data_store.write().unwrap();
+        let records = store.get_mut(entity.set_name());
 
-    for entity in entities.iter() {
-        let set_prefix = format!("{}/{}(", BASE_PATH, entity.set_name());
-        if let Some(rest) = path.strip_prefix(&set_prefix) {
-            // Finde ')/' um Entity-Key von Action zu trennen
-            if let Some(paren_end) = rest.find(")/") {
-                let key_str = &rest[..paren_end];
-                let action_part = &rest[paren_end + 2..];
-                let key_info = match parse_entity_key(&format!("({})", key_str), entity.key_field()) {
-                    Some(k) => k,
-                    None => return (400, json!({"error": {"code": "400", "message": "Invalid key"}})),
-                };
-                let action_name = action_part.rsplit('.').next().unwrap_or(action_part);
-
-                let mut store = state.data_store.write().unwrap();
-                let records = store.get_mut(entity.set_name());
-
-                match action_name {
-                    "draftEdit" => {
-                        if let Some(records) = records {
-                            // Finde aktives Entity
-                            if let Some(active) = records
-                                .iter()
-                                .find(|r| {
-                                    r.get(entity.key_field()).and_then(|v| v.as_str())
-                                        == Some(&key_info.key_value)
-                                        && r.get("IsActiveEntity")
-                                            .and_then(|v| v.as_bool())
-                                            .unwrap_or(true)
-                                })
-                                .cloned()
-                            {
-                                // Draft-Kopie erstellen
-                                let mut draft = active.clone();
-                                if let Some(obj) = draft.as_object_mut() {
-                                    obj.insert("IsActiveEntity".to_string(), json!(false));
-                                    obj.insert("HasActiveEntity".to_string(), json!(true));
-                                    obj.insert("HasDraftEntity".to_string(), json!(false));
-                                }
-                                // Aktives Entity markieren
-                                if let Some(active_rec) = records.iter_mut().find(|r| {
-                                    r.get(entity.key_field()).and_then(|v| v.as_str())
-                                        == Some(&key_info.key_value)
-                                        && r.get("IsActiveEntity")
-                                            .and_then(|v| v.as_bool())
-                                            .unwrap_or(true)
-                                }) {
-                                    if let Some(obj) = active_rec.as_object_mut() {
-                                        obj.insert("HasDraftEntity".to_string(), json!(true));
-                                    }
-                                }
-                                let result = draft.clone();
-                                records.push(draft);
-                                return (201, result);
+        match action.as_str() {
+            "draftEdit" => {
+                if let Some(records) = records {
+                    if let Some(active) = records
+                        .iter()
+                        .find(|r| {
+                            r.get(entity.key_field()).and_then(|v| v.as_str())
+                                == Some(&key.key_value)
+                                && r.get("IsActiveEntity")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(true)
+                        })
+                        .cloned()
+                    {
+                        let mut draft = active.clone();
+                        if let Some(obj) = draft.as_object_mut() {
+                            obj.insert("IsActiveEntity".to_string(), json!(false));
+                            obj.insert("HasActiveEntity".to_string(), json!(true));
+                            obj.insert("HasDraftEntity".to_string(), json!(false));
+                        }
+                        if let Some(active_rec) = records.iter_mut().find(|r| {
+                            r.get(entity.key_field()).and_then(|v| v.as_str())
+                                == Some(&key.key_value)
+                                && r.get("IsActiveEntity")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(true)
+                        }) {
+                            if let Some(obj) = active_rec.as_object_mut() {
+                                obj.insert("HasDraftEntity".to_string(), json!(true));
                             }
                         }
+                        let result = draft.clone();
+                        records.push(draft);
+                        return (201, result);
                     }
-                    "draftActivate" => {
-                        if let Some(records) = records {
-                            // Finde Draft
-                            if let Some(draft) = records
-                                .iter()
-                                .find(|r| {
-                                    r.get(entity.key_field()).and_then(|v| v.as_str())
-                                        == Some(&key_info.key_value)
-                                        && r.get("IsActiveEntity")
-                                            .and_then(|v| v.as_bool())
-                                            == Some(false)
-                                })
-                                .cloned()
-                            {
-                                // Aenderungen in aktives Entity uebernehmen
-                                if let Some(active_rec) = records.iter_mut().find(|r| {
-                                    r.get(entity.key_field()).and_then(|v| v.as_str())
-                                        == Some(&key_info.key_value)
-                                        && r.get("IsActiveEntity")
-                                            .and_then(|v| v.as_bool())
-                                            .unwrap_or(true)
-                                }) {
-                                    if let (Some(active_obj), Some(draft_obj)) =
-                                        (active_rec.as_object_mut(), draft.as_object())
-                                    {
-                                        for (k, v) in draft_obj {
-                                            if k == "IsActiveEntity"
-                                                || k == "HasActiveEntity"
-                                                || k == "HasDraftEntity"
-                                            {
-                                                continue;
-                                            }
-                                            active_obj.insert(k.clone(), v.clone());
-                                        }
-                                        active_obj
-                                            .insert("HasDraftEntity".to_string(), json!(false));
-                                    }
-                                }
-                                // Draft entfernen
-                                records.retain(|r| {
-                                    !(r.get(entity.key_field()).and_then(|v| v.as_str())
-                                        == Some(&key_info.key_value)
-                                        && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                                            == Some(false))
-                                });
-                                // Aktiviertes Entity zurueckgeben
-                                if let Some(activated) = records.iter().find(|r| {
-                                    r.get(entity.key_field()).and_then(|v| v.as_str())
-                                        == Some(&key_info.key_value)
-                                        && r.get("IsActiveEntity")
-                                            .and_then(|v| v.as_bool())
-                                            .unwrap_or(true)
-                                }) {
-                                    return (200, activated.clone());
-                                }
-                            }
-                        }
-                    }
-                    "draftPrepare" => {
-                        if let Some(records) = records {
-                            if let Some(rec) = records.iter().find(|r| {
-                                r.get(entity.key_field()).and_then(|v| v.as_str())
-                                    == Some(&key_info.key_value)
-                                    && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                                        == Some(key_info.is_active)
-                            }) {
-                                return (200, rec.clone());
-                            }
-                        }
-                    }
-                    _ => {}
                 }
-                return (
-                    200,
-                    json!({"error": {"code": "404", "message": format!("Action not found: {}", action_name)}}),
-                );
             }
+            "draftActivate" => {
+                if let Some(records) = records {
+                    if let Some(draft) = records
+                        .iter()
+                        .find(|r| {
+                            r.get(entity.key_field()).and_then(|v| v.as_str())
+                                == Some(&key.key_value)
+                                && r.get("IsActiveEntity")
+                                    .and_then(|v| v.as_bool())
+                                    == Some(false)
+                        })
+                        .cloned()
+                    {
+                        if let Some(active_rec) = records.iter_mut().find(|r| {
+                            r.get(entity.key_field()).and_then(|v| v.as_str())
+                                == Some(&key.key_value)
+                                && r.get("IsActiveEntity")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(true)
+                        }) {
+                            if let (Some(active_obj), Some(draft_obj)) =
+                                (active_rec.as_object_mut(), draft.as_object())
+                            {
+                                for (k, v) in draft_obj {
+                                    if k == "IsActiveEntity"
+                                        || k == "HasActiveEntity"
+                                        || k == "HasDraftEntity"
+                                    {
+                                        continue;
+                                    }
+                                    active_obj.insert(k.clone(), v.clone());
+                                }
+                                active_obj
+                                    .insert("HasDraftEntity".to_string(), json!(false));
+                            }
+                        }
+                        records.retain(|r| {
+                            !(r.get(entity.key_field()).and_then(|v| v.as_str())
+                                == Some(&key.key_value)
+                                && r.get("IsActiveEntity").and_then(|v| v.as_bool())
+                                    == Some(false))
+                        });
+                        if let Some(activated) = records.iter().find(|r| {
+                            r.get(entity.key_field()).and_then(|v| v.as_str())
+                                == Some(&key.key_value)
+                                && r.get("IsActiveEntity")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(true)
+                        }) {
+                            return (200, activated.clone());
+                        }
+                    }
+                }
+            }
+            "draftPrepare" => {
+                if let Some(records) = records {
+                    if let Some(rec) = records.iter().find(|r| {
+                        r.get(entity.key_field()).and_then(|v| v.as_str())
+                            == Some(&key.key_value)
+                            && r.get("IsActiveEntity").and_then(|v| v.as_bool())
+                                == Some(key.is_active)
+                    }) {
+                        return (200, rec.clone());
+                    }
+                }
+            }
+            _ => {}
         }
+        return (
+            200,
+            json!({"error": {"code": "404", "message": format!("Action not found: {}", action)}}),
+        );
     }
     (404, json!({"error": {"code": "404", "message": format!("Unknown POST: {}", rel_url)}}))
 }
@@ -856,89 +847,82 @@ fn handle_batch_post(rel_url: &str, _body: &str, state: &web::Data<AppState>) ->
 fn handle_batch_get(rel_url: &str, state: &web::Data<AppState>) -> Value {
     let entities = &state.entities;
     let store = state.data_store.read().unwrap();
-    let full_path = if rel_url.starts_with('/') {
-        rel_url.to_string()
-    } else {
-        format!("{}/{}", BASE_PATH, rel_url)
-    };
+    let parsed = resolve_odata_path(rel_url, entities);
+    let qs = parse_query_string(&parsed.query_string);
 
-    let (path_part, query_part) = full_path.split_once('?').unwrap_or((&full_path, ""));
-    let path = path_part.trim_end_matches('/');
-    let qs = parse_query_string(query_part);
-
-    // Service root
-    if path == BASE_PATH {
-        let sets: Vec<Value> = entities
-            .iter()
-            .map(|e| json!({"name": e.set_name(), "url": e.set_name()}))
-            .collect();
-        return json!({
-            "@odata.context": format!("{}/$metadata", BASE_PATH),
-            "value": sets
-        });
-    }
-
-    // Iterate entities for collection, $count, and single-entity routes
-    for entity in entities.iter() {
-        let set_path = format!("{}/{}", BASE_PATH, entity.set_name());
-        let count_path = format!("{}/$count", set_path);
-        let records = store.get(entity.set_name());
-
-        // Collection
-        if path == set_path {
-            if let Some(data) = records {
-                return query_collection_from(*entity, data, &qs, entities);
+    match parsed.path {
+        ODataPath::ServiceRoot => {
+            let sets: Vec<Value> = entities
+                .iter()
+                .map(|e| json!({"name": e.set_name(), "url": e.set_name()}))
+                .collect();
+            json!({
+                "@odata.context": format!("{}/$metadata", BASE_PATH),
+                "value": sets
+            })
+        }
+        ODataPath::Collection { entity } => {
+            if let Some(data) = store.get(entity.set_name()) {
+                query_collection_from(entity, data, &qs, entities)
+            } else {
+                query_collection(entity, &qs, entities)
             }
-            return query_collection(*entity, &qs, entities);
         }
-
-        // $count
-        if path == count_path {
-            let count = records.map(|r| r.len()).unwrap_or(0);
-            return json!({"value": count});
+        ODataPath::Count { entity } => {
+            let count = store.get(entity.set_name()).map(|r| r.len()).unwrap_or(0);
+            json!({"value": count})
         }
-
-        // Single entity: /SetName('key') or /SetName(KeyField='key',IsActiveEntity=true)
-        let set_prefix = format!("{}/{}(", BASE_PATH, entity.set_name());
-        if let Some(rest) = path.strip_prefix(&set_prefix) {
-            // Strip trailing ')'
-            if let Some(key_str) = rest.strip_suffix(')') {
-                if let Some(key_info) = parse_entity_key(&format!("({})", key_str), entity.key_field()) {
-                let data = records.map(|r| r.as_slice());
-                if let Some(record) = data.and_then(|d| {
-                    d.iter().find(|r| {
-                        let key_match = r.get(entity.key_field()).and_then(|v| v.as_str()) == Some(&key_info.key_value);
-                        let active_match = r.get("IsActiveEntity").and_then(|v| v.as_bool()).unwrap_or(true) == key_info.is_active;
-                        key_match && active_match
-                    })
-                }) {
-                    let mut result = record.clone();
-                    if let Some(obj) = result.as_object_mut() {
-                        obj.insert(
-                            "@odata.context".to_string(),
-                            json!(format!(
-                                "{}/$metadata#{}/$entity",
-                                BASE_PATH,
-                                entity.set_name()
-                            )),
-                        );
-                    }
-                    if let Some(expand) = qs.get("$expand") {
-                        if !expand.is_empty() {
-                            let nav_names: Vec<&str> =
-                                expand.split(',').map(|s| s.trim()).collect();
-                            entity.expand_record(&mut result, &nav_names, entities);
+        ODataPath::Entity { entity, key } => {
+            let records = store.get(entity.set_name());
+            let data = records.map(|r| r.as_slice());
+            if let Some(record) = data.and_then(|d| {
+                d.iter().find(|r| {
+                    let key_match = r.get(entity.key_field()).and_then(|v| v.as_str()) == Some(&key.key_value);
+                    let active_match = r.get("IsActiveEntity").and_then(|v| v.as_bool()).unwrap_or(true) == key.is_active;
+                    key_match && active_match
+                })
+            }) {
+                let mut result = record.clone();
+                if let Some(obj) = result.as_object_mut() {
+                    obj.insert(
+                        "@odata.context".to_string(),
+                        json!(format!(
+                            "{}/$metadata#{}/$entity",
+                            BASE_PATH,
+                            entity.set_name()
+                        )),
+                    );
+                }
+                if let Some(expand) = qs.get("$expand") {
+                    if !expand.is_empty() {
+                        let nav_names = parse_expand_names(expand);
+                        let nav_refs: Vec<&str> = nav_names.iter().map(|s| s.as_str()).collect();
+                        entity.expand_record(&mut result, &nav_refs, entities);
+                        // DraftAdministrativeData injection
+                        if nav_refs.iter().any(|n| *n == "DraftAdministrativeData") {
+                            if let Some(obj) = result.as_object_mut() {
+                                let is_draft = obj.get("IsActiveEntity")
+                                    .and_then(|v| v.as_bool()) == Some(false);
+                                if is_draft {
+                                    obj.insert("DraftAdministrativeData".to_string(), json!({
+                                        "DraftUUID": format!("draft-{}", obj.get(entity.key_field()).and_then(|v| v.as_str()).unwrap_or("unknown")),
+                                        "InProcessByUser": ""
+                                    }));
+                                } else {
+                                    obj.entry("DraftAdministrativeData".to_string())
+                                        .or_insert(Value::Null);
+                                }
+                            }
                         }
                     }
-                    return result;
                 }
-                return json!({"error": {"code": "404", "message": "Not found"}});
-                }
+                result
+            } else {
+                json!({"error": {"code": "404", "message": "Not found"}})
             }
         }
+        _ => json!({"error": {"code": "404", "message": format!("Unknown: {}", rel_url)}}),
     }
-
-    json!({"error": {"code": "404", "message": format!("Unknown: {}", rel_url)}})
 }
 
 // ── Static file serving ─────────────────────────────────────────────
@@ -1093,33 +1077,28 @@ pub async fn catch_all(req: HttpRequest, body: web::Bytes, data: web::Data<AppSt
         return favicon_response();
     }
 
-    // Entity-bezogene Pfade: /BASE_PATH/SetName(...)
-    for entity in data.entities.iter() {
-        let set_prefix = format!("{}/{}(", BASE_PATH, entity.set_name());
-        if let Some(rest) = path.strip_prefix(&set_prefix) {
-            // Finde das schliessende ')' - alles danach ist ggf. eine Action
-            if let Some(paren_end) = rest.find(')') {
-                let after_paren = &rest[paren_end + 1..];
-
-                // POST Action: .../SetName(key)/Namespace.actionName
-                if req.method() == actix_web::http::Method::POST && after_paren.starts_with('/') {
-                    return draft_action_handler(req, body, data).await;
-                }
-
-                // PATCH: .../SetName(key)
-                if req.method() == actix_web::http::Method::PATCH {
-                    let json_body: Value = match serde_json::from_slice(&body) {
-                        Ok(v) => v,
-                        Err(_) => return error_response(400, "Invalid JSON body"),
-                    };
-                    return patch_entity_handler(req, web::Json(json_body), data).await;
-                }
-
-                // GET: .../SetName(key)
-                return single_entity_handler(req, data).await;
+    // Entity-bezogene Pfade ueber den zentralen Router aufloesen
+    let parsed = resolve_odata_path(path, &data.entities);
+    match parsed.path {
+        ODataPath::Entity { .. } => match *req.method() {
+            actix_web::http::Method::GET => single_entity_handler(req, data).await,
+            actix_web::http::Method::PATCH => {
+                let json_body: Value = match serde_json::from_slice(&body) {
+                    Ok(v) => v,
+                    Err(_) => return error_response(400, "Invalid JSON body"),
+                };
+                patch_entity_handler(req, web::Json(json_body), data).await
+            }
+            actix_web::http::Method::DELETE => delete_entity_handler(req, data).await,
+            _ => error_response(405, "Method not allowed"),
+        },
+        ODataPath::Action { .. } => {
+            if req.method() == actix_web::http::Method::POST {
+                draft_action_handler(req, body, data).await
+            } else {
+                error_response(405, "Method not allowed")
             }
         }
+        _ => static_files(req, data).await,
     }
-
-    static_files(req, data).await
 }

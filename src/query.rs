@@ -156,7 +156,7 @@ pub fn match_filter(record: &Value, expr: &str) -> bool {
 
 /// Parst $expand-Werte und extrahiert Nav-Property-Namen,
 /// ignoriert geklammerte Sub-Optionen wie ($select=DraftUUID,InProcessByUser).
-fn parse_expand_names(expand: &str) -> Vec<String> {
+pub fn parse_expand_names(expand: &str) -> Vec<String> {
     let mut names = Vec::new();
     let mut depth = 0;
     let mut current = String::new();
