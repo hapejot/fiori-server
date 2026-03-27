@@ -204,11 +204,21 @@
         var oApps = oAppsConfig.applications;
         Object.keys(oApps).forEach(function (sKey) {
             var oApp = oApps[sKey];
+            // Each app gets an entity-specific URL so the server can
+            // deliver a matching manifest.json with the correct default route.
+            // Unique component ID per app prevents UI5 module caching conflicts.
+            var sUrl = oApp.semanticObject
+                ? "./apps/" + oApp.semanticObject + "/"
+                : (oApp.url || sResourceRoot);
+            var sAppComponentId = oApp.semanticObject
+                ? oApp.semanticObject.toLowerCase() + ".app"
+                : sComponentId;
+
             oUshellConfig.applications[sKey] = {
                 additionalInformation:
-                    "SAPUI5.Component=" + sComponentId,
+                    "SAPUI5.Component=" + sAppComponentId,
                 applicationType: "URL",
-                url: oApp.url || sResourceRoot,
+                url: sUrl,
                 title: oApp.title || sKey,
                 description: oApp.description || ""
             };
@@ -276,11 +286,16 @@
                         // Copy apps from NavTargetResolutionInternal (populated by
                         // migration) to all three resolution services — same reference,
                         // matching the original SAP sandbox pattern.
+                        // Fallback: if Internal is empty, read from NavTargetResolution.
                         var oApps = JSON.parse(
                             JSON.stringify(
                                 getNestedValue(
                                     oUshellConfig,
                                     "services.NavTargetResolutionInternal.adapter.config.applications"
+                                ) ||
+                                getNestedValue(
+                                    oUshellConfig,
+                                    "services.NavTargetResolution.adapter.config.applications"
                                 ) || {}
                             )
                         );
@@ -300,6 +315,17 @@
                             oApps
                         );
 
+                        // Enable ClientSideTargetResolution so that
+                        // NavTargetResolutionInternal.getLinks() delegates to CSTR
+                        // instead of the adapter's getSemanticObjectLinks fallback.
+                        // Without this, FE V4's DataFieldWithIntentBasedNavigation
+                        // won't resolve links and renders plain text.
+                        setNestedValue(
+                            oUshellConfig,
+                            "services.NavTargetResolutionInternal.config.enableClientSideTargetResolution",
+                            true
+                        );
+
                         // Module paths (if any)
                         if (oUshellConfig.modulePaths) {
                             var oModules = {};
@@ -312,11 +338,39 @@
                             sap.ui.loader.config({ paths: oModules });
                         }
 
+                        // ── DEBUG: dump final config before Container.init ──
+                        console.group("[flp-init] Final UShell Config");
+                        var _ntri = getNestedValue(oUshellConfig,
+                            "services.NavTargetResolutionInternal.adapter.config.applications");
+                        var _ntr = getNestedValue(oUshellConfig,
+                            "services.NavTargetResolution.adapter.config.applications");
+                        var _cstr = getNestedValue(oUshellConfig,
+                            "services.ClientSideTargetResolution.adapter.config.applications");
+                        console.log("NavTargetResolutionInternal apps:", _ntri);
+                        console.log("NavTargetResolution apps:", _ntr);
+                        console.log("ClientSideTargetResolution apps:", _cstr);
+                        console.groupEnd();
+
                         // Load Container AFTER all config is set up (side effects!)
                         ushellUtils
                             .requireAsync(["sap/ushell/Container"])
                             .then(function (aModules) {
-                                aModules[0].init("local").then(fnCallback);
+                                aModules[0].init("local").then(function () {
+                                    // ── DEBUG: verify intent support ──
+                                    sap.ushell.Container.getServiceAsync("CrossApplicationNavigation")
+                                        .then(function (oNav) {
+                                            return oNav.isIntentSupported(
+                                                ["#Products-display", "#Orders-display"]
+                                            );
+                                        })
+                                        .then(function (oResult) {
+                                            console.log("[flp-init] isIntentSupported:", JSON.stringify(oResult));
+                                        })
+                                        .catch(function (e) {
+                                            console.error("[flp-init] isIntentSupported failed:", e);
+                                        });
+                                    fnCallback();
+                                });
                             });
                     }
 

@@ -78,16 +78,26 @@ pub fn build_metadata_xml(entities: &[&dyn ODataEntity]) -> String {
 }
 
 /// Baut das komplette manifest.json dynamisch aus allen registrierten Entitaeten.
+/// `default_entity_idx` bestimmt, welche Entitaet die Default-Route (leerer Hash) bekommt.
 pub fn build_manifest_json(entities: &[&dyn ODataEntity], settings: &Settings) -> Value {
+    build_manifest_json_with_default(entities, settings, 0)
+}
+
+/// Wie `build_manifest_json`, aber mit waehlbarer Default-Entitaet.
+pub fn build_manifest_json_with_default(
+    entities: &[&dyn ODataEntity],
+    settings: &Settings,
+    default_entity_idx: usize,
+) -> Value {
     let mut routes = Vec::new();
     let mut targets = serde_json::Map::new();
     let mut inbounds = serde_json::Map::new();
 
     for (idx, entity) in entities.iter().enumerate() {
         let entity_routes = entity.manifest_routes();
-        // First entity gets an additional default route (empty pattern)
+        // The chosen default entity gets an additional default route (empty pattern)
         // so the app has a landing page when opened with no inner hash.
-        if idx == 0 {
+        if idx == default_entity_idx {
             if let Some(first_route) = entity_routes.first() {
                 if let Some(target) = first_route.get("target") {
                     routes.push(json!({
@@ -106,15 +116,20 @@ pub fn build_manifest_json(entities: &[&dyn ODataEntity], settings: &Settings) -
         inbounds.insert(inbound_key, inbound_val);
     }
 
+    // Entitaet-spezifische App-ID: z.B. "products.app", "orders.app"
+    let default_entity = entities[default_entity_idx];
+    let app_id = format!("{}.app", default_entity.set_name().to_lowercase());
+    let app_title = default_entity.tile_title();
+
     json!({
         "_version": "1.65.0",
         "sap.app": {
-            "id": "products.demo",
+            "id": app_id,
             "type": "application",
             "applicationVersion": {
                 "version": "1.0.0"
             },
-            "title": "Produkte",
+            "title": app_title,
             "description": "Fiori Elements List Report + Object Page",
             "crossNavigation": {
                 "inbounds": inbounds

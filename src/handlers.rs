@@ -1,9 +1,19 @@
-use actix_web::{web, HttpRequest, HttpResponse};
+use axum::{
+    body::Body,
+    extract::State,
+    http::{header::HeaderMap, Method, StatusCode, Uri},
+    response::Response,
+};
+use axum::body::Bytes;
+use log::info;
 use serde_json::{json, Value};
 use std::path::Path;
+use std::sync::Arc;
 
 use crate::app_state::AppState;
-use crate::query::{parse_expand_names, parse_query_string, query_collection, query_collection_from};
+use crate::draft;
+use crate::entity::ODataEntity;
+use crate::query::{parse_query_string, query_collection, query_collection_from};
 use crate::routing::{resolve_odata_path, ODataPath};
 use crate::BASE_PATH;
 
@@ -16,58 +26,95 @@ fn cors_headers() -> Vec<(&'static str, &'static str)> {
     ]
 }
 
-pub fn json_response(data: Value) -> HttpResponse {
+pub fn json_response(data: Value) -> Response {
     let body = serde_json::to_string_pretty(&data).unwrap_or_default();
-    let mut builder = HttpResponse::Ok();
-    builder.insert_header((
-        "Content-Type",
-        "application/json;odata.metadata=minimal;charset=utf-8",
-    ));
-    builder.insert_header(("OData-Version", "4.0"));
+    let mut builder = Response::builder()
+        .status(StatusCode::OK)
+        .header(
+            "Content-Type",
+            "application/json;odata.metadata=minimal;charset=utf-8",
+        )
+        .header("OData-Version", "4.0");
     for (k, v) in cors_headers() {
-        builder.insert_header((k, v));
+        builder = builder.header(k, v);
     }
-    builder.body(body)
+    builder.body(Body::from(body)).unwrap()
 }
 
-pub fn error_response(code: u16, message: &str) -> HttpResponse {
+fn json_response_with_status(status: StatusCode, data: Value) -> Response {
+    let body = serde_json::to_string_pretty(&data).unwrap_or_default();
+    let mut builder = Response::builder()
+        .status(status)
+        .header(
+            "Content-Type",
+            "application/json;odata.metadata=minimal;charset=utf-8",
+        )
+        .header("OData-Version", "4.0");
+    for (k, v) in cors_headers() {
+        builder = builder.header(k, v);
+    }
+    builder.body(Body::from(body)).unwrap()
+}
+
+fn draft_to_response((status, value): (u16, Value)) -> Response {
+    match status {
+        204 => {
+            let mut builder = Response::builder().status(StatusCode::NO_CONTENT);
+            for (k, v) in cors_headers() {
+                builder = builder.header(k, v);
+            }
+            builder.body(Body::empty()).unwrap()
+        }
+        _ => {
+            let http_status = StatusCode::from_u16(status).unwrap_or(StatusCode::OK);
+            json_response_with_status(http_status, value)
+        }
+    }
+}
+
+pub fn error_response(code: u16, message: &str) -> Response {
     let body = json!({"error": {"code": code.to_string(), "message": message}});
-    let mut builder = match code {
-        404 => HttpResponse::NotFound(),
-        405 => HttpResponse::MethodNotAllowed(),
-        400 => HttpResponse::BadRequest(),
-        403 => HttpResponse::Forbidden(),
-        _ => HttpResponse::InternalServerError(),
+    let status = match code {
+        404 => StatusCode::NOT_FOUND,
+        405 => StatusCode::METHOD_NOT_ALLOWED,
+        400 => StatusCode::BAD_REQUEST,
+        403 => StatusCode::FORBIDDEN,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
-    builder.insert_header(("Content-Type", "application/json;charset=utf-8"));
-    builder.insert_header(("OData-Version", "4.0"));
+    let json_body = serde_json::to_string(&body).unwrap_or_default();
+    let mut builder = Response::builder()
+        .status(status)
+        .header("Content-Type", "application/json;charset=utf-8")
+        .header("OData-Version", "4.0");
     for (k, v) in cors_headers() {
-        builder.insert_header((k, v));
+        builder = builder.header(k, v);
     }
-    builder.json(body)
+    builder.body(Body::from(json_body)).unwrap()
 }
 
-pub async fn options_handler() -> HttpResponse {
-    let mut builder = HttpResponse::Ok();
+fn options_response() -> Response {
+    let mut builder = Response::builder().status(StatusCode::OK);
     for (k, v) in cors_headers() {
-        builder.insert_header((k, v));
+        builder = builder.header(k, v);
     }
-    builder.finish()
+    builder.body(Body::empty()).unwrap()
 }
 
-pub async fn metadata_handler(data: web::Data<AppState>) -> HttpResponse {
-    let mut builder = HttpResponse::Ok();
-    builder.insert_header(("Content-Type", "application/xml;charset=utf-8"));
-    builder.insert_header(("OData-Version", "4.0"));
+pub async fn metadata_handler(State(state): State<Arc<AppState>>) -> Response {
+    let mut builder = Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "application/xml;charset=utf-8")
+        .header("OData-Version", "4.0");
     for (k, v) in cors_headers() {
-        builder.insert_header((k, v));
+        builder = builder.header(k, v);
     }
-    builder.body(data.metadata_xml.clone())
+    builder.body(Body::from(state.metadata_xml.clone())).unwrap()
 }
 
 /// Service-Dokument – wird dynamisch aus der Entity-Registry erzeugt.
-pub async fn service_document(data: web::Data<AppState>) -> HttpResponse {
-    let sets: Vec<Value> = data.entities
+pub async fn service_document(State(state): State<Arc<AppState>>) -> Response {
+    let sets: Vec<Value> = state
+        .entities
         .iter()
         .map(|e| json!({"name": e.set_name(), "url": e.set_name()}))
         .collect();
@@ -78,374 +125,147 @@ pub async fn service_document(data: web::Data<AppState>) -> HttpResponse {
 }
 
 /// Generischer Collection-Handler fuer beliebige EntitySets.
-pub async fn collection_handler(req: HttpRequest, data: web::Data<AppState>) -> HttpResponse {
-    let parsed = resolve_odata_path(req.path(), &data.entities);
+pub async fn collection_handler(
+    State(state): State<Arc<AppState>>,
+    uri: Uri,
+) -> Response {
+    let path = uri.path();
+    let query = uri.query().unwrap_or("");
+    let parsed = resolve_odata_path(path, &state.entities);
     if let ODataPath::Collection { entity } = parsed.path {
-        let qs = parse_query_string(req.query_string());
-        let store = data.data_store.read().unwrap();
+        let qs = parse_query_string(query);
+        let store = state.data_store.read().unwrap();
         if let Some(records) = store.get(entity.set_name()) {
-            return json_response(query_collection_from(entity, records, &qs, &data.entities));
+            return json_response(query_collection_from(entity, records, &qs, &state.entities));
         }
-        return json_response(query_collection(entity, &qs, &data.entities));
+        return json_response(query_collection(entity, &qs, &state.entities));
     }
     error_response(404, "Entity set not found")
 }
 
 /// Generischer $count-Handler fuer beliebige EntitySets.
-pub async fn count_handler(req: HttpRequest, data: web::Data<AppState>) -> HttpResponse {
-    let parsed = resolve_odata_path(req.path(), &data.entities);
+pub async fn count_handler(
+    State(state): State<Arc<AppState>>,
+    uri: Uri,
+) -> Response {
+    let path = uri.path();
+    let parsed = resolve_odata_path(path, &state.entities);
     if let ODataPath::Count { entity } = parsed.path {
-        let store = data.data_store.read().unwrap();
+        let store = state.data_store.read().unwrap();
         let count = store.get(entity.set_name()).map(|v| v.len()).unwrap_or(0);
-        let mut builder = HttpResponse::Ok();
-        builder.insert_header(("Content-Type", "text/plain;charset=utf-8"));
-        builder.insert_header(("OData-Version", "4.0"));
+        let mut builder = Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "text/plain;charset=utf-8")
+            .header("OData-Version", "4.0");
         for (k, v) in cors_headers() {
-            builder.insert_header((k, v));
+            builder = builder.header(k, v);
         }
-        return builder.body(count.to_string());
+        return builder.body(Body::from(count.to_string())).unwrap();
     }
     error_response(404, "Entity set not found")
 }
 
 /// Generischer Single-Entity-Handler: /SetName('key') or /SetName(Key='val',IsActiveEntity=true)
-pub async fn single_entity_handler(req: HttpRequest, state: web::Data<AppState>) -> HttpResponse {
-    let parsed = resolve_odata_path(req.path(), &state.entities);
+fn handle_single_entity(path: &str, query: &str, state: &AppState) -> Response {
+    let parsed = resolve_odata_path(path, &state.entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
-        let qs = parse_query_string(req.query_string());
         let store = state.data_store.read().unwrap();
-        let records = store.get(entity.set_name());
-        let data = records.map(|r| r.as_slice());
-        if let Some(record) = data.and_then(|d| {
-            d.iter().find(|r| {
-                r.get(entity.key_field()).and_then(|v| v.as_str()) == Some(&key.key_value)
-                    && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(key.is_active)
-            })
-        }) {
-            let mut result = record.clone();
-            if let Some(obj) = result.as_object_mut() {
-                obj.insert(
-                    "@odata.context".to_string(),
-                    json!(format!(
-                        "{}/$metadata#{}/$entity",
-                        BASE_PATH,
-                        entity.set_name()
-                    )),
-                );
-            }
-            // $expand
-            if let Some(expand) = qs.get("$expand") {
-                if !expand.is_empty() {
-                    let nav_names = parse_expand_names(expand);
-                    let nav_refs: Vec<&str> = nav_names.iter().map(|s| s.as_str()).collect();
-                    entity.expand_record(&mut result, &nav_refs, &state.entities);
-                    // DraftAdministrativeData injection
-                    if nav_refs.iter().any(|n| *n == "DraftAdministrativeData") {
-                        if let Some(obj) = result.as_object_mut() {
-                            let is_draft = obj.get("IsActiveEntity")
-                                .and_then(|v| v.as_bool()) == Some(false);
-                            if is_draft {
-                                obj.insert("DraftAdministrativeData".to_string(), json!({
-                                    "DraftUUID": format!("draft-{}", obj.get(entity.key_field()).and_then(|v| v.as_str()).unwrap_or("unknown")),
-                                    "InProcessByUser": ""
-                                }));
-                            } else {
-                                obj.entry("DraftAdministrativeData".to_string())
-                                    .or_insert(Value::Null);
-                            }
-                        }
-                    }
-                }
-            }
-            return json_response(result);
-        }
-        return error_response(
-            404,
-            &format!(
-                "Entity with {}='{}' not found.",
-                entity.key_field(),
-                &key.key_value
-            ),
-        );
+        return draft_to_response(draft::read_entity(
+            &store,
+            entity,
+            &key.key_value,
+            key.is_active,
+            query,
+            &state.entities,
+        ));
     }
     error_response(404, "Entity not found.")
 }
 
 /// Generischer PATCH-Handler: /SetName(key) – aktualisiert Felder in-memory.
-pub async fn patch_entity_handler(
-    req: HttpRequest,
-    body: web::Json<Value>,
-    state: web::Data<AppState>,
-) -> HttpResponse {
-    let parsed = resolve_odata_path(req.path(), &state.entities);
+fn handle_patch_entity(path: &str, body: &Value, state: &AppState) -> Response {
+    let parsed = resolve_odata_path(path, &state.entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
         let mut store = state.data_store.write().unwrap();
-        if let Some(records) = store.get_mut(entity.set_name()) {
-            if let Some(record) = records.iter_mut().find(|r| {
-                r.get(entity.key_field()).and_then(|v| v.as_str()) == Some(&key.key_value)
-                    && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(key.is_active)
-            }) {
-                // Nur nicht-immutable Felder aktualisieren
-                let immutable_fields: Vec<&str> = entity
-                    .fields_def()
-                    .unwrap_or(&[])
-                    .iter()
-                    .filter(|f| f.immutable)
-                    .map(|f| f.name)
-                    .collect();
-
-                if let Some(patch_obj) = body.as_object() {
-                    if let Some(rec_obj) = record.as_object_mut() {
-                        for (k, value) in patch_obj {
-                            // Draft-keys und immutable Felder nicht aendern
-                            if k == "IsActiveEntity" || k == "HasActiveEntity" || k == "HasDraftEntity" {
-                                continue;
-                            }
-                            if !immutable_fields.contains(&k.as_str()) {
-                                rec_obj.insert(k.clone(), value.clone());
-                            }
-                        }
-                    }
-                }
-
-                let mut result = record.clone();
-                if let Some(obj) = result.as_object_mut() {
-                    obj.insert(
-                        "@odata.context".to_string(),
-                        json!(format!(
-                            "{}/$metadata#{}/$entity",
-                            BASE_PATH,
-                            entity.set_name()
-                        )),
-                    );
-                }
-                return json_response(result);
-            }
-            return error_response(
-                404,
-                &format!("Entity with {}='{}' not found.", entity.key_field(), &key.key_value),
-            );
-        }
+        return draft_to_response(draft::patch_entity(
+            &mut store,
+            entity,
+            &key.key_value,
+            key.is_active,
+            body,
+        ));
     }
     error_response(404, "Entity not found.")
 }
 
 /// Handler fuer DELETE: Draft verwerfen (Discard).
 /// DELETE /SetName(key) – entfernt Draft und setzt HasDraftEntity=false am aktiven Entity.
-pub async fn delete_entity_handler(
-    req: HttpRequest,
-    state: web::Data<AppState>,
-) -> HttpResponse {
-    let parsed = resolve_odata_path(req.path(), &state.entities);
+fn handle_delete_entity(path: &str, state: &AppState) -> Response {
+    let parsed = resolve_odata_path(path, &state.entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
         let mut store = state.data_store.write().unwrap();
-        if let Some(records) = store.get_mut(entity.set_name()) {
-            let found = records.iter().any(|r| {
-                r.get(entity.key_field()).and_then(|v| v.as_str())
-                    == Some(&key.key_value)
-                    && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                        == Some(key.is_active)
-            });
-            if found {
-                // Draft entfernen
-                records.retain(|r| {
-                    !(r.get(entity.key_field()).and_then(|v| v.as_str())
-                        == Some(&key.key_value)
-                        && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                            == Some(key.is_active))
-                });
-                // Falls ein Draft geloescht wurde: HasDraftEntity=false am aktiven Entity
-                if !key.is_active {
-                    if let Some(active) = records.iter_mut().find(|r| {
-                        r.get(entity.key_field()).and_then(|v| v.as_str())
-                            == Some(&key.key_value)
-                            && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                                == Some(true)
-                    }) {
-                        if let Some(obj) = active.as_object_mut() {
-                            obj.insert(
-                                "HasDraftEntity".to_string(),
-                                Value::Bool(false),
-                            );
-                        }
-                    }
-                }
-                let mut builder = HttpResponse::NoContent();
-                for (k, v) in cors_headers() {
-                    builder.insert_header((k, v));
-                }
-                return builder.finish();
-            }
-        }
-        return error_response(404, "Entity not found.");
+        return draft_to_response(draft::delete_entity(
+            &mut store,
+            entity,
+            &key.key_value,
+            key.is_active,
+            &state.entities,
+        ));
     }
     error_response(404, "Entity not found.")
 }
 
 /// Handler fuer Draft-Actions: draftEdit, draftActivate, draftPrepare.
 /// POST /SetName(key)/Namespace.actionName
-pub async fn draft_action_handler(
-    req: HttpRequest,
-    _body: web::Bytes,
-    state: web::Data<AppState>,
-) -> HttpResponse {
-    let parsed = resolve_odata_path(req.path(), &state.entities);
+fn handle_draft_action(path: &str, state: &AppState) -> Response {
+    let parsed = resolve_odata_path(path, &state.entities);
     if let ODataPath::Action {
         entity,
         key,
         action,
     } = parsed.path
     {
-        let key_value = &key.key_value;
-        let key_field = entity.key_field();
-        let set_name = entity.set_name();
-
-        match action.as_str() {
+        return match action.as_str() {
             "draftEdit" => {
                 let mut store = state.data_store.write().unwrap();
-                if let Some(records) = store.get_mut(set_name) {
-                    let active_record = records.iter_mut().find(|r| {
-                        r.get(key_field).and_then(|v| v.as_str()) == Some(key_value)
-                            && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                                == Some(true)
-                    });
-                    if let Some(active) = active_record {
-                        if let Some(obj) = active.as_object_mut() {
-                            obj.insert(
-                                "HasDraftEntity".to_string(),
-                                Value::Bool(true),
-                            );
-                        }
-                        let mut draft = active.clone();
-                        if let Some(obj) = draft.as_object_mut() {
-                            obj.insert(
-                                "IsActiveEntity".to_string(),
-                                Value::Bool(false),
-                            );
-                            obj.insert(
-                                "HasActiveEntity".to_string(),
-                                Value::Bool(true),
-                            );
-                            obj.insert(
-                                "HasDraftEntity".to_string(),
-                                Value::Bool(false),
-                            );
-                            obj.insert(
-                                "@odata.context".to_string(),
-                                json!(format!(
-                                    "{}/$metadata#{}/$entity",
-                                    BASE_PATH, set_name
-                                )),
-                            );
-                        }
-                        let result = draft.clone();
-                        records.push(draft);
-                        return json_response(result);
-                    }
-                    return error_response(404, "Active entity not found.");
-                }
-                return error_response(404, "Entity set not found.");
+                draft_to_response(draft::draft_edit(
+                    &mut store,
+                    entity,
+                    &key.key_value,
+                    &state.entities,
+                ))
             }
             "draftActivate" => {
                 let mut store = state.data_store.write().unwrap();
-                if let Some(records) = store.get_mut(set_name) {
-                    let draft_data = records
-                        .iter()
-                        .find(|r| {
-                            r.get(key_field).and_then(|v| v.as_str())
-                                == Some(key_value)
-                                && r.get("IsActiveEntity")
-                                    .and_then(|v| v.as_bool())
-                                    == Some(false)
-                        })
-                        .cloned();
-                    if let Some(draft) = draft_data {
-                        if let Some(active) = records.iter_mut().find(|r| {
-                            r.get(key_field).and_then(|v| v.as_str())
-                                == Some(key_value)
-                                && r.get("IsActiveEntity")
-                                    .and_then(|v| v.as_bool())
-                                    == Some(true)
-                        }) {
-                            if let (Some(draft_obj), Some(active_obj)) =
-                                (draft.as_object(), active.as_object_mut())
-                            {
-                                for (k, v) in draft_obj {
-                                    if k != "IsActiveEntity"
-                                        && k != "HasActiveEntity"
-                                        && k != "HasDraftEntity"
-                                        && !k.starts_with("@odata")
-                                    {
-                                        active_obj.insert(k.clone(), v.clone());
-                                    }
-                                }
-                                active_obj.insert(
-                                    "HasDraftEntity".to_string(),
-                                    Value::Bool(false),
-                                );
-                            }
-                            let mut result = active.clone();
-                            if let Some(obj) = result.as_object_mut() {
-                                obj.insert(
-                                    "@odata.context".to_string(),
-                                    json!(format!(
-                                        "{}/$metadata#{}/$entity",
-                                        BASE_PATH, set_name
-                                    )),
-                                );
-                            }
-                            records.retain(|r| {
-                                !(r.get(key_field).and_then(|v| v.as_str())
-                                    == Some(key_value)
-                                    && r.get("IsActiveEntity")
-                                        .and_then(|v| v.as_bool())
-                                        == Some(false))
-                            });
-                            return json_response(result);
-                        }
-                    }
-                    return error_response(404, "Draft entity not found.");
-                }
-                return error_response(404, "Entity set not found.");
+                draft_to_response(draft::draft_activate(
+                    &mut store,
+                    entity,
+                    &key.key_value,
+                    &state.entities,
+                ))
             }
             "draftPrepare" => {
                 let store = state.data_store.read().unwrap();
-                if let Some(records) = store.get(set_name) {
-                    if let Some(record) = records.iter().find(|r| {
-                        r.get(key_field).and_then(|v| v.as_str()) == Some(key_value)
-                            && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                                == Some(key.is_active)
-                    }) {
-                        let mut result = record.clone();
-                        if let Some(obj) = result.as_object_mut() {
-                            obj.insert(
-                                "@odata.context".to_string(),
-                                json!(format!(
-                                    "{}/$metadata#{}/$entity",
-                                    BASE_PATH, set_name
-                                )),
-                            );
-                        }
-                        return json_response(result);
-                    }
-                }
-                return error_response(404, "Entity not found for draftPrepare.");
+                draft_to_response(draft::draft_prepare(
+                    &store,
+                    entity,
+                    &key.key_value,
+                    key.is_active,
+                ))
             }
-            _ => {
-                return error_response(
-                    400,
-                    &format!("Unknown action: {}", action),
-                );
-            }
-        }
+            _ => error_response(400, &format!("Unknown action: {}", action)),
+        };
     }
     error_response(404, "Entity not found for action.")
 }
 
 // ── $batch handler ──────────────────────────────────────────────────
-pub async fn batch_handler(req: HttpRequest, body: web::Bytes, data: web::Data<AppState>) -> HttpResponse {
-    let content_type = req
-        .headers()
+pub async fn batch_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let content_type = headers
         .get("content-type")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
@@ -496,7 +316,10 @@ pub async fn batch_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
                         continue;
                     }
                     let cs_request_line = cs_segment.lines().find(|l| {
-                        l.starts_with("GET ") || l.starts_with("POST ") || l.starts_with("PATCH ") || l.starts_with("DELETE ")
+                        l.starts_with("GET ")
+                            || l.starts_with("POST ")
+                            || l.starts_with("PATCH ")
+                            || l.starts_with("DELETE ")
                     });
                     if let Some(cs_req_line) = cs_request_line {
                         let cs_parts: Vec<&str> = cs_req_line.split_whitespace().collect();
@@ -505,10 +328,10 @@ pub async fn batch_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
                         let cs_body = extract_batch_body(cs_segment);
 
                         let (cs_status, cs_resp_json) = match cs_method {
-                            "GET" => (200, handle_batch_get(cs_rel_url, &data)),
-                            "PATCH" => handle_batch_patch(cs_rel_url, &cs_body, &data),
-                            "POST" => handle_batch_post(cs_rel_url, &cs_body, &data),
-                            "DELETE" => handle_batch_delete(cs_rel_url, &data),
+                            "GET" => (200, handle_batch_get(cs_rel_url, &state)),
+                            "PATCH" => handle_batch_patch(cs_rel_url, &cs_body, &state),
+                            "POST" => handle_batch_post(cs_rel_url, &cs_body, &state),
+                            "DELETE" => handle_batch_delete(cs_rel_url, &state),
                             _ => (200, json!({})),
                         };
                         let cs_resp_body = serde_json::to_string(&cs_resp_json).unwrap_or_default();
@@ -559,9 +382,13 @@ pub async fn batch_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
         let lines: Vec<&str> = segment.lines().collect();
         // Finde die Request-Zeile (GET, POST, PATCH, etc.)
         let request_line = lines.iter().find(|l| {
-            l.starts_with("GET ") || l.starts_with("POST ") || l.starts_with("PATCH ") || l.starts_with("DELETE ")
+            l.starts_with("GET ")
+                || l.starts_with("POST ")
+                || l.starts_with("PATCH ")
+                || l.starts_with("DELETE ")
         });
         if let Some(request_line) = request_line {
+            info!("+-- {}", request_line);
             let parts: Vec<&str> = request_line.split_whitespace().collect();
             let method = parts.first().copied().unwrap_or("");
             let rel_url = parts.get(1).copied().unwrap_or("");
@@ -570,11 +397,11 @@ pub async fn batch_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
             let segment_body = extract_batch_body(segment);
 
             let (status, resp_json) = match method {
-                "GET" => (200, handle_batch_get(rel_url, &data)),
-                "PATCH" => handle_batch_patch(rel_url, &segment_body, &data),
-                "POST" => handle_batch_post(rel_url, &segment_body, &data),
-                "DELETE" => handle_batch_delete(rel_url, &data),
-                _ => (200, handle_batch_get(rel_url, &data)),
+                "GET" => (200, handle_batch_get(rel_url, &state)),
+                "PATCH" => handle_batch_patch(rel_url, &segment_body, &state),
+                "POST" => handle_batch_post(rel_url, &segment_body, &state),
+                "DELETE" => handle_batch_delete(rel_url, &state),
+                _ => (200, handle_batch_get(rel_url, &state)),
             };
 
             let resp_body = serde_json::to_string(&resp_json).unwrap_or_default();
@@ -598,6 +425,10 @@ pub async fn batch_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
     }
 
     let resp_boundary = format!("batch_resp_{}", std::process::id());
+
+    // Nach Batch-Verarbeitung Daten persistieren
+    state.save_data();
+
     let mut body_parts = Vec::new();
     for rp in &response_parts {
         body_parts.push(format!("--{}\r\n{}", resp_boundary, rp));
@@ -605,16 +436,17 @@ pub async fn batch_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
     body_parts.push(format!("--{}--\r\n", resp_boundary));
     let full_body = body_parts.join("\r\n");
 
-    let mut builder = HttpResponse::Ok();
-    builder.insert_header((
-        "Content-Type",
-        format!("multipart/mixed; boundary={}", resp_boundary),
-    ));
-    builder.insert_header(("OData-Version", "4.0"));
+    let mut builder = Response::builder()
+        .status(StatusCode::OK)
+        .header(
+            "Content-Type",
+            format!("multipart/mixed; boundary={}", resp_boundary),
+        )
+        .header("OData-Version", "4.0");
     for (k, v) in cors_headers() {
-        builder.insert_header((k, v));
+        builder = builder.header(k, v);
     }
-    builder.body(full_body)
+    builder.body(Body::from(full_body)).unwrap()
 }
 
 /// Extrahiert den JSON-Body aus einem Batch-Segment (nach der Leerzeile).
@@ -639,87 +471,40 @@ fn extract_batch_body(segment: &str) -> String {
 }
 
 /// Batch-PATCH: aktualisiert ein einzelnes Entity im data_store.
-fn handle_batch_patch(rel_url: &str, body: &str, state: &web::Data<AppState>) -> (u16, Value) {
+fn handle_batch_patch(rel_url: &str, body: &str, state: &AppState) -> (u16, Value) {
     let parsed = resolve_odata_path(rel_url, &state.entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
         let patch_data: Value = serde_json::from_str(body).unwrap_or(json!({}));
         let mut store = state.data_store.write().unwrap();
-        if let Some(records) = store.get_mut(entity.set_name()) {
-            if let Some(record) = records.iter_mut().find(|r| {
-                let key_match = r.get(entity.key_field()).and_then(|v| v.as_str())
-                    == Some(&key.key_value);
-                let active_match = r
-                    .get("IsActiveEntity")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true)
-                    == key.is_active;
-                key_match && active_match
-            }) {
-                if let (Some(rec_obj), Some(patch_obj)) =
-                    (record.as_object_mut(), patch_data.as_object())
-                {
-                    for (k, v) in patch_obj {
-                        if k == "IsActiveEntity"
-                            || k == "HasActiveEntity"
-                            || k == "HasDraftEntity"
-                        {
-                            continue;
-                        }
-                        rec_obj.insert(k.clone(), v.clone());
-                    }
-                }
-                return (200, record.clone());
-            }
-        }
-        return (404, json!({"error": {"code": "404", "message": "Not found"}}));
+        return draft::patch_entity(&mut store, entity, &key.key_value, key.is_active, &patch_data);
     }
-    (404, json!({"error": {"code": "404", "message": format!("Unknown: {}", rel_url)}}))
+    (
+        404,
+        json!({"error": {"code": "404", "message": format!("Unknown: {}", rel_url)}}),
+    )
 }
 
 /// Batch-DELETE: Draft verwerfen innerhalb von $batch.
-fn handle_batch_delete(rel_url: &str, state: &web::Data<AppState>) -> (u16, Value) {
+fn handle_batch_delete(rel_url: &str, state: &AppState) -> (u16, Value) {
     let parsed = resolve_odata_path(rel_url, &state.entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
         let mut store = state.data_store.write().unwrap();
-        if let Some(records) = store.get_mut(entity.set_name()) {
-            let found = records.iter().any(|r| {
-                r.get(entity.key_field()).and_then(|v| v.as_str())
-                    == Some(&key.key_value)
-                    && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                        == Some(key.is_active)
-            });
-            if found {
-                records.retain(|r| {
-                    !(r.get(entity.key_field()).and_then(|v| v.as_str())
-                        == Some(&key.key_value)
-                        && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                            == Some(key.is_active))
-                });
-                if !key.is_active {
-                    if let Some(active) = records.iter_mut().find(|r| {
-                        r.get(entity.key_field()).and_then(|v| v.as_str())
-                            == Some(&key.key_value)
-                            && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                                == Some(true)
-                    }) {
-                        if let Some(obj) = active.as_object_mut() {
-                            obj.insert(
-                                "HasDraftEntity".to_string(),
-                                json!(false),
-                            );
-                        }
-                    }
-                }
-                return (204, json!(null));
-            }
-        }
-        return (404, json!({"error": {"code": "404", "message": "Not found"}}));
+        return draft::delete_entity(
+            &mut store,
+            entity,
+            &key.key_value,
+            key.is_active,
+            &state.entities,
+        );
     }
-    (404, json!({"error": {"code": "404", "message": format!("Unknown: {}", rel_url)}}))
+    (
+        404,
+        json!({"error": {"code": "404", "message": format!("Unknown: {}", rel_url)}}),
+    )
 }
 
 /// Batch-POST: behandelt Aktionen (draftEdit, draftActivate, draftPrepare) innerhalb von $batch.
-fn handle_batch_post(rel_url: &str, _body: &str, state: &web::Data<AppState>) -> (u16, Value) {
+fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value) {
     let parsed = resolve_odata_path(rel_url, &state.entities);
     if let ODataPath::Action {
         entity,
@@ -728,123 +513,41 @@ fn handle_batch_post(rel_url: &str, _body: &str, state: &web::Data<AppState>) ->
     } = parsed.path
     {
         let mut store = state.data_store.write().unwrap();
-        let records = store.get_mut(entity.set_name());
-
-        match action.as_str() {
+        return match action.as_str() {
             "draftEdit" => {
-                if let Some(records) = records {
-                    if let Some(active) = records
-                        .iter()
-                        .find(|r| {
-                            r.get(entity.key_field()).and_then(|v| v.as_str())
-                                == Some(&key.key_value)
-                                && r.get("IsActiveEntity")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(true)
-                        })
-                        .cloned()
-                    {
-                        let mut draft = active.clone();
-                        if let Some(obj) = draft.as_object_mut() {
-                            obj.insert("IsActiveEntity".to_string(), json!(false));
-                            obj.insert("HasActiveEntity".to_string(), json!(true));
-                            obj.insert("HasDraftEntity".to_string(), json!(false));
-                        }
-                        if let Some(active_rec) = records.iter_mut().find(|r| {
-                            r.get(entity.key_field()).and_then(|v| v.as_str())
-                                == Some(&key.key_value)
-                                && r.get("IsActiveEntity")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(true)
-                        }) {
-                            if let Some(obj) = active_rec.as_object_mut() {
-                                obj.insert("HasDraftEntity".to_string(), json!(true));
-                            }
-                        }
-                        let result = draft.clone();
-                        records.push(draft);
-                        return (201, result);
-                    }
-                }
+                draft::draft_edit(&mut store, entity, &key.key_value, &state.entities)
             }
             "draftActivate" => {
-                if let Some(records) = records {
-                    if let Some(draft) = records
-                        .iter()
-                        .find(|r| {
-                            r.get(entity.key_field()).and_then(|v| v.as_str())
-                                == Some(&key.key_value)
-                                && r.get("IsActiveEntity")
-                                    .and_then(|v| v.as_bool())
-                                    == Some(false)
-                        })
-                        .cloned()
-                    {
-                        if let Some(active_rec) = records.iter_mut().find(|r| {
-                            r.get(entity.key_field()).and_then(|v| v.as_str())
-                                == Some(&key.key_value)
-                                && r.get("IsActiveEntity")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(true)
-                        }) {
-                            if let (Some(active_obj), Some(draft_obj)) =
-                                (active_rec.as_object_mut(), draft.as_object())
-                            {
-                                for (k, v) in draft_obj {
-                                    if k == "IsActiveEntity"
-                                        || k == "HasActiveEntity"
-                                        || k == "HasDraftEntity"
-                                    {
-                                        continue;
-                                    }
-                                    active_obj.insert(k.clone(), v.clone());
-                                }
-                                active_obj
-                                    .insert("HasDraftEntity".to_string(), json!(false));
-                            }
-                        }
-                        records.retain(|r| {
-                            !(r.get(entity.key_field()).and_then(|v| v.as_str())
-                                == Some(&key.key_value)
-                                && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                                    == Some(false))
-                        });
-                        if let Some(activated) = records.iter().find(|r| {
-                            r.get(entity.key_field()).and_then(|v| v.as_str())
-                                == Some(&key.key_value)
-                                && r.get("IsActiveEntity")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(true)
-                        }) {
-                            return (200, activated.clone());
-                        }
-                    }
-                }
+                draft::draft_activate(&mut store, entity, &key.key_value, &state.entities)
             }
-            "draftPrepare" => {
-                if let Some(records) = records {
-                    if let Some(rec) = records.iter().find(|r| {
-                        r.get(entity.key_field()).and_then(|v| v.as_str())
-                            == Some(&key.key_value)
-                            && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                                == Some(key.is_active)
-                    }) {
-                        return (200, rec.clone());
-                    }
-                }
-            }
-            _ => {}
-        }
-        return (
-            200,
-            json!({"error": {"code": "404", "message": format!("Action not found: {}", action)}}),
-        );
+            "draftPrepare" => draft::draft_prepare(&store, entity, &key.key_value, key.is_active),
+            _ => (
+                400,
+                json!({"error": {"code": "400", "message": format!("Unknown action: {}", action)}}),
+            ),
+        };
     }
-    (404, json!({"error": {"code": "404", "message": format!("Unknown POST: {}", rel_url)}}))
+
+    // Sub-Collection POST: neues Kind-Element anlegen (z.B. Orders('O003')/Items)
+    if let ODataPath::SubCollection {
+        parent_entity,
+        parent_key,
+        child_entity,
+        ..
+    } = parsed.path
+    {
+        let mut store = state.data_store.write().unwrap();
+        return draft::create_sub_item(&mut store, parent_entity, &parent_key, child_entity, body);
+    }
+
+    (
+        404,
+        json!({"error": {"code": "404", "message": format!("Unknown POST: {}", rel_url)}}),
+    )
 }
 
 /// Generischer Batch-GET – loest Pfade ueber die Entity-Registry auf.
-fn handle_batch_get(rel_url: &str, state: &web::Data<AppState>) -> Value {
+fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
     let entities = &state.entities;
     let store = state.data_store.read().unwrap();
     let parsed = resolve_odata_path(rel_url, entities);
@@ -873,64 +576,91 @@ fn handle_batch_get(rel_url: &str, state: &web::Data<AppState>) -> Value {
             json!({"value": count})
         }
         ODataPath::Entity { entity, key } => {
+            let (_, val) = draft::read_entity(
+                &store,
+                entity,
+                &key.key_value,
+                key.is_active,
+                &parsed.query_string,
+                entities,
+            );
+            val
+        }
+        ODataPath::SubCollection {
+            parent_entity,
+            parent_key,
+            child_entity,
+            ..
+        } => draft::read_sub_collection(
+            &store,
+            parent_entity,
+            &parent_key,
+            child_entity,
+            &parsed.query_string,
+            entities,
+        ),
+        ODataPath::PropertyAccess {
+            entity,
+            key,
+            property,
+        } => {
             let records = store.get(entity.set_name());
-            let data = records.map(|r| r.as_slice());
-            if let Some(record) = data.and_then(|d| {
-                d.iter().find(|r| {
-                    let key_match = r.get(entity.key_field()).and_then(|v| v.as_str()) == Some(&key.key_value);
-                    let active_match = r.get("IsActiveEntity").and_then(|v| v.as_bool()).unwrap_or(true) == key.is_active;
-                    key_match && active_match
-                })
+            if let Some(record) = records.and_then(|r| {
+                draft::find_record(r, entity.key_field(), &key.key_value, key.is_active)
             }) {
-                let mut result = record.clone();
-                if let Some(obj) = result.as_object_mut() {
-                    obj.insert(
-                        "@odata.context".to_string(),
-                        json!(format!(
-                            "{}/$metadata#{}/$entity",
-                            BASE_PATH,
-                            entity.set_name()
-                        )),
-                    );
+                if let Some(val) = record.get(&property) {
+                    return json!({ "value": val });
                 }
-                if let Some(expand) = qs.get("$expand") {
-                    if !expand.is_empty() {
-                        let nav_names = parse_expand_names(expand);
-                        let nav_refs: Vec<&str> = nav_names.iter().map(|s| s.as_str()).collect();
-                        entity.expand_record(&mut result, &nav_refs, entities);
-                        // DraftAdministrativeData injection
-                        if nav_refs.iter().any(|n| *n == "DraftAdministrativeData") {
-                            if let Some(obj) = result.as_object_mut() {
-                                let is_draft = obj.get("IsActiveEntity")
-                                    .and_then(|v| v.as_bool()) == Some(false);
-                                if is_draft {
-                                    obj.insert("DraftAdministrativeData".to_string(), json!({
-                                        "DraftUUID": format!("draft-{}", obj.get(entity.key_field()).and_then(|v| v.as_str()).unwrap_or("unknown")),
-                                        "InProcessByUser": ""
-                                    }));
-                                } else {
-                                    obj.entry("DraftAdministrativeData".to_string())
-                                        .or_insert(Value::Null);
-                                }
-                            }
-                        }
-                    }
-                }
-                result
-            } else {
-                json!({"error": {"code": "404", "message": "Not found"}})
             }
+            json!({"error": {"code": "404", "message": format!("Property '{}' not found", property)}})
         }
         _ => json!({"error": {"code": "404", "message": format!("Unknown: {}", rel_url)}}),
     }
 }
 
+// ── Sub-Collection handler ──────────────────────────────────────────
+/// Liefert die Kind-Eintraege einer Komposition.
+/// Z.B. Orders('O001')/Items → alle OrderItems mit OrderID == 'O001'.
+/// Filtert nach dem IsActiveEntity-Status des Eltern-Datensatzes.
+fn handle_sub_collection(
+    parent_entity: &dyn ODataEntity,
+    parent_key: &crate::routing::EntityKeyInfo,
+    child_entity: &dyn ODataEntity,
+    query: &str,
+    state: &AppState,
+) -> Response {
+    let store = state.data_store.read().unwrap();
+    json_response(draft::read_sub_collection(
+        &store,
+        parent_entity,
+        parent_key,
+        child_entity,
+        query,
+        &state.entities,
+    ))
+}
+
 // ── Static file serving ─────────────────────────────────────────────
-pub async fn static_files(req: HttpRequest, data: web::Data<AppState>) -> HttpResponse {
-    let raw_path = urlencoding::decode(req.path())
+fn handle_static_files(path: &str, state: &AppState) -> Response {
+    let raw_path = urlencoding::decode(path)
         .unwrap_or_default()
         .into_owned();
     let mut relative = raw_path.trim_start_matches('/').to_string();
+
+    // Entity-spezifischer App-Pfad: /apps/{EntitySet}/...
+    // Jede Entitaet bekommt ein eigenes Manifest mit passender Default-Route.
+    let mut entity_hint: Option<String> = None;
+    if relative.starts_with("apps/") {
+        let rest = &relative["apps/".len()..];
+        if let Some(slash_pos) = rest.find('/') {
+            let candidate = rest[..slash_pos].to_string();
+            if state.entity_manifests.contains_key(&candidate) {
+                entity_hint = Some(candidate.clone());
+                info!("entity hint: {}", candidate);
+                relative = rest[slash_pos + 1..].to_string();
+            }
+        }
+    }
 
     for prefix in &["products/demo/", "products.demo/"] {
         if relative.starts_with(prefix) {
@@ -944,22 +674,60 @@ pub async fn static_files(req: HttpRequest, data: web::Data<AppState>) -> HttpRe
 
     // manifest.json wird dynamisch aus der Entity-Registry generiert
     if relative == "manifest.json" {
-        let mut builder = HttpResponse::Ok();
-        builder.insert_header(("Content-Type", "application/json;charset=utf-8"));
+        let manifest_body = entity_hint
+            .as_ref()
+            .and_then(|name| state.entity_manifests.get(name))
+            .unwrap_or(&state.manifest_json);
+        info!(
+            "Serving manifest.json for entity: {}",
+            entity_hint.as_deref().unwrap_or("default")
+        );
+        let mut builder = Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "application/json;charset=utf-8");
         for (k, v) in cors_headers() {
-            builder.insert_header((k, v));
+            builder = builder.header(k, v);
         }
-        return builder.body(data.manifest_json.clone());
+        return builder.body(Body::from(manifest_body.clone())).unwrap();
+    }
+
+    // Component.js wird dynamisch generiert — der Klassenname muss zum
+    // sap.app.id im jeweiligen Manifest passen, sonst cached UI5 den
+    // falschen Component fuer die zweite App.
+    if relative == "Component.js" {
+        let app_id = entity_hint
+            .as_ref()
+            .map(|name| format!("{}.app", name.to_lowercase()))
+            .unwrap_or_else(|| "products.demo".to_string());
+        let body = format!(
+            "sap.ui.define([\"sap/fe/core/AppComponent\"], function (AppComponent) {{\n\
+             \t\"use strict\";\n\
+             \treturn AppComponent.extend(\"{}.Component\", {{\n\
+             \t\tmetadata: {{\n\
+             \t\t\tmanifest: \"json\"\n\
+             \t\t}}\n\
+             \t}});\n\
+             }});",
+            app_id
+        );
+        let mut builder = Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "application/javascript;charset=utf-8");
+        for (k, v) in cors_headers() {
+            builder = builder.header(k, v);
+        }
+        return builder.body(Body::from(body)).unwrap();
     }
 
     // flp.html wird dynamisch generiert (Settings-gesteuert)
     if relative == "flp.html" {
-        let mut builder = HttpResponse::Ok();
-        builder.insert_header(("Content-Type", "text/html;charset=utf-8"));
+        let mut builder = Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "text/html;charset=utf-8");
         for (k, v) in cors_headers() {
-            builder.insert_header((k, v));
+            builder = builder.header(k, v);
         }
-        return builder.body(data.flp_html.clone());
+        return builder.body(Body::from(state.flp_html.clone())).unwrap();
     }
 
     let wa_dir = crate::webapp_dir();
@@ -975,9 +743,13 @@ pub async fn static_files(req: HttpRequest, data: web::Data<AppState>) -> HttpRe
             // SPA fallback: extensionless routes get the dynamic flp.html
             // but NOT for /sap/ paths (e.g. /sap/bc/lrep/flex/...)
             if Path::new(&relative).extension().is_none() && !raw_path.starts_with("/sap/") {
-                let mut builder = HttpResponse::Ok();
-                builder.insert_header(("Content-Type", "text/html;charset=utf-8"));
-                return builder.body(data.flp_html.clone());
+                let mut builder = Response::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Type", "text/html;charset=utf-8");
+                for (k, v) in cors_headers() {
+                    builder = builder.header(k, v);
+                }
+                return builder.body(Body::from(state.flp_html.clone())).unwrap();
             }
             return error_response(404, &format!("Resource not found: {}", raw_path));
         }
@@ -997,25 +769,32 @@ pub async fn static_files(req: HttpRequest, data: web::Data<AppState>) -> HttpRe
     };
 
     if target.exists() && target.is_file() {
+        info!("serving static file: {}", target.display());
         return serve_file(&target);
     }
 
     // SPA fallback for extensionless routes (skip /sap/ API paths)
     if Path::new(&relative).extension().is_none() && !raw_path.starts_with("/sap/") {
-        let mut builder = HttpResponse::Ok();
-        builder.insert_header(("Content-Type", "text/html;charset=utf-8"));
-        return builder.body(data.flp_html.clone());
+        let mut builder = Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "text/html;charset=utf-8");
+        for (k, v) in cors_headers() {
+            builder = builder.header(k, v);
+        }
+        return builder.body(Body::from(state.flp_html.clone())).unwrap();
     }
 
     error_response(404, &format!("Resource not found: {}", raw_path))
 }
 
-fn serve_file(path: &Path) -> HttpResponse {
+fn serve_file(path: &Path) -> Response {
     let mime = mime_guess::from_path(path).first_or_octet_stream();
     match std::fs::read(path) {
-        Ok(bytes) => HttpResponse::Ok()
-            .insert_header(("Content-Type", mime.to_string()))
-            .body(bytes),
+        Ok(bytes) => Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", mime.to_string())
+            .body(Body::from(bytes))
+            .unwrap(),
         Err(_) => error_response(500, "Failed to read file"),
     }
 }
@@ -1059,46 +838,105 @@ fn favicon_svg() -> &'static str {
 </svg>"##
 }
 
-fn favicon_response() -> HttpResponse {
-    HttpResponse::Ok()
-        .insert_header(("Content-Type", "image/svg+xml"))
-        .insert_header(("Cache-Control", "public, max-age=86400"))
-        .body(favicon_svg())
+fn favicon_response() -> Response {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "image/svg+xml")
+        .header("Cache-Control", "public, max-age=86400")
+        .body(Body::from(favicon_svg()))
+        .unwrap()
 }
 
-pub async fn catch_all(req: HttpRequest, body: web::Bytes, data: web::Data<AppState>) -> HttpResponse {
-    let path = req.path();
+pub async fn catch_all(
+    State(state): State<Arc<AppState>>,
+    method: Method,
+    uri: Uri,
+    body: Bytes,
+) -> Response {
+    let path = uri.path();
+    let query = uri.query().unwrap_or("");
 
-    if req.method() == actix_web::http::Method::OPTIONS {
-        return options_handler().await;
+    if method == Method::OPTIONS {
+        return options_response();
     }
 
     if path == "/favicon.ico" || path == "/favicon.svg" {
+        info!("favicon");
         return favicon_response();
     }
 
     // Entity-bezogene Pfade ueber den zentralen Router aufloesen
-    let parsed = resolve_odata_path(path, &data.entities);
+    let parsed = resolve_odata_path(path, &state.entities);
+    info!("{parsed:?}");
     match parsed.path {
-        ODataPath::Entity { .. } => match *req.method() {
-            actix_web::http::Method::GET => single_entity_handler(req, data).await,
-            actix_web::http::Method::PATCH => {
+        ODataPath::Entity { .. } => match method {
+            Method::GET => handle_single_entity(path, query, &state),
+            Method::PATCH => {
                 let json_body: Value = match serde_json::from_slice(&body) {
                     Ok(v) => v,
                     Err(_) => return error_response(400, "Invalid JSON body"),
                 };
-                patch_entity_handler(req, web::Json(json_body), data).await
+                let resp = handle_patch_entity(path, &json_body, &state);
+                state.save_data();
+                resp
             }
-            actix_web::http::Method::DELETE => delete_entity_handler(req, data).await,
+            Method::DELETE => {
+                let resp = handle_delete_entity(path, &state);
+                state.save_data();
+                resp
+            }
             _ => error_response(405, "Method not allowed"),
         },
         ODataPath::Action { .. } => {
-            if req.method() == actix_web::http::Method::POST {
-                draft_action_handler(req, body, data).await
+            if method == Method::POST {
+                let resp = handle_draft_action(path, &state);
+                state.save_data();
+                resp
             } else {
                 error_response(405, "Method not allowed")
             }
         }
-        _ => static_files(req, data).await,
+        ODataPath::SubCollection {
+            parent_entity,
+            parent_key,
+            child_entity,
+            ..
+        } => match method {
+            Method::GET => {
+                handle_sub_collection(parent_entity, &parent_key, child_entity, query, &state)
+            }
+            Method::POST => {
+                let body_str = String::from_utf8_lossy(&body);
+                let mut store = state.data_store.write().unwrap();
+                let resp = draft_to_response(draft::create_sub_item(
+                    &mut store,
+                    parent_entity,
+                    &parent_key,
+                    child_entity,
+                    &body_str,
+                ));
+                drop(store);
+                state.save_data();
+                resp
+            }
+            _ => error_response(405, "Method not allowed"),
+        },
+        ODataPath::PropertyAccess {
+            entity,
+            key,
+            property,
+        } => {
+            let store = state.data_store.read().unwrap();
+            let records = store.get(entity.set_name());
+            if let Some(record) = records.and_then(|r| {
+                draft::find_record(r, entity.key_field(), &key.key_value, key.is_active)
+            }) {
+                if let Some(val) = record.get(&property) {
+                    return json_response(json!({ "value": val }));
+                }
+            }
+            error_response(404, &format!("Property '{}' not found", property))
+        }
+        _ => handle_static_files(path, &state),
     }
 }

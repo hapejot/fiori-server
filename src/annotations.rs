@@ -10,6 +10,8 @@ pub struct FieldDef {
     pub scale: Option<u32>,
     /// Feld ist nicht editierbar (Key, berechnete Werte etc.)
     pub immutable: bool,
+    /// Semantic Object fuer Intent-Based Navigation (z.B. "Products").
+    pub semantic_object: Option<&'static str>,
 }
 
 /// LineItem-Referenz mit Annotation-spezifischen Attributen.
@@ -19,12 +21,16 @@ pub struct LineItemField {
     pub criticality_path: Option<&'static str>,
     /// Navigation-Property-Pfad – erzeugt UI.DataFieldWithNavigationPath.
     pub navigation_path: Option<&'static str>,
+    /// Semantic Object – erzeugt UI.DataFieldWithIntentBasedNavigation.
+    pub semantic_object: Option<&'static str>,
 }
 
 /// NavigationProperty-Definition im EntityType.
 pub struct NavigationPropertyDef {
     pub name: &'static str,
     pub target_type: &'static str,
+    /// true fuer 1:n Kompositionen (erzeugt Collection-Typ)
+    pub is_collection: bool,
 }
 
 /// DataPoint fuer den Object-Page-Header.
@@ -56,6 +62,14 @@ pub struct FacetSectionDef {
     pub field_group_label: &'static str,
 }
 
+/// Tabellen-Facet: verweist auf die UI.LineItem-Annotation einer Komposition (NavProperty).
+pub struct TableFacetDef {
+    pub label: &'static str,
+    pub id: &'static str,
+    /// Name des NavigationProperty (z.B. "Items")
+    pub navigation_property: &'static str,
+}
+
 /// Kopfzeile der Object Page.
 pub struct HeaderInfoDef {
     pub type_name: &'static str,
@@ -73,6 +87,8 @@ pub struct AnnotationsDef {
     pub data_points: &'static [DataPointDef],
     pub facet_sections: &'static [FacetSectionDef],
     pub field_groups: &'static [FieldGroupDef],
+    /// Tabellen-Facets fuer Kompositionen (z.B. OrderItems).
+    pub table_facets: &'static [TableFacetDef],
 }
 
 /// Erzeugt das Annotations-XML fuer eine Entitaet aus ihrer AnnotationsDef.
@@ -104,7 +120,9 @@ pub fn build_annotations_xml(
             .find(|fd| fd.name == f.name)
             .map(|fd| fd.label)
             .unwrap_or(f.name);
-        let record_type = if f.navigation_path.is_some() {
+        let record_type = if f.semantic_object.is_some() {
+            "UI.DataFieldWithIntentBasedNavigation"
+        } else if f.navigation_path.is_some() {
             "UI.DataFieldWithNavigationPath"
         } else {
             "UI.DataField"
@@ -118,6 +136,13 @@ pub fn build_annotations_xml(
             "<PropertyValue Property=\"Label\" String=\"{}\"/>",
             label
         ));
+        if let Some(so) = f.semantic_object {
+            x.push_str(&format!(
+                "<PropertyValue Property=\"SemanticObject\" String=\"{}\"/>",
+                so
+            ));
+            x.push_str("<PropertyValue Property=\"Action\" String=\"display\"/>");
+        }
         if let Some(nav) = f.navigation_path {
             x.push_str(&format!(
                 "<PropertyValue Property=\"Target\" NavigationPropertyPath=\"{}\"/>",
@@ -249,6 +274,23 @@ pub fn build_annotations_xml(
         x.push_str("</PropertyValue>");
         x.push_str("</Record>");
     }
+    // ── Table Facets (Composition tables) ──
+    for tf in def.table_facets {
+        x.push_str("<Record Type=\"UI.ReferenceFacet\">");
+        x.push_str(&format!(
+            "<PropertyValue Property=\"Label\" String=\"{}\"/>",
+            tf.label
+        ));
+        x.push_str(&format!(
+            "<PropertyValue Property=\"ID\" String=\"{}\"/>",
+            tf.id
+        ));
+        x.push_str(&format!(
+            "<PropertyValue Property=\"Target\" AnnotationPath=\"{}/@UI.LineItem\"/>",
+            tf.navigation_property
+        ));
+        x.push_str("</Record>");
+    }
     x.push_str("</Collection>");
     x.push_str("</Annotation>");
 
@@ -262,20 +304,35 @@ pub fn build_annotations_xml(
         x.push_str("<PropertyValue Property=\"Data\">");
         x.push_str("<Collection>");
         for name in fg.fields {
-            let label = fields
-                .iter()
-                .find(|fd| fd.name == *name)
-                .map(|fd| fd.label)
-                .unwrap_or(name);
-            x.push_str("<Record Type=\"UI.DataField\">");
-            x.push_str(&format!(
-                "<PropertyValue Property=\"Value\" Path=\"{}\"/>",
-                name
-            ));
-            x.push_str(&format!(
-                "<PropertyValue Property=\"Label\" String=\"{}\"/>",
-                label
-            ));
+            let field_def = fields.iter().find(|fd| fd.name == *name);
+            let label = field_def.map(|fd| fd.label).unwrap_or(name);
+            let semantic_obj = field_def.and_then(|fd| fd.semantic_object);
+            if let Some(so) = semantic_obj {
+                x.push_str("<Record Type=\"UI.DataFieldWithIntentBasedNavigation\">");
+                x.push_str(&format!(
+                    "<PropertyValue Property=\"Value\" Path=\"{}\"/>",
+                    name
+                ));
+                x.push_str(&format!(
+                    "<PropertyValue Property=\"Label\" String=\"{}\"/>",
+                    label
+                ));
+                x.push_str(&format!(
+                    "<PropertyValue Property=\"SemanticObject\" String=\"{}\"/>",
+                    so
+                ));
+                x.push_str("<PropertyValue Property=\"Action\" String=\"display\"/>");
+            } else {
+                x.push_str("<Record Type=\"UI.DataField\">");
+                x.push_str(&format!(
+                    "<PropertyValue Property=\"Value\" Path=\"{}\"/>",
+                    name
+                ));
+                x.push_str(&format!(
+                    "<PropertyValue Property=\"Label\" String=\"{}\"/>",
+                    label
+                ));
+            }
             x.push_str("</Record>");
         }
         x.push_str("</Collection>");
@@ -285,18 +342,37 @@ pub fn build_annotations_xml(
     }
 
     x.push_str("</Annotations>");
+
+    // ── Property-level Common.SemanticObject annotations ──
+    for f in fields {
+        if let Some(so) = f.semantic_object {
+            x.push_str(&format!(
+                "<Annotations Target=\"{ns}.{et}/{prop}\">",
+                ns = NAMESPACE,
+                et = entity_type_name,
+                prop = f.name
+            ));
+            x.push_str(&format!(
+                "<Annotation Term=\"Common.SemanticObject\" String=\"{}\"/>",
+                so
+            ));
+            x.push_str("</Annotations>");
+        }
+    }
+
     x
 }
 
-/// Erzeugt Capabilities-Annotations fuer ein EntitySet (UpdateRestrictions, DraftRoot).
+/// Erzeugt Capabilities-Annotations fuer ein EntitySet (UpdateRestrictions, DraftRoot/DraftNode).
 pub fn build_capabilities_annotations(
     entity_set_name: &str,
     entity_type_name: &str,
     fields: &[FieldDef],
+    is_draft_root: bool,
 ) -> String {
     let mut x = String::new();
 
-    // UpdateRestrictions + DraftRoot auf dem EntitySet
+    // UpdateRestrictions + DraftRoot/DraftNode auf dem EntitySet
     x.push_str(&format!(
         "<Annotations Target=\"{ns}.EntityContainer/{set}\">",
         ns = NAMESPACE,
@@ -307,23 +383,35 @@ pub fn build_capabilities_annotations(
     x.push_str("<PropertyValue Property=\"Updatable\" Bool=\"true\"/>");
     x.push_str("</Record>");
     x.push_str("</Annotation>");
-    // DraftRoot – aktiviert den Edit-Button in Fiori Elements V4
-    x.push_str("<Annotation Term=\"Common.DraftRoot\">");
-    x.push_str("<Record Type=\"Common.DraftRootType\">");
-    x.push_str(&format!(
-        "<PropertyValue Property=\"ActivationAction\" String=\"{ns}.draftActivate\"/>",
-        ns = NAMESPACE
-    ));
-    x.push_str(&format!(
-        "<PropertyValue Property=\"EditAction\" String=\"{ns}.draftEdit\"/>",
-        ns = NAMESPACE
-    ));
-    x.push_str(&format!(
-        "<PropertyValue Property=\"PreparationAction\" String=\"{ns}.draftPrepare\"/>",
-        ns = NAMESPACE
-    ));
-    x.push_str("</Record>");
-    x.push_str("</Annotation>");
+    if is_draft_root {
+        // DraftRoot – aktiviert den Edit-Button in Fiori Elements V4
+        x.push_str("<Annotation Term=\"Common.DraftRoot\">");
+        x.push_str("<Record Type=\"Common.DraftRootType\">");
+        x.push_str(&format!(
+            "<PropertyValue Property=\"ActivationAction\" String=\"{ns}.draftActivate\"/>",
+            ns = NAMESPACE
+        ));
+        x.push_str(&format!(
+            "<PropertyValue Property=\"EditAction\" String=\"{ns}.draftEdit\"/>",
+            ns = NAMESPACE
+        ));
+        x.push_str(&format!(
+            "<PropertyValue Property=\"PreparationAction\" String=\"{ns}.draftPrepare\"/>",
+            ns = NAMESPACE
+        ));
+        x.push_str("</Record>");
+        x.push_str("</Annotation>");
+    } else {
+        // DraftNode – Kompositions-Kind-Entity
+        x.push_str("<Annotation Term=\"Common.DraftNode\">");
+        x.push_str("<Record Type=\"Common.DraftNodeType\">");
+        x.push_str(&format!(
+            "<PropertyValue Property=\"PreparationAction\" String=\"{ns}.draftPrepare\"/>",
+            ns = NAMESPACE
+        ));
+        x.push_str("</Record>");
+        x.push_str("</Annotation>");
+    }
     x.push_str("</Annotations>");
 
     // Immutable-Annotations auf Properties -> Felder im Edit-Mode readonly
@@ -446,11 +534,16 @@ pub fn build_draft_actions_xml(type_name: &str) -> String {
 /// Haengt NavigationProperty-Elemente an einen EntityType-XML-String an.
 pub fn append_navigation_properties(xml: &mut String, nav_props: &[NavigationPropertyDef]) {
     for np in nav_props {
+        let type_attr = if np.is_collection {
+            format!("Collection({}.{})", NAMESPACE, np.target_type)
+        } else {
+            format!("{}.{}", NAMESPACE, np.target_type)
+        };
         xml.insert_str(
             xml.rfind("</EntityType>").unwrap(),
             &format!(
-                "<NavigationProperty Name=\"{}\" Type=\"{}.{}\"/>",
-                np.name, NAMESPACE, np.target_type
+                "<NavigationProperty Name=\"{}\" Type=\"{}\"/>",
+                np.name, type_attr
             ),
         );
     }

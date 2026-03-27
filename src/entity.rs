@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use serde_json::{json, Value};
 
 use crate::annotations::*;
@@ -10,7 +12,7 @@ use crate::BASE_PATH;
 ///   2. set_name, key_field, type_name, mock_data, entity_type,
 ///      entity_set, annotations_def (und ggf. expand_record) implementieren
 ///   3. Instanz im AppStateBuilder via .entity() registrieren
-pub trait ODataEntity: Sync {
+pub trait ODataEntity: Sync + Debug {
     /// Name des EntitySets (z.B. "Products", "Orders")
     fn set_name(&self) -> &'static str;
     /// Name des Schluesselfelds (z.B. "ProductID")
@@ -26,6 +28,10 @@ pub trait ODataEntity: Sync {
     /// NavigationProperty-Definitionen (optional).
     fn navigation_properties(&self) -> &'static [NavigationPropertyDef] {
         &[]
+    }
+    /// Eltern-EntitySet bei Kompositionen (z.B. "Orders" fuer OrderItems).
+    fn parent_set_name(&self) -> Option<&'static str> {
+        None
     }
     /// EDMX EntityType-XML – wird automatisch aus fields_def() erzeugt
     /// oder kann manuell ueberschrieben werden.
@@ -55,10 +61,12 @@ pub trait ODataEntity: Sync {
         };
         // UpdateRestrictions + Immutable-Annotations
         if let Some(fields) = self.fields_def() {
+            let is_draft_root = self.parent_set_name().is_none();
             xml.push_str(&build_capabilities_annotations(
                 self.set_name(),
                 self.type_name(),
                 fields,
+                is_draft_root,
             ));
         }
         xml

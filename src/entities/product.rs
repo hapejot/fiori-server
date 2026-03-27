@@ -4,6 +4,7 @@ use crate::annotations::*;
 use crate::entity::ODataEntity;
 use crate::NAMESPACE;
 
+#[derive(Debug)]
 pub struct ProductEntity;
 
 impl ODataEntity for ProductEntity {
@@ -49,18 +50,18 @@ impl ODataEntity for ProductEntity {
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
-            FieldDef { name: "ProductID",         label: "Produkt-ID",    edm_type: "Edm.String",          max_length: Some(10),  precision: None,     scale: None, immutable: true },
-            FieldDef { name: "ProductName",       label: "Produktname",   edm_type: "Edm.String",          max_length: Some(80),  precision: None,     scale: None, immutable: false },
-            FieldDef { name: "Category",          label: "Kategorie",     edm_type: "Edm.String",          max_length: Some(40),  precision: None,     scale: None, immutable: false },
-            FieldDef { name: "Supplier",          label: "Lieferant",     edm_type: "Edm.String",          max_length: Some(80),  precision: None,     scale: None, immutable: false },
-            FieldDef { name: "Status",            label: "Status",        edm_type: "Edm.String",          max_length: Some(1),   precision: None,     scale: None, immutable: false },
-            FieldDef { name: "StatusCriticality", label: "Kritikalitaet", edm_type: "Edm.Byte",            max_length: None,      precision: None,     scale: None, immutable: true },
-            FieldDef { name: "Price",             label: "Preis",         edm_type: "Edm.Decimal",         max_length: None,      precision: Some(15), scale: Some(2), immutable: false },
-            FieldDef { name: "Currency",          label: "Waehrung",      edm_type: "Edm.String",          max_length: Some(3),   precision: None,     scale: None, immutable: false },
-            FieldDef { name: "UnitsInStock",      label: "Lagerbestand",  edm_type: "Edm.Int32",           max_length: None,      precision: None,     scale: None, immutable: false },
-            FieldDef { name: "Rating",            label: "Bewertung",     edm_type: "Edm.Byte",            max_length: None,      precision: None,     scale: None, immutable: false },
-            FieldDef { name: "CreatedAt",         label: "Erstellt am",   edm_type: "Edm.DateTimeOffset",  max_length: None,      precision: None,     scale: None, immutable: true },
-            FieldDef { name: "Description",       label: "Beschreibung",  edm_type: "Edm.String",          max_length: Some(500), precision: None,     scale: None, immutable: false },
+            FieldDef { name: "ProductID",         label: "Produkt-ID",    edm_type: "Edm.String",          max_length: Some(10),  precision: None,     scale: None, immutable: true,  semantic_object: None },
+            FieldDef { name: "ProductName",       label: "Produktname",   edm_type: "Edm.String",          max_length: Some(80),  precision: None,     scale: None, immutable: false, semantic_object: None },
+            FieldDef { name: "Category",          label: "Kategorie",     edm_type: "Edm.String",          max_length: Some(40),  precision: None,     scale: None, immutable: false, semantic_object: None },
+            FieldDef { name: "Supplier",          label: "Lieferant",     edm_type: "Edm.String",          max_length: Some(80),  precision: None,     scale: None, immutable: false, semantic_object: None },
+            FieldDef { name: "Status",            label: "Status",        edm_type: "Edm.String",          max_length: Some(1),   precision: None,     scale: None, immutable: false, semantic_object: None },
+            FieldDef { name: "StatusCriticality", label: "Kritikalitaet", edm_type: "Edm.Byte",            max_length: None,      precision: None,     scale: None, immutable: true,  semantic_object: None },
+            FieldDef { name: "Price",             label: "Preis",         edm_type: "Edm.Decimal",         max_length: None,      precision: Some(15), scale: Some(2), immutable: false, semantic_object: None },
+            FieldDef { name: "Currency",          label: "Waehrung",      edm_type: "Edm.String",          max_length: Some(3),   precision: None,     scale: None, immutable: false, semantic_object: None },
+            FieldDef { name: "UnitsInStock",      label: "Lagerbestand",  edm_type: "Edm.Int32",           max_length: None,      precision: None,     scale: None, immutable: false, semantic_object: None },
+            FieldDef { name: "Rating",            label: "Bewertung",     edm_type: "Edm.Byte",            max_length: None,      precision: None,     scale: None, immutable: false, semantic_object: None },
+            FieldDef { name: "CreatedAt",         label: "Erstellt am",   edm_type: "Edm.DateTimeOffset",  max_length: None,      precision: None,     scale: None, immutable: true,  semantic_object: None },
+            FieldDef { name: "Description",       label: "Beschreibung",  edm_type: "Edm.String",          max_length: Some(500), precision: None,     scale: None, immutable: false, semantic_object: None },
         ];
         Some(FIELDS)
     }
@@ -79,14 +80,14 @@ impl ODataEntity for ProductEntity {
         static DEF: AnnotationsDef = AnnotationsDef {
             selection_fields: &["Category", "Status", "Supplier"],
             line_item: &[
-                LineItemField { name: "ProductID",    importance: Some("High"), criticality_path: None, navigation_path: None },
-                LineItemField { name: "ProductName",  importance: None, criticality_path: None, navigation_path: None },
-                LineItemField { name: "Category",     importance: None, criticality_path: None, navigation_path: None },
-                LineItemField { name: "Supplier",     importance: None, criticality_path: None, navigation_path: None },
-                LineItemField { name: "Price",        importance: None, criticality_path: None, navigation_path: None },
-                LineItemField { name: "UnitsInStock", importance: None, criticality_path: None, navigation_path: None },
-                LineItemField { name: "Rating",       importance: None, criticality_path: None, navigation_path: None },
-                LineItemField { name: "Status",       importance: None, criticality_path: Some("StatusCriticality"), navigation_path: None },
+                LineItemField { name: "ProductID",    importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "ProductName",  importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "Category",     importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "Supplier",     importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "Price",        importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "UnitsInStock", importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "Rating",       importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "Status",       importance: None, criticality_path: Some("StatusCriticality"), navigation_path: None, semantic_object: None },
             ],
             header_info: HeaderInfoDef {
                 type_name: "Produkt",
@@ -112,6 +113,7 @@ impl ODataEntity for ProductEntity {
                 FieldGroupDef { qualifier: "General", fields: &["ProductID", "ProductName", "Category", "Supplier", "Status", "CreatedAt", "Description"] },
                 FieldGroupDef { qualifier: "Pricing", fields: &["Price", "Currency", "UnitsInStock", "Rating"] },
             ],
+            table_facets: &[],
         };
         Some(&DEF)
     }

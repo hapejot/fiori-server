@@ -1,6 +1,7 @@
 mod annotations;
 mod app_state;
 mod builders;
+mod draft;
 mod entities;
 mod entity;
 mod handlers;
@@ -8,11 +9,16 @@ mod query;
 mod routing;
 mod settings;
 
-use actix_web::{web, App, HttpServer};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use std::path::PathBuf;
+use std::sync::Arc;
+use tower_http::trace::TraceLayer;
 
 use app_state::AppState;
-use entities::{OrderEntity, ProductEntity};
+use entities::{OrderEntity, OrderItemEntity, ProductEntity};
 use handlers::*;
 use settings::Settings;
 
@@ -24,8 +30,16 @@ pub fn webapp_dir() -> PathBuf {
     std::env::current_dir().unwrap_or_default().join("webapp")
 }
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
+#[tokio::main]
+async fn main() {
+    // Logger initialisieren (RUST_LOG=info fuer Standard, =debug fuer mehr)
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .init();
+
     let host = "0.0.0.0";
     let port = 8000u16;
 
@@ -56,62 +70,50 @@ async fn main() -> std::io::Result<()> {
     println!("{}", "=".repeat(60));
     println!("  Druecke Ctrl+C zum Beenden\n");
 
-    let app_state = web::Data::new(
+    let data_dir = std::env::current_dir().unwrap_or_default().join("data");
+    let app_state = Arc::new(
         AppState::builder()
             .settings(settings)
+            .data_dir(&data_dir)
             .entity(&ProductEntity)
             .entity(&OrderEntity)
+            .entity(&OrderItemEntity)
             .build(),
     );
 
-    HttpServer::new(move || {
-        let base = BASE_PATH;
+    let base = BASE_PATH;
 
-        let mut app = App::new()
-            .app_data(app_state.clone())
+    // Routen fuer jedes registrierte EntitySet dynamisch erzeugen
+    let mut entity_routes = Router::new();
+    for entity in app_state.entities.iter() {
+        let set = entity.set_name();
+        entity_routes = entity_routes
             .route(
-                &format!("{}/$metadata", base),
-                web::get().to(metadata_handler),
+                &format!("{}/{}", base, set),
+                get(collection_handler).head(collection_handler),
             )
             .route(
-                &format!("{}/$metadata", base),
-                web::head().to(metadata_handler),
-            )
-            .route(
-                &format!("{}/$metadata", base),
-                web::method(actix_web::http::Method::OPTIONS).to(options_handler),
-            )
-            .route(&format!("{}/", base), web::get().to(service_document))
-            .route(&format!("{}/", base), web::head().to(service_document))
-            .route(base, web::get().to(service_document))
-            .route(base, web::head().to(service_document))
-            .route(&format!("{}/$batch", base), web::post().to(batch_handler))
-            .route(
-                &format!("{}/$batch", base),
-                web::method(actix_web::http::Method::OPTIONS).to(options_handler),
+                &format!("{}/{}/$count", base, set),
+                get(count_handler),
             );
+    }
 
-        // Routen fuer jedes registrierte EntitySet dynamisch erzeugen
-        for entity in app_state.entities.iter() {
-            let set = entity.set_name();
-            app = app
-                .route(
-                    &format!("{}/{}", base, set),
-                    web::get().to(collection_handler),
-                )
-                .route(
-                    &format!("{}/{}", base, set),
-                    web::head().to(collection_handler),
-                )
-                .route(
-                    &format!("{}/{}/$count", base, set),
-                    web::get().to(count_handler),
-                );
-        }
+    let app = Router::new()
+        .route(
+            &format!("{}/$metadata", base),
+            get(metadata_handler).head(metadata_handler),
+        )
+        .route(
+            &format!("{}/", base),
+            get(service_document).head(service_document),
+        )
+        .route(base, get(service_document).head(service_document))
+        .route(&format!("{}/$batch", base), post(batch_handler))
+        .merge(entity_routes)
+        .fallback(catch_all)
+        .layer(TraceLayer::new_for_http())
+        .with_state(app_state);
 
-        app.default_service(web::route().to(catch_all))
-    })
-    .bind((host, port))?
-    .run()
-    .await
+    let listener = tokio::net::TcpListener::bind((host, port)).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
