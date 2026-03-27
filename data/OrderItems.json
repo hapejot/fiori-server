@@ -1,26 +1,6 @@
 [
   {
     "Currency": "EUR",
-    "ItemID": "I001",
-    "NetAmount": "2599.98",
-    "OrderID": "O001",
-    "ProductID": "P001",
-    "ProductName": "Laptop Pro 15",
-    "Quantity": 2,
-    "UnitPrice": "1299.99"
-  },
-  {
-    "Currency": "EUR",
-    "ItemID": "I002",
-    "NetAmount": "59.90",
-    "OrderID": "O001",
-    "ProductID": "P002",
-    "ProductName": "Wireless Mouse",
-    "Quantity": 2,
-    "UnitPrice": "29.95"
-  },
-  {
-    "Currency": "EUR",
     "ItemID": "I003",
     "NetAmount": "299.50",
     "OrderID": "O002",
@@ -58,5 +38,25 @@
     "ProductName": "Desk Lamp LED",
     "Quantity": 1,
     "UnitPrice": "39.99"
+  },
+  {
+    "Currency": "EUR",
+    "ItemID": "I001",
+    "NetAmount": "2599.98",
+    "OrderID": "O001",
+    "ProductID": "P001",
+    "ProductName": "Laptop Pro 15",
+    "Quantity": 1,
+    "UnitPrice": "1299.99"
+  },
+  {
+    "Currency": "EUR",
+    "ItemID": "I002",
+    "NetAmount": "59.90",
+    "OrderID": "O001",
+    "ProductID": "P002",
+    "ProductName": "Wireless Mouse",
+    "Quantity": 3,
+    "UnitPrice": "29.95"
   }
 ]
