@@ -205,5 +205,6 @@ fn load_entity_data(
     } else {
         info!("  {} : mock_data() (keine Datei {})", set_name, json_path.display());
     }
+    info!("returning mock_data for {}: {} records", set_name, entity.mock_data().len());
     entity.mock_data()
 }
