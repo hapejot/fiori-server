@@ -136,9 +136,9 @@ pub async fn collection_handler(
         let qs = parse_query_string(query);
         let store = state.data_store.read().unwrap();
         if let Some(records) = store.get(entity.set_name()) {
-            return json_response(query_collection_from(entity, records, &qs, &state.entities));
+            return json_response(query_collection_from(entity, records, &qs, &state.entities, &store));
         }
-        return json_response(query_collection(entity, &qs, &state.entities));
+        return json_response(query_collection(entity, &qs, &state.entities, &store));
     }
     error_response(404, "Entity set not found")
 }
@@ -566,9 +566,9 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
         }
         ODataPath::Collection { entity } => {
             if let Some(data) = store.get(entity.set_name()) {
-                query_collection_from(entity, data, &qs, entities)
+                query_collection_from(entity, data, &qs, entities, &store)
             } else {
-                query_collection(entity, &qs, entities)
+                query_collection(entity, &qs, entities, &store)
             }
         }
         ODataPath::Count { entity } => {

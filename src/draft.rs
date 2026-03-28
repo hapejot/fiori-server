@@ -223,7 +223,7 @@ pub fn read_entity(
         if !expand.is_empty() {
             let nav_names = parse_expand_names(expand);
             let nav_refs: Vec<&str> = nav_names.iter().map(|s| s.as_str()).collect();
-            entity.expand_record(&mut result, &nav_refs, entities);
+            entity.expand_record(&mut result, &nav_refs, entities, store);
             if nav_refs.iter().any(|n| *n == "DraftAdministrativeData") {
                 inject_draft_admin_data(&mut result, entity.key_field());
             }
@@ -491,7 +491,7 @@ pub fn read_sub_collection(
         })
         .unwrap_or_default();
     let qs = parse_query_string(query);
-    query_collection_from(child_entity, &child_records, &qs, entities)
+    query_collection_from(child_entity, &child_records, &qs, entities, store)
 }
 
 /// Erzeugt ein neues Kind-Element in einer Sub-Collection (Komposition).

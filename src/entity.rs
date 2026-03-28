@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 use serde_json::{json, Value};
@@ -77,6 +78,7 @@ pub trait ODataEntity: Sync + Debug {
         _record: &mut Value,
         _nav_properties: &[&str],
         _entities: &[&dyn ODataEntity],
+        _data_store: &HashMap<String, Vec<Value>>,
     ) {
     }
 

@@ -190,12 +190,12 @@ pub fn parse_expand_names(expand: &str) -> Vec<String> {
 
 /// Fuehrt eine OData-Abfrage auf den Mock-Daten einer Entitaet aus
 /// ($filter, $orderby, $skip, $top, $expand, $select, $count).
-pub fn query_collection(entity: &dyn ODataEntity, qs: &HashMap<String, String>, entities: &[&dyn ODataEntity]) -> Value {
-    query_collection_from(entity, &entity.mock_data(), qs, entities)
+pub fn query_collection(entity: &dyn ODataEntity, qs: &HashMap<String, String>, entities: &[&dyn ODataEntity], data_store: &HashMap<String, Vec<Value>>) -> Value {
+    query_collection_from(entity, &entity.mock_data(), qs, entities, data_store)
 }
 
 /// Fuehrt eine OData-Abfrage auf bereits geladenen Daten aus.
-pub fn query_collection_from(entity: &dyn ODataEntity, data: &[Value], qs: &HashMap<String, String>, entities: &[&dyn ODataEntity]) -> Value {
+pub fn query_collection_from(entity: &dyn ODataEntity, data: &[Value], qs: &HashMap<String, String>, entities: &[&dyn ODataEntity], data_store: &HashMap<String, Vec<Value>>) -> Value {
     let mut results: Vec<Value> = data.to_vec();
 
     // $filter
@@ -243,7 +243,7 @@ pub fn query_collection_from(entity: &dyn ODataEntity, data: &[Value], qs: &Hash
             let nav_names = parse_expand_names(expand);
             let nav_refs: Vec<&str> = nav_names.iter().map(|s| s.as_str()).collect();
             for r in &mut results {
-                entity.expand_record(r, &nav_refs, entities);
+                entity.expand_record(r, &nav_refs, entities, data_store);
                 // DraftAdministrativeData: inject null for active, minimal object for drafts
                 if nav_refs.iter().any(|n| *n == "DraftAdministrativeData") {
                     if let Some(obj) = r.as_object_mut() {

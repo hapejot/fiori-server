@@ -17,6 +17,8 @@ pub struct FieldDef {
 /// LineItem-Referenz mit Annotation-spezifischen Attributen.
 pub struct LineItemField {
     pub name: &'static str,
+    /// Optionales Label-Override (falls name ein Pfad wie "Product/ProductName" ist).
+    pub label: Option<&'static str>,
     pub importance: Option<&'static str>,
     pub criticality_path: Option<&'static str>,
     /// Navigation-Property-Pfad – erzeugt UI.DataFieldWithNavigationPath.
@@ -115,11 +117,13 @@ pub fn build_annotations_xml(
     x.push_str("<Annotation Term=\"UI.LineItem\">");
     x.push_str("<Collection>");
     for f in def.line_item {
-        let label = fields
-            .iter()
-            .find(|fd| fd.name == f.name)
-            .map(|fd| fd.label)
-            .unwrap_or(f.name);
+        let label = f.label.unwrap_or_else(|| {
+            fields
+                .iter()
+                .find(|fd| fd.name == f.name)
+                .map(|fd| fd.label)
+                .unwrap_or(f.name)
+        });
         let record_type = if f.semantic_object.is_some() {
             "UI.DataFieldWithIntentBasedNavigation"
         } else if f.navigation_path.is_some() {

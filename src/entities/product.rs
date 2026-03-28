@@ -80,14 +80,14 @@ impl ODataEntity for ProductEntity {
         static DEF: AnnotationsDef = AnnotationsDef {
             selection_fields: &["Category", "Status", "Supplier"],
             line_item: &[
-                LineItemField { name: "ProductID",    importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "ProductName",  importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "Category",     importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "Supplier",     importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "Price",        importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "UnitsInStock", importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "Rating",       importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "Status",       importance: None, criticality_path: Some("StatusCriticality"), navigation_path: None, semantic_object: None },
+                LineItemField { name: "ProductID",    label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "ProductName",  label: None, importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "Category",     label: None, importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "Supplier",     label: None, importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "Price",        label: None, importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "UnitsInStock", label: None, importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "Rating",       label: None, importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "Status",       label: None, importance: None, criticality_path: Some("StatusCriticality"), navigation_path: None, semantic_object: None },
             ],
             header_info: HeaderInfoDef {
                 type_name: "Produkt",

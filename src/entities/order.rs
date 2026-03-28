@@ -48,7 +48,7 @@ impl ODataEntity for OrderEntity {
         ]
     }
 
-    fn expand_record(&self, record: &mut Value, nav_properties: &[&str], entities: &[&dyn ODataEntity]) {
+    fn expand_record(&self, record: &mut Value, nav_properties: &[&str], entities: &[&dyn ODataEntity], data_store: &std::collections::HashMap<String, Vec<Value>>) {
         // Items-Expansion: OrderItems filtern nach OrderID
         if nav_properties.contains(&"Items") {
             let found_entity = entities.iter().find(|e| e.set_name() == "OrderItems");
@@ -58,7 +58,9 @@ impl ODataEntity for OrderEntity {
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
                 if let Some(oid) = order_id {
-                    let data = entity.mock_data();
+                    let data = data_store.get(entity.set_name())
+                        .cloned()
+                        .unwrap_or_else(|| entity.mock_data());
                     let items: Vec<Value> = data
                         .into_iter()
                         .filter(|item| item.get("OrderID").and_then(|v| v.as_str()) == Some(&oid))
@@ -109,12 +111,12 @@ impl ODataEntity for OrderEntity {
         static DEF: AnnotationsDef = AnnotationsDef {
             selection_fields: &["Status", "CustomerName"],
             line_item: &[
-                LineItemField { name: "OrderID",      importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "CustomerName", importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "Quantity",     importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "TotalAmount",  importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "OrderDate",    importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "Status",       importance: None, criticality_path: Some("StatusCriticality"), navigation_path: None, semantic_object: None },
+                LineItemField { name: "OrderID",      label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "CustomerName", label: None, importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "Quantity",     label: None, importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "TotalAmount",  label: None, importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "OrderDate",    label: None, importance: None, criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "Status",       label: None, importance: None, criticality_path: Some("StatusCriticality"), navigation_path: None, semantic_object: None },
             ],
             header_info: HeaderInfoDef {
                 type_name: "Bestellung",
