@@ -71,15 +71,22 @@ async fn main() {
     println!("  Druecke Ctrl+C zum Beenden\n");
 
     let data_dir = std::env::current_dir().unwrap_or_default().join("data");
-    let app_state = Arc::new(
-        AppState::builder()
-            .settings(settings)
-            .data_dir(&data_dir)
-            .entity(&ProductEntity)
-            .entity(&OrderEntity)
-            .entity(&OrderItemEntity)
-            .build(),
-    );
+    let config_dir = std::env::current_dir()
+        .unwrap_or_default()
+        .join("config")
+        .join("entities");
+    let generic_entities = entities::generic::load_generic_entities(&config_dir);
+
+    let mut builder = AppState::builder()
+        .settings(settings)
+        .data_dir(&data_dir)
+        .entity(&ProductEntity)
+        .entity(&OrderEntity)
+        .entity(&OrderItemEntity);
+    for ge in generic_entities {
+        builder = builder.entity(ge);
+    }
+    let app_state = Arc::new(builder.build());
 
     let base = BASE_PATH;
 

@@ -1,0 +1,52 @@
+[
+  {
+    "City": "München",
+    "Country": "DE",
+    "CustomerID": "C001",
+    "CustomerName": "TechCorp GmbH",
+    "Email": "info@techcorp.de",
+    "Phone": "+49 89 12345-0",
+    "PostalCode": "80802",
+    "Street": "Leopoldstr. 42"
+  },
+  {
+    "City": "Zürich",
+    "Country": "CH",
+    "CustomerID": "C002",
+    "CustomerName": "PeriphTech AG",
+    "Email": "kontakt@periphtech.ch",
+    "Phone": "+41 44 987-6543",
+    "PostalCode": "8001",
+    "Street": "Bahnhofstr. 7"
+  },
+  {
+    "City": "London",
+    "Country": "GB",
+    "CustomerID": "C003",
+    "CustomerName": "ConnectWorld Ltd.",
+    "Email": "sales@connectworld.co.uk",
+    "Phone": "+44 20 7946-0958",
+    "PostalCode": "NW1 6XE",
+    "Street": "12 Baker Street"
+  },
+  {
+    "City": "Berlin",
+    "Country": "DE",
+    "CustomerID": "C004",
+    "CustomerName": "DisplayMax SE",
+    "Email": "service@displaymax.de",
+    "Phone": "+49 30 55667-800",
+    "PostalCode": "10117",
+    "Street": "Friedrichstr. 100"
+  },
+  {
+    "City": "Wien",
+    "Country": "AT",
+    "CustomerID": "C005",
+    "CustomerName": "LightDesign KG",
+    "Email": "hello@lightdesign.at",
+    "Phone": "+43 1 234-5678",
+    "PostalCode": "1070",
+    "Street": "Mariahilfer Str. 88"
+  }
+]

@@ -691,6 +691,17 @@ fn handle_static_files(path: &str, state: &AppState) -> Response {
         return builder.body(Body::from(manifest_body.clone())).unwrap();
     }
 
+    // apps.json dynamisch ausliefern (statische + generische Entitaeten)
+    if relative == "config/apps.json" {
+        let mut builder = Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "application/json;charset=utf-8");
+        for (k, v) in cors_headers() {
+            builder = builder.header(k, v);
+        }
+        return builder.body(Body::from(state.apps_json.clone())).unwrap();
+    }
+
     // Component.js wird dynamisch generiert — der Klassenname muss zum
     // sap.app.id im jeweiligen Manifest passen, sonst cached UI5 den
     // falschen Component fuer die zweite App.

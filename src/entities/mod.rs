@@ -1,3 +1,4 @@
+pub mod generic;
 mod product;
 mod order;
 mod order_item;

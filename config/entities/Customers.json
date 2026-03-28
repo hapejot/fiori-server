@@ -1,0 +1,143 @@
+{
+    "set_name": "Customers",
+    "key_field": "CustomerID",
+    "type_name": "Customer",
+    "tile": {
+        "title": "Kunden",
+        "description": "Kundenübersicht",
+        "icon": "sap-icon://customer"
+    },
+    "fields": [
+        {
+            "name": "CustomerID",
+            "label": "Kunden-Nr.",
+            "edm_type": "Edm.String",
+            "max_length": 10,
+            "immutable": true
+        },
+        {
+            "name": "CustomerName",
+            "label": "Kundenname",
+            "edm_type": "Edm.String",
+            "max_length": 80
+        },
+        {
+            "name": "Email",
+            "label": "E-Mail",
+            "edm_type": "Edm.String",
+            "max_length": 120
+        },
+        {
+            "name": "Phone",
+            "label": "Telefon",
+            "edm_type": "Edm.String",
+            "max_length": 30
+        },
+        {
+            "name": "Street",
+            "label": "Strasse",
+            "edm_type": "Edm.String",
+            "max_length": 80
+        },
+        {
+            "name": "City",
+            "label": "Stadt",
+            "edm_type": "Edm.String",
+            "max_length": 40
+        },
+        {
+            "name": "PostalCode",
+            "label": "PLZ",
+            "edm_type": "Edm.String",
+            "max_length": 10
+        },
+        {
+            "name": "Country",
+            "label": "Land",
+            "edm_type": "Edm.String",
+            "max_length": 3
+        }
+    ],
+    "navigation_properties": [
+        {
+            "name": "Contacts",
+            "target_type": "Contact",
+            "target_set": "Contacts",
+            "is_collection": true
+        }
+    ],
+    "annotations": {
+        "selection_fields": [
+            "City",
+            "Country"
+        ],
+        "line_item": [
+            {
+                "name": "CustomerID",
+                "importance": "High"
+            },
+            {
+                "name": "CustomerName"
+            },
+            {
+                "name": "Email"
+            },
+            {
+                "name": "City"
+            },
+            {
+                "name": "Country"
+            }
+        ],
+        "header_info": {
+            "type_name": "Kunde",
+            "type_name_plural": "Kunden",
+            "title_path": "CustomerName",
+            "description_path": "CustomerID"
+        },
+        "header_facets": [],
+        "data_points": [],
+        "facet_sections": [
+            {
+                "label": "Kontaktdaten",
+                "id": "ContactInfo",
+                "field_group_qualifier": "Contact",
+                "field_group_label": "Kontakt"
+            },
+            {
+                "label": "Adresse",
+                "id": "AddressInfo",
+                "field_group_qualifier": "Address",
+                "field_group_label": "Anschrift"
+            }
+        ],
+        "field_groups": [
+            {
+                "qualifier": "Contact",
+                "fields": [
+                    "CustomerID",
+                    "CustomerName",
+                    "Email",
+                    "Phone"
+                ]
+            },
+            {
+                "qualifier": "Address",
+                "fields": [
+                    "Street",
+                    "City",
+                    "PostalCode",
+                    "Country"
+                ]
+            }
+        ],
+        "table_facets": [
+            {
+                "label": "Ansprechpartner",
+                "id": "ContactsFacet",
+                "target": "Contacts",
+                "navigation_property": "Contacts"
+            }
+        ]
+    }
+}

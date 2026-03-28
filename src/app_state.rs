@@ -22,6 +22,8 @@ pub struct AppState {
     /// Liste die Default-Route ist.
     pub entity_manifests: HashMap<String, String>,
     pub flp_html: String,
+    /// Dynamisch generierte apps.json (statische + generische Entitaeten zusammengefuehrt).
+    pub apps_json: String,
     /// Mutable Data-Store: EntitySet-Name -> Vec<Value>
     pub data_store: RwLock<HashMap<String, Vec<Value>>>,
     /// Verzeichnis fuer persistente JSON-Dateien
@@ -131,6 +133,30 @@ impl AppStateBuilder {
 
         let flp_html = builders::build_flp_html(&settings);
 
+        // apps.json zusammenbauen: statische Datei + generische Entitaeten
+        let apps_json = {
+            let webapp_dir = std::env::current_dir().unwrap_or_default().join("webapp");
+            let static_path = webapp_dir.join("config/apps.json");
+            let mut apps: serde_json::Map<String, Value> = if static_path.is_file() {
+                std::fs::read_to_string(&static_path)
+                    .ok()
+                    .and_then(|c| serde_json::from_str::<Value>(&c).ok())
+                    .and_then(|v| v.get("applications").cloned())
+                    .and_then(|v| v.as_object().cloned())
+                    .unwrap_or_default()
+            } else {
+                serde_json::Map::new()
+            };
+            // Generische Entitaeten einfuegen
+            for entity in &entities {
+                if let Some((key, val)) = entity.apps_json_entry() {
+                    apps.insert(key, val);
+                }
+            }
+            let wrapper = serde_json::json!({ "applications": apps });
+            serde_json::to_string_pretty(&wrapper).unwrap_or_default()
+        };
+
         // Data-Verzeichnis: JSON-Dateien haben Vorrang vor mock_data()
         let data_dir = self
             .data_dir
@@ -161,6 +187,7 @@ impl AppStateBuilder {
             manifest_json,
             entity_manifests,
             flp_html,
+            apps_json,
             data_store: RwLock::new(store),
             data_dir: data_dir.to_path_buf(),
         }

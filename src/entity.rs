@@ -89,6 +89,13 @@ pub trait ODataEntity: Sync + Debug {
             .unwrap_or(self.set_name())
     }
 
+    /// Optionaler apps.json-Eintrag fuer das FLP.
+    /// Default: None – hardkodierte Entitaeten werden ueber die statische apps.json konfiguriert.
+    /// GenericEntity liefert die Kachel-Konfiguration aus der JSON-Datei.
+    fn apps_json_entry(&self) -> Option<(String, Value)> {
+        None
+    }
+
     /// Manifest crossNavigation inbound Schluessel (z.B. "Products-display").
     fn manifest_inbound_key(&self) -> String {
         format!("{}-display", self.set_name())

@@ -1,0 +1,62 @@
+[
+  {
+    "ContactID": "K001",
+    "CustomerID": "C001",
+    "Department": "Einkauf",
+    "Email": "m.mueller@techcorp.de",
+    "FirstName": "Max",
+    "LastName": "Müller",
+    "Phone": "+49 89 12345-101",
+    "Position": "Einkaufsleiter"
+  },
+  {
+    "ContactID": "K002",
+    "CustomerID": "C001",
+    "Department": "IT",
+    "Email": "a.schmidt@techcorp.de",
+    "FirstName": "Anna",
+    "LastName": "Schmidt",
+    "Phone": "+49 89 12345-202",
+    "Position": "IT-Leiterin"
+  },
+  {
+    "ContactID": "K003",
+    "CustomerID": "C002",
+    "Department": "Vertrieb",
+    "Email": "h.weber@periphtech.ch",
+    "FirstName": "Hans",
+    "LastName": "Weber",
+    "Phone": "+41 44 987-6001",
+    "Position": "Key Account Manager"
+  },
+  {
+    "ContactID": "K004",
+    "CustomerID": "C003",
+    "Department": "Procurement",
+    "Email": "s.johnson@connectworld.co.uk",
+    "FirstName": "Sarah",
+    "LastName": "Johnson",
+    "Phone": "+44 20 7946-1234",
+    "Position": "Senior Buyer"
+  },
+  {
+    "ContactID": "K005",
+    "CustomerID": "C004",
+    "Department": "Technik",
+    "Email": "k.fischer@displaymax.de",
+    "FirstName": "Klaus",
+    "LastName": "Fischer",
+    "Phone": "+49 30 55667-801",
+    "Position": "Technischer Leiter"
+  },
+  {
+    "ContactID": "K006",
+    "CustomerID": "C005",
+    "Department": "Geschäftsführung",
+    "Email": "e.berger@lightdesign.at",
+    "FirstName": "Eva",
+    "LastName": "Berger",
+    "Phone": "+43 1 234-5679",
+    "Position": "Geschäftsführerin"
+  }
+]

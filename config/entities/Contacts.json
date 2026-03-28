@@ -1,0 +1,74 @@
+{
+  "set_name": "Contacts",
+  "key_field": "ContactID",
+  "type_name": "Contact",
+  "tile": {
+    "title": "Ansprechpartner",
+    "description": "Ansprechpartner-Übersicht",
+    "icon": "sap-icon://person-placeholder"
+  },
+  "fields": [
+    { "name": "ContactID",   "label": "Kontakt-Nr.",    "edm_type": "Edm.String", "max_length": 10, "immutable": true },
+    { "name": "CustomerID",  "label": "Kunden-Nr.",     "edm_type": "Edm.String", "max_length": 10, "semantic_object": "Customers" },
+    { "name": "FirstName",   "label": "Vorname",        "edm_type": "Edm.String", "max_length": 40 },
+    { "name": "LastName",    "label": "Nachname",       "edm_type": "Edm.String", "max_length": 40 },
+    { "name": "Email",       "label": "E-Mail",         "edm_type": "Edm.String", "max_length": 120 },
+    { "name": "Phone",       "label": "Telefon",        "edm_type": "Edm.String", "max_length": 30 },
+    { "name": "Department",  "label": "Abteilung",      "edm_type": "Edm.String", "max_length": 40 },
+    { "name": "Position",    "label": "Position",       "edm_type": "Edm.String", "max_length": 60 }
+  ],
+  "navigation_properties": [
+    {
+      "name": "Customer",
+      "target_type": "Customer",
+      "target_set": "Customers",
+      "is_collection": false,
+      "foreign_key": "CustomerID"
+    }
+  ],
+  "annotations": {
+    "selection_fields": ["CustomerID", "Department"],
+    "line_item": [
+      { "name": "ContactID",  "importance": "High" },
+      { "name": "LastName" },
+      { "name": "FirstName" },
+      { "name": "Customer/CustomerName", "label": "Kunde" },
+      { "name": "Department" },
+      { "name": "Email" },
+      { "name": "Phone" }
+    ],
+    "header_info": {
+      "type_name": "Ansprechpartner",
+      "type_name_plural": "Ansprechpartner",
+      "title_path": "LastName",
+      "description_path": "Position"
+    },
+    "header_facets": [],
+    "data_points": [],
+    "facet_sections": [
+      {
+        "label": "Persönliche Daten",
+        "id": "PersonalInfo",
+        "field_group_qualifier": "Personal",
+        "field_group_label": "Person"
+      },
+      {
+        "label": "Unternehmen",
+        "id": "CompanyInfo",
+        "field_group_qualifier": "Company",
+        "field_group_label": "Firmenzuordnung"
+      }
+    ],
+    "field_groups": [
+      {
+        "qualifier": "Personal",
+        "fields": ["ContactID", "FirstName", "LastName", "Email", "Phone"]
+      },
+      {
+        "qualifier": "Company",
+        "fields": ["CustomerID", "Department", "Position"]
+      }
+    ],
+    "table_facets": []
+  }
+}
