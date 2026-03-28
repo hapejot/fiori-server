@@ -457,18 +457,16 @@ impl ODataEntity for GenericEntity {
 
 // ── Laden aus Verzeichnis ───────────────────────────────────────────────
 
-/// Laedt alle Entity-Konfigurationen aus einem Verzeichnis.
-/// Jede `.json`-Datei wird als EntityConfig geparst und in eine
-/// GenericEntity umgewandelt (mit 'static Lebensdauer via Box::leak).
-pub fn load_generic_entities(config_dir: &Path) -> Vec<&'static dyn ODataEntity> {
-    let mut entities: Vec<&'static dyn ODataEntity> = Vec::new();
+/// Laedt alle Entity-Konfigurationen aus einem Verzeichnis als rohe Structs.
+pub fn load_raw_configs(config_dir: &Path) -> Vec<EntityConfig> {
+    let mut configs: Vec<EntityConfig> = Vec::new();
 
     if !config_dir.is_dir() {
         info!(
             "Kein Entity-Config-Verzeichnis: {} – uebersprungen",
             config_dir.display()
         );
-        return entities;
+        return configs;
     }
 
     let mut entries: Vec<_> = match std::fs::read_dir(config_dir) {
@@ -479,7 +477,7 @@ pub fn load_generic_entities(config_dir: &Path) -> Vec<&'static dyn ODataEntity>
                 config_dir.display(),
                 e
             );
-            return entities;
+            return configs;
         }
     };
     entries.sort_by_key(|e| e.file_name());
@@ -496,9 +494,7 @@ pub fn load_generic_entities(config_dir: &Path) -> Vec<&'static dyn ODataEntity>
                         "  Generische Entitaet geladen: {} ({})",
                         config.set_name, config.type_name
                     );
-                    let entity = GenericEntity::from_config(config);
-                    let leaked: &'static GenericEntity = Box::leak(Box::new(entity));
-                    entities.push(leaked);
+                    configs.push(config);
                 }
                 Err(e) => {
                     eprintln!(
@@ -518,5 +514,22 @@ pub fn load_generic_entities(config_dir: &Path) -> Vec<&'static dyn ODataEntity>
         }
     }
 
-    entities
+    configs
+}
+
+/// Wandelt rohe EntityConfigs in registrierbare ODataEntity-Instanzen um.
+pub fn create_generic_entities(configs: Vec<EntityConfig>) -> Vec<&'static dyn ODataEntity> {
+    configs
+        .into_iter()
+        .map(|config| {
+            let entity = GenericEntity::from_config(config);
+            let leaked: &'static GenericEntity = Box::leak(Box::new(entity));
+            leaked as &'static dyn ODataEntity
+        })
+        .collect()
+}
+
+/// Laedt und erzeugt generische Entitaeten in einem Schritt (Bequemlichkeit).
+pub fn load_generic_entities(config_dir: &Path) -> Vec<&'static dyn ODataEntity> {
+    create_generic_entities(load_raw_configs(config_dir))
 }

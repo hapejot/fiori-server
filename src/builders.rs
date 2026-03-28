@@ -30,7 +30,14 @@ pub fn build_metadata_xml(entities: &[&dyn ODataEntity]) -> String {
     // Bound draft actions fuer jede Entitaet
     let draft_actions: String = entities
         .iter()
-        .map(|e| build_draft_actions_xml(e.type_name()))
+        .map(|e| {
+            let mut actions = build_draft_actions_xml(e.type_name());
+            let custom = e.custom_actions_xml();
+            if !custom.is_empty() {
+                actions.push_str(&custom);
+            }
+            actions
+        })
         .collect::<Vec<_>>()
         .join("\n");
 

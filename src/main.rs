@@ -18,7 +18,10 @@ use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 
 use app_state::AppState;
-use entities::{OrderEntity, OrderItemEntity, ProductEntity};
+use entities::{
+    EntityConfigEntity, EntityFacetEntity, EntityFieldEntity, EntityNavigationEntity,
+    EntityTableFacetEntity, OrderEntity, OrderItemEntity, ProductEntity,
+};
 use handlers::*;
 use settings::Settings;
 
@@ -75,14 +78,24 @@ async fn main() {
         .unwrap_or_default()
         .join("config")
         .join("entities");
-    let generic_entities = entities::generic::load_generic_entities(&config_dir);
+
+    // Zwei-Schritt-Laden: erst rohe Configs, daraus Meta-Daten generieren,
+    // dann generische Entitaeten erzeugen.
+    let raw_configs = entities::generic::load_raw_configs(&config_dir);
+    entities::meta::write_meta_data(&data_dir, &raw_configs);
+    let generic_entities = entities::generic::create_generic_entities(raw_configs);
 
     let mut builder = AppState::builder()
         .settings(settings)
         .data_dir(&data_dir)
         .entity(&ProductEntity)
         .entity(&OrderEntity)
-        .entity(&OrderItemEntity);
+        .entity(&OrderItemEntity)
+        .entity(&EntityConfigEntity)
+        .entity(&EntityFieldEntity)
+        .entity(&EntityFacetEntity)
+        .entity(&EntityNavigationEntity)
+        .entity(&EntityTableFacetEntity);
     for ge in generic_entities {
         builder = builder.entity(ge);
     }

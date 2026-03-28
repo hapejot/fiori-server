@@ -1,0 +1,30 @@
+[
+  {
+    "HeaderDescriptionPath": "Position",
+    "HeaderTitlePath": "LastName",
+    "HeaderTypeName": "Ansprechpartner",
+    "HeaderTypeNamePlural": "Ansprechpartner",
+    "KeyField": "ContactID",
+    "ParentSetName": "",
+    "SelectionFields": "CustomerID,Department",
+    "SetName": "Contacts",
+    "TileDescription": "Ansprechpartner-Übersicht",
+    "TileIcon": "sap-icon://person-placeholder",
+    "TileTitle": "Ansprechpartner",
+    "TypeName": "Contact"
+  },
+  {
+    "HeaderDescriptionPath": "CustomerID",
+    "HeaderTitlePath": "CustomerName",
+    "HeaderTypeName": "Kunde",
+    "HeaderTypeNamePlural": "Kunden",
+    "KeyField": "CustomerID",
+    "ParentSetName": "",
+    "SelectionFields": "City,Country",
+    "SetName": "Customers",
+    "TileDescription": "Kundenübersicht",
+    "TileIcon": "sap-icon://customer",
+    "TileTitle": "Kunden",
+    "TypeName": "Customer"
+  }
+]

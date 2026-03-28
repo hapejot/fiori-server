@@ -253,6 +253,31 @@ fn handle_draft_action(path: &str, state: &AppState) -> Response {
                     key.is_active,
                 ))
             }
+            "publishConfig" => {
+                let config_dir = std::env::current_dir()
+                    .unwrap_or_default()
+                    .join("config")
+                    .join("entities");
+                let store = state.data_store.read().unwrap();
+                match crate::entities::meta::publish_entity_config(
+                    &store,
+                    &config_dir,
+                    &key.key_value,
+                ) {
+                    Ok(val) => {
+                        let body = serde_json::json!({
+                            "@odata.context": format!("{}/$metadata#EntityConfigs/$entity", crate::BASE_PATH),
+                            "value": val
+                        });
+                        Response::builder()
+                            .status(200)
+                            .header("Content-Type", "application/json")
+                            .body(Body::from(serde_json::to_string(&body).unwrap_or_default()))
+                            .unwrap()
+                    }
+                    Err(msg) => error_response(400, &msg),
+                }
+            }
             _ => error_response(400, &format!("Unknown action: {}", action)),
         };
     }
@@ -521,6 +546,25 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
                 draft::draft_activate(&mut store, entity, &key.key_value, &state.entities)
             }
             "draftPrepare" => draft::draft_prepare(&store, entity, &key.key_value, key.is_active),
+            "publishConfig" => {
+                drop(store); // Write-Lock freigeben
+                let config_dir = std::env::current_dir()
+                    .unwrap_or_default()
+                    .join("config")
+                    .join("entities");
+                let read_store = state.data_store.read().unwrap();
+                match crate::entities::meta::publish_entity_config(
+                    &read_store,
+                    &config_dir,
+                    &key.key_value,
+                ) {
+                    Ok(val) => (200, val),
+                    Err(msg) => (
+                        400,
+                        json!({"error": {"code": "400", "message": msg}}),
+                    ),
+                }
+            }
             _ => (
                 400,
                 json!({"error": {"code": "400", "message": format!("Unknown action: {}", action)}}),
@@ -538,6 +582,12 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
     {
         let mut store = state.data_store.write().unwrap();
         return draft::create_sub_item(&mut store, parent_entity, &parent_key, child_entity, body);
+    }
+
+    // Collection POST: neuen Draft-Datensatz anlegen
+    if let ODataPath::Collection { entity } = parsed.path {
+        let mut store = state.data_store.write().unwrap();
+        return draft::create_entity(&mut store, entity, body);
     }
 
     (
@@ -948,6 +998,21 @@ pub async fn catch_all(
             }
             error_response(404, &format!("Property '{}' not found", property))
         }
+        ODataPath::Collection { entity } => match method {
+            Method::POST => {
+                let body_str = String::from_utf8_lossy(&body);
+                let mut store = state.data_store.write().unwrap();
+                let resp = draft_to_response(draft::create_entity(
+                    &mut store,
+                    entity,
+                    &body_str,
+                ));
+                drop(store);
+                state.save_data();
+                resp
+            }
+            _ => handle_static_files(path, &state),
+        },
         _ => handle_static_files(path, &state),
     }
 }

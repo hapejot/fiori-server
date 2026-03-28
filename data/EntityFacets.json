@@ -1,0 +1,42 @@
+[
+  {
+    "FacetID": "Contacts_PersonalInfo",
+    "FieldGroupFields": "ContactID,FirstName,LastName,Email,Phone",
+    "FieldGroupLabel": "Person",
+    "FieldGroupQualifier": "Personal",
+    "SectionId": "PersonalInfo",
+    "SectionLabel": "Persönliche Daten",
+    "SetName": "Contacts",
+    "SortOrder": 0
+  },
+  {
+    "FacetID": "Contacts_CompanyInfo",
+    "FieldGroupFields": "CustomerID,Department,Position",
+    "FieldGroupLabel": "Firmenzuordnung",
+    "FieldGroupQualifier": "Company",
+    "SectionId": "CompanyInfo",
+    "SectionLabel": "Unternehmen",
+    "SetName": "Contacts",
+    "SortOrder": 1
+  },
+  {
+    "FacetID": "Customers_ContactInfo",
+    "FieldGroupFields": "CustomerID,CustomerName,Email,Phone",
+    "FieldGroupLabel": "Kontakt",
+    "FieldGroupQualifier": "Contact",
+    "SectionId": "ContactInfo",
+    "SectionLabel": "Kontaktdaten",
+    "SetName": "Customers",
+    "SortOrder": 0
+  },
+  {
+    "FacetID": "Customers_AddressInfo",
+    "FieldGroupFields": "Street,City,PostalCode,Country",
+    "FieldGroupLabel": "Anschrift",
+    "FieldGroupQualifier": "Address",
+    "SectionId": "AddressInfo",
+    "SectionLabel": "Adresse",
+    "SetName": "Customers",
+    "SortOrder": 1
+  }
+]

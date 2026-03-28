@@ -1,0 +1,22 @@
+[
+  {
+    "ForeignKey": "CustomerID",
+    "IsCollection": false,
+    "NavID": "Contacts_Customer",
+    "NavName": "Customer",
+    "SetName": "Contacts",
+    "SortOrder": 0,
+    "TargetSet": "Customers",
+    "TargetType": "Customer"
+  },
+  {
+    "ForeignKey": "",
+    "IsCollection": true,
+    "NavID": "Customers_Contacts",
+    "NavName": "Contacts",
+    "SetName": "Customers",
+    "SortOrder": 0,
+    "TargetSet": "Contacts",
+    "TargetType": "Contact"
+  }
+]

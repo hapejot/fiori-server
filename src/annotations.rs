@@ -418,16 +418,21 @@ pub fn build_capabilities_annotations(
     }
     x.push_str("</Annotations>");
 
-    // Immutable-Annotations auf Properties -> Felder im Edit-Mode readonly
-    let immutable_fields: Vec<&FieldDef> = fields.iter().filter(|f| f.immutable).collect();
-    for f in &immutable_fields {
+    // Per-Property-Annotations: Common.Label + ggf. Immutable
+    for f in fields {
         x.push_str(&format!(
             "<Annotations Target=\"{ns}.{ty}/{prop}\">",
             ns = NAMESPACE,
             ty = entity_type_name,
             prop = f.name
         ));
-        x.push_str("<Annotation Term=\"Org.OData.Core.V1.Immutable\" Bool=\"true\"/>");
+        x.push_str(&format!(
+            "<Annotation Term=\"Common.Label\" String=\"{}\"/>",
+            f.label
+        ));
+        if f.immutable {
+            x.push_str("<Annotation Term=\"Org.OData.Core.V1.Immutable\" Bool=\"true\"/>");
+        }
         x.push_str("</Annotations>");
     }
 

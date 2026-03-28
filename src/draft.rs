@@ -403,16 +403,31 @@ pub fn draft_activate(
         }
     };
 
-    // Draft-Daten in aktiven Datensatz uebernehmen
-    if let Some(active) = find_record_mut(records, key_field, key_value, true) {
-        if let (Some(active_obj), Some(draft_obj)) = (active.as_object_mut(), draft.as_object()) {
-            for (k, v) in draft_obj {
-                if !is_draft_field(k) && !k.starts_with("@odata") {
-                    active_obj.insert(k.clone(), v.clone());
+    // Draft-Daten in aktiven Datensatz uebernehmen oder neuen aktiven erzeugen
+    let has_active = draft
+        .get("HasActiveEntity")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    if has_active {
+        // Existierenden aktiven Datensatz aktualisieren
+        if let Some(active) = find_record_mut(records, key_field, key_value, true) {
+            if let (Some(active_obj), Some(draft_obj)) =
+                (active.as_object_mut(), draft.as_object())
+            {
+                for (k, v) in draft_obj {
+                    if !is_draft_field(k) && !k.starts_with("@odata") {
+                        active_obj.insert(k.clone(), v.clone());
+                    }
                 }
+                active_obj.insert("HasDraftEntity".to_string(), json!(false));
             }
-            active_obj.insert("HasDraftEntity".to_string(), json!(false));
         }
+    } else {
+        // Neuer Datensatz: Draft zum aktiven Datensatz befoerdern
+        let mut new_active = draft.clone();
+        set_draft_flags(&mut new_active, true, false, false);
+        records.push(new_active);
     }
 
     // Draft entfernen
@@ -492,6 +507,61 @@ pub fn read_sub_collection(
         .unwrap_or_default();
     let qs = parse_query_string(query);
     query_collection_from(child_entity, &child_records, &qs, entities, store)
+}
+
+/// Erzeugt einen neuen Draft-Datensatz per POST auf die Collection.
+pub fn create_entity(
+    store: &mut Store,
+    entity: &dyn ODataEntity,
+    body: &str,
+) -> (u16, Value) {
+    let mut new_record: Value = if body.trim().is_empty() {
+        json!({})
+    } else {
+        serde_json::from_str(body).unwrap_or_else(|_| json!({}))
+    };
+
+    if let Some(obj) = new_record.as_object_mut() {
+        // Key generieren, falls nicht vorhanden
+        let key_field = entity.key_field();
+        if !obj.contains_key(key_field) {
+            let existing = store
+                .get(entity.set_name())
+                .map(|r| r.len())
+                .unwrap_or(0);
+            obj.insert(
+                key_field.to_string(),
+                json!(format!("NEW{:04}", existing + 1)),
+            );
+        }
+
+        // Draft-Felder
+        obj.insert("IsActiveEntity".to_string(), json!(false));
+        obj.insert("HasActiveEntity".to_string(), json!(false));
+        obj.insert("HasDraftEntity".to_string(), json!(false));
+
+        // Default-Werte fuer fehlende Felder
+        if let Some(fields) = entity.fields_def() {
+            for f in fields {
+                obj.entry(f.name.to_string())
+                    .or_insert_with(|| match f.edm_type {
+                        "Edm.Int32" | "Edm.Byte" => json!(0),
+                        "Edm.Decimal" => json!("0"),
+                        "Edm.Boolean" => json!(false),
+                        _ => json!(""),
+                    });
+            }
+        }
+    }
+
+    let mut result = new_record.clone();
+    inject_odata_context(&mut result, entity.set_name());
+    store
+        .entry(entity.set_name().to_string())
+        .or_insert_with(Vec::new)
+        .push(new_record);
+
+    (201, result)
 }
 
 /// Erzeugt ein neues Kind-Element in einer Sub-Collection (Komposition).

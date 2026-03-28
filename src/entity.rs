@@ -53,6 +53,16 @@ pub trait ODataEntity: Sync + Debug {
     fn annotations_def(&self) -> Option<&'static AnnotationsDef> {
         None
     }
+    /// Zusaetzliche Annotations-XML (z.B. UI.Identification fuer Custom Actions).
+    /// Wird am Ende von annotations() angehaengt.
+    fn extra_annotations_xml(&self) -> String {
+        String::new()
+    }
+    /// Zusaetzliche gebundene OData-Actions (z.B. publishConfig).
+    /// Wird neben den Draft-Actions ins Schema geschrieben.
+    fn custom_actions_xml(&self) -> String {
+        String::new()
+    }
     /// EDMX Annotations-XML – wird automatisch aus annotations_def() erzeugt.
     fn annotations(&self) -> String {
         let mut xml = match (self.annotations_def(), self.fields_def()) {
@@ -70,6 +80,8 @@ pub trait ODataEntity: Sync + Debug {
                 is_draft_root,
             ));
         }
+        // Zusaetzliche entitaetsspezifische Annotations
+        xml.push_str(&self.extra_annotations_xml());
         xml
     }
     /// $expand-Logik auf einen einzelnen Datensatz anwenden (optional).

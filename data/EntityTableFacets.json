@@ -1,0 +1,10 @@
+[
+  {
+    "FacetId": "ContactsFacet",
+    "FacetLabel": "Ansprechpartner",
+    "NavigationProperty": "Contacts",
+    "SetName": "Customers",
+    "SortOrder": 0,
+    "TableFacetID": "Customers_ContactsFacet"
+  }
+]
