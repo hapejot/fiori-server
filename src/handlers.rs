@@ -11,9 +11,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::app_state::AppState;
-use crate::draft;
+use crate::data_store::{EntityKey, ODataQuery, ParentKey, StoreError};
 use crate::entity::ODataEntity;
-use crate::query::{parse_query_string, query_collection, query_collection_from};
 use crate::routing::{resolve_odata_path, ODataPath};
 use crate::BASE_PATH;
 
@@ -56,20 +55,52 @@ fn json_response_with_status(status: StatusCode, data: Value) -> Response {
     builder.body(Body::from(body)).unwrap()
 }
 
-fn draft_to_response((status, value): (u16, Value)) -> Response {
-    match status {
-        204 => {
+fn store_error_to_response(err: StoreError) -> Response {
+    match err {
+        StoreError::NotFound(msg) => error_response(404, &msg),
+        StoreError::BadRequest(msg) => error_response(400, &msg),
+    }
+}
+
+fn store_result_to_response(result: Result<Value, StoreError>) -> Response {
+    match result {
+        Ok(val) => json_response(val),
+        Err(e) => store_error_to_response(e),
+    }
+}
+
+fn store_result_to_response_with_status(
+    result: Result<Value, StoreError>,
+    status: StatusCode,
+) -> Response {
+    match result {
+        Ok(val) => json_response_with_status(status, val),
+        Err(e) => store_error_to_response(e),
+    }
+}
+
+fn store_delete_to_response(result: Result<(), StoreError>) -> Response {
+    match result {
+        Ok(()) => {
             let mut builder = Response::builder().status(StatusCode::NO_CONTENT);
             for (k, v) in cors_headers() {
                 builder = builder.header(k, v);
             }
             builder.body(Body::empty()).unwrap()
         }
-        _ => {
-            let http_status = StatusCode::from_u16(status).unwrap_or(StatusCode::OK);
-            json_response_with_status(http_status, value)
-        }
+        Err(e) => store_error_to_response(e),
     }
+}
+
+/// Build an EntityKey from the parsed routing info.
+fn entity_key_from_routing(
+    entity: &dyn ODataEntity,
+    key: &crate::routing::EntityKeyInfo,
+) -> EntityKey {
+    EntityKey::composite(&[
+        (entity.key_field(), &key.key_value),
+        ("IsActiveEntity", if key.is_active { "true" } else { "false" }),
+    ])
 }
 
 pub fn error_response(code: u16, message: &str) -> Response {
@@ -130,15 +161,15 @@ pub async fn collection_handler(
     uri: Uri,
 ) -> Response {
     let path = uri.path();
-    let query = uri.query().unwrap_or("");
+    let query_str = uri.query().unwrap_or("");
     let parsed = resolve_odata_path(path, &state.entities);
-    if let ODataPath::Collection { entity } = parsed.path {
-        let qs = parse_query_string(query);
-        let store = state.data_store.read().unwrap();
-        if let Some(records) = store.get(entity.set_name()) {
-            return json_response(query_collection_from(entity, records, &qs, &state.entities, &store));
-        }
-        return json_response(query_collection(entity, &qs, &state.entities, &store));
+    if let ODataPath::Collection { entity: _ } = parsed.path {
+        let set_name = match &parsed.path {
+            ODataPath::Collection { entity } => entity.set_name(),
+            _ => return error_response(404, "Entity set not found"),
+        };
+        let query = ODataQuery::parse(query_str);
+        return store_result_to_response(state.data_store.get_collection(set_name, &query, None));
     }
     error_response(404, "Entity set not found")
 }
@@ -151,8 +182,8 @@ pub async fn count_handler(
     let path = uri.path();
     let parsed = resolve_odata_path(path, &state.entities);
     if let ODataPath::Count { entity } = parsed.path {
-        let store = state.data_store.read().unwrap();
-        let count = store.get(entity.set_name()).map(|v| v.len()).unwrap_or(0);
+        let query = ODataQuery::empty();
+        let count = state.data_store.count(entity.set_name(), &query, None);
         let mut builder = Response::builder()
             .status(StatusCode::OK)
             .header("Content-Type", "text/plain;charset=utf-8")
@@ -166,18 +197,14 @@ pub async fn count_handler(
 }
 
 /// Generischer Single-Entity-Handler: /SetName('key') or /SetName(Key='val',IsActiveEntity=true)
-fn handle_single_entity(path: &str, query: &str, state: &AppState) -> Response {
+fn handle_single_entity(path: &str, query_str: &str, state: &AppState) -> Response {
     let parsed = resolve_odata_path(path, &state.entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
-        let store = state.data_store.read().unwrap();
-        return draft_to_response(draft::read_entity(
-            &store,
-            entity,
-            &key.key_value,
-            key.is_active,
-            query,
-            &state.entities,
-        ));
+        let entity_key = entity_key_from_routing(entity, &key);
+        let query = ODataQuery::parse(query_str);
+        return store_result_to_response(
+            state.data_store.read_entity(entity.set_name(), &entity_key, &query),
+        );
     }
     error_response(404, "Entity not found.")
 }
@@ -186,14 +213,10 @@ fn handle_single_entity(path: &str, query: &str, state: &AppState) -> Response {
 fn handle_patch_entity(path: &str, body: &Value, state: &AppState) -> Response {
     let parsed = resolve_odata_path(path, &state.entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
-        let mut store = state.data_store.write().unwrap();
-        return draft_to_response(draft::patch_entity(
-            &mut store,
-            entity,
-            &key.key_value,
-            key.is_active,
-            body,
-        ));
+        let entity_key = entity_key_from_routing(entity, &key);
+        return store_result_to_response(
+            state.data_store.patch_entity(entity.set_name(), &entity_key, body),
+        );
     }
     error_response(404, "Entity not found.")
 }
@@ -203,14 +226,10 @@ fn handle_patch_entity(path: &str, body: &Value, state: &AppState) -> Response {
 fn handle_delete_entity(path: &str, state: &AppState) -> Response {
     let parsed = resolve_odata_path(path, &state.entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
-        let mut store = state.data_store.write().unwrap();
-        return draft_to_response(draft::delete_entity(
-            &mut store,
-            entity,
-            &key.key_value,
-            key.is_active,
-            &state.entities,
-        ));
+        let entity_key = entity_key_from_routing(entity, &key);
+        return store_delete_to_response(
+            state.data_store.delete_entity(entity.set_name(), &entity_key),
+        );
     }
     error_response(404, "Entity not found.")
 }
@@ -225,44 +244,26 @@ fn handle_draft_action(path: &str, state: &AppState) -> Response {
         action,
     } = parsed.path
     {
+        let entity_key = entity_key_from_routing(entity, &key);
         return match action.as_str() {
-            "draftEdit" => {
-                let mut store = state.data_store.write().unwrap();
-                draft_to_response(draft::draft_edit(
-                    &mut store,
-                    entity,
-                    &key.key_value,
-                    &state.entities,
-                ))
-            }
-            "draftActivate" => {
-                let mut store = state.data_store.write().unwrap();
-                draft_to_response(draft::draft_activate(
-                    &mut store,
-                    entity,
-                    &key.key_value,
-                    &state.entities,
-                ))
-            }
-            "draftPrepare" => {
-                let store = state.data_store.read().unwrap();
-                draft_to_response(draft::draft_prepare(
-                    &store,
-                    entity,
-                    &key.key_value,
-                    key.is_active,
-                ))
-            }
+            "draftEdit" => store_result_to_response(
+                state.data_store.draft_edit(entity.set_name(), &entity_key),
+            ),
+            "draftActivate" => store_result_to_response(
+                state.data_store.draft_activate(entity.set_name(), &entity_key),
+            ),
+            "draftPrepare" => store_result_to_response(
+                state.data_store.draft_prepare(entity.set_name(), &entity_key),
+            ),
             "publishConfig" => {
                 let config_dir = std::env::current_dir()
                     .unwrap_or_default()
                     .join("config")
                     .join("entities");
-                let store = state.data_store.read().unwrap();
                 match crate::entities::meta::publish_entity_config(
-                    &store,
                     &config_dir,
                     &key.key_value,
+                    state.data_store.as_ref(),
                 ) {
                     Ok(val) => {
                         let body = serde_json::json!({
@@ -452,7 +453,7 @@ pub async fn batch_handler(
     let resp_boundary = format!("batch_resp_{}", std::process::id());
 
     // Nach Batch-Verarbeitung Daten persistieren
-    state.save_data();
+    state.data_store.commit();
 
     let mut body_parts = Vec::new();
     for rp in &response_parts {
@@ -500,8 +501,11 @@ fn handle_batch_patch(rel_url: &str, body: &str, state: &AppState) -> (u16, Valu
     let parsed = resolve_odata_path(rel_url, &state.entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
         let patch_data: Value = serde_json::from_str(body).unwrap_or(json!({}));
-        let mut store = state.data_store.write().unwrap();
-        return draft::patch_entity(&mut store, entity, &key.key_value, key.is_active, &patch_data);
+        let entity_key = entity_key_from_routing(entity, &key);
+        match state.data_store.patch_entity(entity.set_name(), &entity_key, &patch_data) {
+            Ok(val) => return (200, val),
+            Err(e) => return (404, json!({"error": {"code": "404", "message": format!("{}", e)}})),
+        }
     }
     (
         404,
@@ -513,14 +517,11 @@ fn handle_batch_patch(rel_url: &str, body: &str, state: &AppState) -> (u16, Valu
 fn handle_batch_delete(rel_url: &str, state: &AppState) -> (u16, Value) {
     let parsed = resolve_odata_path(rel_url, &state.entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
-        let mut store = state.data_store.write().unwrap();
-        return draft::delete_entity(
-            &mut store,
-            entity,
-            &key.key_value,
-            key.is_active,
-            &state.entities,
-        );
+        let entity_key = entity_key_from_routing(entity, &key);
+        match state.data_store.delete_entity(entity.set_name(), &entity_key) {
+            Ok(()) => return (204, json!({})),
+            Err(e) => return (404, json!({"error": {"code": "404", "message": format!("{}", e)}})),
+        }
     }
     (
         404,
@@ -537,38 +538,40 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
         action,
     } = parsed.path
     {
-        let mut store = state.data_store.write().unwrap();
-        return match action.as_str() {
-            "draftEdit" => {
-                draft::draft_edit(&mut store, entity, &key.key_value, &state.entities)
-            }
-            "draftActivate" => {
-                draft::draft_activate(&mut store, entity, &key.key_value, &state.entities)
-            }
-            "draftPrepare" => draft::draft_prepare(&store, entity, &key.key_value, key.is_active),
+        let entity_key = entity_key_from_routing(entity, &key);
+        let result = match action.as_str() {
+            "draftEdit" => state.data_store.draft_edit(entity.set_name(), &entity_key),
+            "draftActivate" => state.data_store.draft_activate(entity.set_name(), &entity_key),
+            "draftPrepare" => state.data_store.draft_prepare(entity.set_name(), &entity_key),
             "publishConfig" => {
-                drop(store); // Write-Lock freigeben
                 let config_dir = std::env::current_dir()
                     .unwrap_or_default()
                     .join("config")
                     .join("entities");
-                let read_store = state.data_store.read().unwrap();
                 match crate::entities::meta::publish_entity_config(
-                    &read_store,
                     &config_dir,
                     &key.key_value,
+                    state.data_store.as_ref(),
                 ) {
-                    Ok(val) => (200, val),
-                    Err(msg) => (
-                        400,
-                        json!({"error": {"code": "400", "message": msg}}),
-                    ),
+                    Ok(val) => return (200, val),
+                    Err(msg) => {
+                        return (
+                            400,
+                            json!({"error": {"code": "400", "message": msg}}),
+                        )
+                    }
                 }
             }
-            _ => (
-                400,
-                json!({"error": {"code": "400", "message": format!("Unknown action: {}", action)}}),
-            ),
+            _ => {
+                return (
+                    400,
+                    json!({"error": {"code": "400", "message": format!("Unknown action: {}", action)}}),
+                )
+            }
+        };
+        return match result {
+            Ok(val) => (200, val),
+            Err(e) => (404, json!({"error": {"code": "404", "message": format!("{}", e)}})),
         };
     }
 
@@ -580,14 +583,27 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
         ..
     } = parsed.path
     {
-        let mut store = state.data_store.write().unwrap();
-        return draft::create_sub_item(&mut store, parent_entity, &parent_key, child_entity, body);
+        let parent = ParentKey::new(
+            parent_entity.set_name(),
+            entity_key_from_routing(parent_entity, &parent_key),
+        );
+        let data: Value = serde_json::from_str(body).unwrap_or(json!({}));
+        match state
+            .data_store
+            .create_entity(child_entity.set_name(), &data, Some(&parent))
+        {
+            Ok(val) => return (201, val),
+            Err(e) => return (400, json!({"error": {"code": "400", "message": format!("{}", e)}})),
+        }
     }
 
     // Collection POST: neuen Draft-Datensatz anlegen
     if let ODataPath::Collection { entity } = parsed.path {
-        let mut store = state.data_store.write().unwrap();
-        return draft::create_entity(&mut store, entity, body);
+        let data: Value = serde_json::from_str(body).unwrap_or(json!({}));
+        match state.data_store.create_entity(entity.set_name(), &data, None) {
+            Ok(val) => return (201, val),
+            Err(e) => return (400, json!({"error": {"code": "400", "message": format!("{}", e)}})),
+        }
     }
 
     (
@@ -599,9 +615,8 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
 /// Generischer Batch-GET – loest Pfade ueber die Entity-Registry auf.
 fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
     let entities = &state.entities;
-    let store = state.data_store.read().unwrap();
     let parsed = resolve_odata_path(rel_url, entities);
-    let qs = parse_query_string(&parsed.query_string);
+    let query = ODataQuery::parse(&parsed.query_string);
 
     match parsed.path {
         ODataPath::ServiceRoot => {
@@ -615,54 +630,47 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
             })
         }
         ODataPath::Collection { entity } => {
-            if let Some(data) = store.get(entity.set_name()) {
-                query_collection_from(entity, data, &qs, entities, &store)
-            } else {
-                query_collection(entity, &qs, entities, &store)
+            match state.data_store.get_collection(entity.set_name(), &query, None) {
+                Ok(val) => val,
+                Err(e) => json!({"error": {"code": "404", "message": format!("{}", e)}}),
             }
         }
         ODataPath::Count { entity } => {
-            let count = store.get(entity.set_name()).map(|r| r.len()).unwrap_or(0);
+            let count = state.data_store.count(entity.set_name(), &query, None);
             json!({"value": count})
         }
         ODataPath::Entity { entity, key } => {
-            let (_, val) = draft::read_entity(
-                &store,
-                entity,
-                &key.key_value,
-                key.is_active,
-                &parsed.query_string,
-                entities,
-            );
-            val
+            let entity_key = entity_key_from_routing(entity, &key);
+            match state.data_store.read_entity(entity.set_name(), &entity_key, &query) {
+                Ok(val) => val,
+                Err(e) => json!({"error": {"code": "404", "message": format!("{}", e)}}),
+            }
         }
         ODataPath::SubCollection {
             parent_entity,
             parent_key,
             child_entity,
             ..
-        } => draft::read_sub_collection(
-            &store,
-            parent_entity,
-            &parent_key,
-            child_entity,
-            &parsed.query_string,
-            entities,
-        ),
+        } => {
+            let parent = ParentKey::new(
+                parent_entity.set_name(),
+                entity_key_from_routing(parent_entity, &parent_key),
+            );
+            match state.data_store.get_collection(child_entity.set_name(), &query, Some(&parent)) {
+                Ok(val) => val,
+                Err(e) => json!({"error": {"code": "404", "message": format!("{}", e)}}),
+            }
+        }
         ODataPath::PropertyAccess {
             entity,
             key,
             property,
         } => {
-            let records = store.get(entity.set_name());
-            if let Some(record) = records.and_then(|r| {
-                draft::find_record(r, entity.key_field(), &key.key_value, key.is_active)
-            }) {
-                if let Some(val) = record.get(&property) {
-                    return json!({ "value": val });
-                }
+            let entity_key = entity_key_from_routing(entity, &key);
+            match state.data_store.get_property(entity.set_name(), &entity_key, &property) {
+                Ok(val) => json!({ "value": val }),
+                Err(e) => json!({"error": {"code": "404", "message": format!("{}", e)}}),
             }
-            json!({"error": {"code": "404", "message": format!("Property '{}' not found", property)}})
         }
         _ => json!({"error": {"code": "404", "message": format!("Unknown: {}", rel_url)}}),
     }
@@ -670,24 +678,23 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
 
 // ── Sub-Collection handler ──────────────────────────────────────────
 /// Liefert die Kind-Eintraege einer Komposition.
-/// Z.B. Orders('O001')/Items → alle OrderItems mit OrderID == 'O001'.
-/// Filtert nach dem IsActiveEntity-Status des Eltern-Datensatzes.
 fn handle_sub_collection(
     parent_entity: &dyn ODataEntity,
     parent_key: &crate::routing::EntityKeyInfo,
     child_entity: &dyn ODataEntity,
-    query: &str,
+    query_str: &str,
     state: &AppState,
 ) -> Response {
-    let store = state.data_store.read().unwrap();
-    json_response(draft::read_sub_collection(
-        &store,
-        parent_entity,
-        parent_key,
-        child_entity,
-        query,
-        &state.entities,
-    ))
+    let parent = ParentKey::new(
+        parent_entity.set_name(),
+        entity_key_from_routing(parent_entity, parent_key),
+    );
+    let query = ODataQuery::parse(query_str);
+    store_result_to_response(
+        state
+            .data_store
+            .get_collection(child_entity.set_name(), &query, Some(&parent)),
+    )
 }
 
 // ── Eincompilierte statische Dateien ────────────────────────────────
@@ -979,12 +986,12 @@ pub async fn catch_all(
                     Err(_) => return error_response(400, "Invalid JSON body"),
                 };
                 let resp = handle_patch_entity(path, &json_body, &state);
-                state.save_data();
+                state.data_store.commit();
                 resp
             }
             Method::DELETE => {
                 let resp = handle_delete_entity(path, &state);
-                state.save_data();
+                state.data_store.commit();
                 resp
             }
             _ => error_response(405, "Method not allowed"),
@@ -992,7 +999,7 @@ pub async fn catch_all(
         ODataPath::Action { .. } => {
             if method == Method::POST {
                 let resp = handle_draft_action(path, &state);
-                state.save_data();
+                state.data_store.commit();
                 resp
             } else {
                 error_response(405, "Method not allowed")
@@ -1009,16 +1016,20 @@ pub async fn catch_all(
             }
             Method::POST => {
                 let body_str = String::from_utf8_lossy(&body);
-                let mut store = state.data_store.write().unwrap();
-                let resp = draft_to_response(draft::create_sub_item(
-                    &mut store,
-                    parent_entity,
-                    &parent_key,
-                    child_entity,
-                    &body_str,
-                ));
-                drop(store);
-                state.save_data();
+                let data: Value = serde_json::from_str(&body_str).unwrap_or(json!({}));
+                let parent = ParentKey::new(
+                    parent_entity.set_name(),
+                    entity_key_from_routing(parent_entity, &parent_key),
+                );
+                let resp = store_result_to_response_with_status(
+                    state.data_store.create_entity(
+                        child_entity.set_name(),
+                        &data,
+                        Some(&parent),
+                    ),
+                    StatusCode::CREATED,
+                );
+                state.data_store.commit();
                 resp
             }
             _ => error_response(405, "Method not allowed"),
@@ -1028,28 +1039,21 @@ pub async fn catch_all(
             key,
             property,
         } => {
-            let store = state.data_store.read().unwrap();
-            let records = store.get(entity.set_name());
-            if let Some(record) = records.and_then(|r| {
-                draft::find_record(r, entity.key_field(), &key.key_value, key.is_active)
-            }) {
-                if let Some(val) = record.get(&property) {
-                    return json_response(json!({ "value": val }));
-                }
+            let entity_key = entity_key_from_routing(entity, &key);
+            match state.data_store.get_property(entity.set_name(), &entity_key, &property) {
+                Ok(val) => json_response(json!({ "value": val })),
+                Err(e) => store_error_to_response(e),
             }
-            error_response(404, &format!("Property '{}' not found", property))
         }
         ODataPath::Collection { entity } => match method {
             Method::POST => {
                 let body_str = String::from_utf8_lossy(&body);
-                let mut store = state.data_store.write().unwrap();
-                let resp = draft_to_response(draft::create_entity(
-                    &mut store,
-                    entity,
-                    &body_str,
-                ));
-                drop(store);
-                state.save_data();
+                let data: Value = serde_json::from_str(&body_str).unwrap_or(json!({}));
+                let resp = store_result_to_response_with_status(
+                    state.data_store.create_entity(entity.set_name(), &data, None),
+                    StatusCode::CREATED,
+                );
+                state.data_store.commit();
                 resp
             }
             _ => handle_static_files(path, &state),

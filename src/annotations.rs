@@ -557,3 +557,625 @@ pub fn append_navigation_properties(xml: &mut String, nav_props: &[NavigationPro
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Helpers ─────────────────────────────────────────────────
+
+    fn simple_fields() -> Vec<FieldDef> {
+        vec![
+            FieldDef {
+                name: "ProductID",
+                label: "Product Nr.",
+                edm_type: "Edm.String",
+                max_length: Some(10),
+                precision: None,
+                scale: None,
+                immutable: true,
+                semantic_object: None,
+            },
+            FieldDef {
+                name: "ProductName",
+                label: "Product Name",
+                edm_type: "Edm.String",
+                max_length: Some(80),
+                precision: None,
+                scale: None,
+                immutable: false,
+                semantic_object: None,
+            },
+            FieldDef {
+                name: "Price",
+                label: "Price",
+                edm_type: "Edm.Decimal",
+                max_length: None,
+                precision: Some(15),
+                scale: Some(2),
+                immutable: false,
+                semantic_object: None,
+            },
+        ]
+    }
+
+    fn simple_annotations() -> AnnotationsDef {
+        AnnotationsDef {
+            selection_fields: &["ProductName"],
+            line_item: &[
+                LineItemField {
+                    name: "ProductID",
+                    label: None,
+                    importance: Some("High"),
+                    criticality_path: None,
+                    navigation_path: None,
+                    semantic_object: None,
+                },
+                LineItemField {
+                    name: "ProductName",
+                    label: None,
+                    importance: None,
+                    criticality_path: None,
+                    navigation_path: None,
+                    semantic_object: None,
+                },
+            ],
+            header_info: HeaderInfoDef {
+                type_name: "Product",
+                type_name_plural: "Products",
+                title_path: "ProductName",
+                description_path: "ProductID",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[FacetSectionDef {
+                label: "General",
+                id: "GeneralSection",
+                field_group_qualifier: "Main",
+                field_group_label: "Main Data",
+            }],
+            field_groups: &[FieldGroupDef {
+                qualifier: "Main",
+                fields: &["ProductID", "ProductName", "Price"],
+            }],
+            table_facets: &[],
+        }
+    }
+
+    // ── build_annotations_xml ───────────────────────────────────
+
+    #[test]
+    fn annotations_xml_contains_target() {
+        let xml = build_annotations_xml("Product", &simple_annotations(), &simple_fields());
+        assert!(xml.contains("Annotations Target=\"ProductsService.Product\""));
+    }
+
+    #[test]
+    fn annotations_xml_selection_fields() {
+        let xml = build_annotations_xml("Product", &simple_annotations(), &simple_fields());
+        assert!(xml.contains("<Annotation Term=\"UI.SelectionFields\">"));
+        assert!(xml.contains("<PropertyPath>ProductName</PropertyPath>"));
+    }
+
+    #[test]
+    fn annotations_xml_line_item_basic() {
+        let xml = build_annotations_xml("Product", &simple_annotations(), &simple_fields());
+        assert!(xml.contains("<Annotation Term=\"UI.LineItem\">"));
+        // ProductID field: should use label from FieldDef
+        assert!(xml.contains("Property=\"Value\" Path=\"ProductID\""));
+        assert!(xml.contains("Property=\"Label\" String=\"Product Nr.\""));
+        // High importance
+        assert!(xml.contains("EnumMember=\"UI.ImportanceType/High\""));
+    }
+
+    #[test]
+    fn annotations_xml_line_item_with_semantic_object() {
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[LineItemField {
+                name: "CustomerID",
+                label: Some("Customer"),
+                importance: None,
+                criticality_path: None,
+                navigation_path: None,
+                semantic_object: Some("Customers"),
+            }],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[],
+            field_groups: &[],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Test", &def, &[]);
+        assert!(xml.contains("Record Type=\"UI.DataFieldWithIntentBasedNavigation\""));
+        assert!(xml.contains("Property=\"SemanticObject\" String=\"Customers\""));
+        assert!(xml.contains("Property=\"Action\" String=\"display\""));
+        assert!(xml.contains("Property=\"Label\" String=\"Customer\""));
+    }
+
+    #[test]
+    fn annotations_xml_line_item_with_navigation_path() {
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[LineItemField {
+                name: "Customer/CustomerName",
+                label: Some("Kunde"),
+                importance: None,
+                criticality_path: None,
+                navigation_path: Some("Customer"),
+                semantic_object: None,
+            }],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[],
+            field_groups: &[],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Test", &def, &[]);
+        assert!(xml.contains("Record Type=\"UI.DataFieldWithNavigationPath\""));
+        assert!(xml.contains("Property=\"Target\" NavigationPropertyPath=\"Customer\""));
+        assert!(xml.contains("Property=\"Label\" String=\"Kunde\""));
+    }
+
+    #[test]
+    fn annotations_xml_line_item_with_criticality() {
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[LineItemField {
+                name: "Status",
+                label: Some("Status"),
+                importance: None,
+                criticality_path: Some("StatusCriticality"),
+                navigation_path: None,
+                semantic_object: None,
+            }],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[],
+            field_groups: &[],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Test", &def, &[]);
+        assert!(xml.contains("Property=\"Criticality\" Path=\"StatusCriticality\""));
+    }
+
+    #[test]
+    fn annotations_xml_line_item_label_fallback() {
+        // When no explicit label and no matching field → uses field name
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[LineItemField {
+                name: "Unknown",
+                label: None,
+                importance: None,
+                criticality_path: None,
+                navigation_path: None,
+                semantic_object: None,
+            }],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[],
+            field_groups: &[],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Test", &def, &[]);
+        // Falls back to field name as label
+        assert!(xml.contains("Property=\"Label\" String=\"Unknown\""));
+    }
+
+    #[test]
+    fn annotations_xml_header_info() {
+        let xml = build_annotations_xml("Product", &simple_annotations(), &simple_fields());
+        assert!(xml.contains("<Annotation Term=\"UI.HeaderInfo\">"));
+        assert!(xml.contains("Property=\"TypeName\" String=\"Product\""));
+        assert!(xml.contains("Property=\"TypeNamePlural\" String=\"Products\""));
+        assert!(xml.contains("Property=\"Value\" Path=\"ProductName\""));
+        assert!(xml.contains("Property=\"Value\" Path=\"ProductID\""));
+    }
+
+    #[test]
+    fn annotations_xml_header_facets_empty() {
+        let xml = build_annotations_xml("Product", &simple_annotations(), &simple_fields());
+        assert!(xml.contains("<Annotation Term=\"UI.HeaderFacets\">"));
+        assert!(xml.contains("<Collection></Collection>"));
+    }
+
+    #[test]
+    fn annotations_xml_header_facets_with_data() {
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[HeaderFacetDef {
+                data_point_qualifier: "Rating",
+                label: "Bewertung",
+            }],
+            data_points: &[DataPointDef {
+                qualifier: "Rating",
+                value_path: "RatingValue",
+                title: "Bewertung",
+                max_value: Some(5),
+                visualization: Some("Rating"),
+            }],
+            facet_sections: &[],
+            field_groups: &[],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Test", &def, &[]);
+        assert!(xml.contains("AnnotationPath=\"@UI.DataPoint#Rating\""));
+        assert!(xml.contains("Property=\"Label\" String=\"Bewertung\""));
+        // DataPoint
+        assert!(xml.contains("Annotation Term=\"UI.DataPoint\" Qualifier=\"Rating\""));
+        assert!(xml.contains("Property=\"Value\" Path=\"RatingValue\""));
+        assert!(xml.contains("Property=\"Title\" String=\"Bewertung\""));
+        assert!(xml.contains("Property=\"MaximumValue\" Int=\"5\""));
+        assert!(xml.contains("EnumMember=\"UI.VisualizationType/Rating\""));
+    }
+
+    #[test]
+    fn annotations_xml_data_point_minimal() {
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[DataPointDef {
+                qualifier: "Amount",
+                value_path: "TotalAmount",
+                title: "Gesamtbetrag",
+                max_value: None,
+                visualization: None,
+            }],
+            facet_sections: &[],
+            field_groups: &[],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Test", &def, &[]);
+        assert!(xml.contains("Qualifier=\"Amount\""));
+        assert!(xml.contains("Property=\"Value\" Path=\"TotalAmount\""));
+        assert!(!xml.contains("MaximumValue"));
+        assert!(!xml.contains("VisualizationType"));
+    }
+
+    #[test]
+    fn annotations_xml_facet_sections() {
+        let xml = build_annotations_xml("Product", &simple_annotations(), &simple_fields());
+        assert!(xml.contains("<Annotation Term=\"UI.Facets\">"));
+        assert!(xml.contains("Record Type=\"UI.CollectionFacet\""));
+        assert!(xml.contains("Property=\"Label\" String=\"General\""));
+        assert!(xml.contains("Property=\"ID\" String=\"GeneralSection\""));
+        assert!(xml.contains("AnnotationPath=\"@UI.FieldGroup#Main\""));
+        assert!(xml.contains("Property=\"Label\" String=\"Main Data\""));
+    }
+
+    #[test]
+    fn annotations_xml_table_facets() {
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[],
+            field_groups: &[],
+            table_facets: &[TableFacetDef {
+                label: "Positionen",
+                id: "ItemsFacet",
+                navigation_property: "Items",
+            }],
+        };
+        let xml = build_annotations_xml("Order", &def, &[]);
+        assert!(xml.contains("Record Type=\"UI.ReferenceFacet\""));
+        assert!(xml.contains("Property=\"Label\" String=\"Positionen\""));
+        assert!(xml.contains("Property=\"ID\" String=\"ItemsFacet\""));
+        assert!(xml.contains("AnnotationPath=\"Items/@UI.LineItem\""));
+    }
+
+    #[test]
+    fn annotations_xml_field_groups() {
+        let xml = build_annotations_xml("Product", &simple_annotations(), &simple_fields());
+        assert!(xml.contains("Annotation Term=\"UI.FieldGroup\" Qualifier=\"Main\""));
+        assert!(xml.contains("Record Type=\"UI.FieldGroupType\""));
+        // Fields should have labels from FieldDef
+        assert!(xml.contains("Property=\"Value\" Path=\"ProductID\""));
+        assert!(xml.contains("Property=\"Label\" String=\"Product Nr.\""));
+        assert!(xml.contains("Property=\"Value\" Path=\"ProductName\""));
+        assert!(xml.contains("Property=\"Label\" String=\"Product Name\""));
+        assert!(xml.contains("Property=\"Value\" Path=\"Price\""));
+    }
+
+    #[test]
+    fn annotations_xml_field_group_with_semantic_object() {
+        let fields = vec![FieldDef {
+            name: "CustomerID",
+            label: "Customer",
+            edm_type: "Edm.String",
+            max_length: None,
+            precision: None,
+            scale: None,
+            immutable: false,
+            semantic_object: Some("Customers"),
+        }];
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[],
+            field_groups: &[FieldGroupDef {
+                qualifier: "Main",
+                fields: &["CustomerID"],
+            }],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Contact", &def, &fields);
+        // FieldGroup should use DataFieldWithIntentBasedNavigation
+        assert!(xml.contains("Record Type=\"UI.DataFieldWithIntentBasedNavigation\""));
+        assert!(xml.contains("Property=\"SemanticObject\" String=\"Customers\""));
+        assert!(xml.contains("Property=\"Action\" String=\"display\""));
+    }
+
+    #[test]
+    fn annotations_xml_semantic_object_property_level() {
+        let fields = vec![FieldDef {
+            name: "CustomerID",
+            label: "Customer",
+            edm_type: "Edm.String",
+            max_length: None,
+            precision: None,
+            scale: None,
+            immutable: false,
+            semantic_object: Some("Customers"),
+        }];
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[],
+            field_groups: &[],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Contact", &def, &fields);
+        assert!(xml.contains("Annotations Target=\"ProductsService.Contact/CustomerID\""));
+        assert!(xml.contains("Annotation Term=\"Common.SemanticObject\" String=\"Customers\""));
+    }
+
+    #[test]
+    fn annotations_xml_closes_properly() {
+        let xml = build_annotations_xml("Product", &simple_annotations(), &simple_fields());
+        // The main Annotations block should be closed
+        assert!(xml.starts_with("<Annotations Target="));
+        // Should end with a closing tag
+        assert!(xml.ends_with("</Annotations>"));
+    }
+
+    // ── build_capabilities_annotations ──────────────────────────
+
+    #[test]
+    fn capabilities_draft_root() {
+        let xml = build_capabilities_annotations("Products", "Product", &simple_fields(), true);
+        assert!(xml.contains("Annotations Target=\"ProductsService.EntityContainer/Products\""));
+        assert!(xml.contains("Org.OData.Capabilities.V1.UpdateRestrictions"));
+        assert!(xml.contains("Property=\"Updatable\" Bool=\"true\""));
+        assert!(xml.contains("Annotation Term=\"Common.DraftRoot\""));
+        assert!(xml.contains("Record Type=\"Common.DraftRootType\""));
+        assert!(xml.contains("Property=\"ActivationAction\" String=\"ProductsService.draftActivate\""));
+        assert!(xml.contains("Property=\"EditAction\" String=\"ProductsService.draftEdit\""));
+        assert!(xml.contains("Property=\"PreparationAction\" String=\"ProductsService.draftPrepare\""));
+        assert!(!xml.contains("Common.DraftNode"));
+    }
+
+    #[test]
+    fn capabilities_draft_node() {
+        let xml = build_capabilities_annotations("OrderItems", "OrderItem", &simple_fields(), false);
+        assert!(xml.contains("Annotations Target=\"ProductsService.EntityContainer/OrderItems\""));
+        assert!(xml.contains("Annotation Term=\"Common.DraftNode\""));
+        assert!(xml.contains("Record Type=\"Common.DraftNodeType\""));
+        assert!(xml.contains("Property=\"PreparationAction\" String=\"ProductsService.draftPrepare\""));
+        assert!(!xml.contains("Common.DraftRoot"));
+        assert!(!xml.contains("EditAction"));
+        assert!(!xml.contains("ActivationAction"));
+    }
+
+    #[test]
+    fn capabilities_per_property_labels() {
+        let xml = build_capabilities_annotations("Products", "Product", &simple_fields(), true);
+        assert!(xml.contains("Annotations Target=\"ProductsService.Product/ProductID\""));
+        assert!(xml.contains("Common.Label\" String=\"Product Nr.\""));
+        assert!(xml.contains("Annotations Target=\"ProductsService.Product/ProductName\""));
+        assert!(xml.contains("Common.Label\" String=\"Product Name\""));
+        assert!(xml.contains("Annotations Target=\"ProductsService.Product/Price\""));
+        assert!(xml.contains("Common.Label\" String=\"Price\""));
+    }
+
+    #[test]
+    fn capabilities_immutable_annotation() {
+        let xml = build_capabilities_annotations("Products", "Product", &simple_fields(), true);
+        // ProductID is immutable
+        let product_id_section = &xml[xml.find("Product/ProductID").unwrap()..];
+        let section_end = product_id_section.find("</Annotations>").unwrap();
+        let section = &product_id_section[..section_end];
+        assert!(section.contains("Org.OData.Core.V1.Immutable\" Bool=\"true\""));
+
+        // ProductName is NOT immutable
+        let product_name_section = &xml[xml.find("Product/ProductName").unwrap()..];
+        let section_end = product_name_section.find("</Annotations>").unwrap();
+        let section = &product_name_section[..section_end];
+        assert!(!section.contains("Immutable"));
+    }
+
+    // ── build_entity_type_xml ───────────────────────────────────
+
+    #[test]
+    fn entity_type_xml_basic_structure() {
+        let xml = build_entity_type_xml("Product", "ProductID", &simple_fields());
+        assert!(xml.starts_with("<EntityType Name=\"Product\">"));
+        assert!(xml.ends_with("</EntityType>"));
+        assert!(xml.contains("<Key>"));
+        assert!(xml.contains("<PropertyRef Name=\"ProductID\"/>"));
+        assert!(xml.contains("<PropertyRef Name=\"IsActiveEntity\"/>"));
+    }
+
+    #[test]
+    fn entity_type_xml_properties() {
+        let xml = build_entity_type_xml("Product", "ProductID", &simple_fields());
+        // Key field: Nullable=false
+        assert!(xml.contains("Name=\"ProductID\""));
+        assert!(xml.contains("Type=\"Edm.String\" Nullable=\"false\" MaxLength=\"10\""));
+        // Normal field
+        assert!(xml.contains("Name=\"ProductName\""));
+        assert!(xml.contains("Type=\"Edm.String\" MaxLength=\"80\""));
+        // Decimal field with precision/scale
+        assert!(xml.contains("Name=\"Price\""));
+        assert!(xml.contains("Type=\"Edm.Decimal\" Precision=\"15\" Scale=\"2\""));
+    }
+
+    #[test]
+    fn entity_type_xml_draft_properties() {
+        let xml = build_entity_type_xml("Product", "ProductID", &simple_fields());
+        assert!(xml.contains("Name=\"IsActiveEntity\""));
+        assert!(xml.contains("Name=\"HasActiveEntity\""));
+        assert!(xml.contains("Name=\"HasDraftEntity\""));
+    }
+
+    #[test]
+    fn entity_type_xml_draft_navigation_properties() {
+        let xml = build_entity_type_xml("Product", "ProductID", &simple_fields());
+        assert!(xml.contains("NavigationProperty Name=\"SiblingEntity\" Type=\"ProductsService.Product\""));
+        assert!(xml.contains("NavigationProperty Name=\"DraftAdministrativeData\" Type=\"ProductsService.DraftAdministrativeData\""));
+        assert!(xml.contains("ContainsTarget=\"true\""));
+    }
+
+    #[test]
+    fn entity_type_xml_empty_fields() {
+        let xml = build_entity_type_xml("Empty", "ID", &[]);
+        assert!(xml.contains("<EntityType Name=\"Empty\">"));
+        assert!(xml.contains("<PropertyRef Name=\"ID\"/>"));
+        // Should still have draft properties
+        assert!(xml.contains("IsActiveEntity"));
+        assert!(xml.contains("SiblingEntity"));
+    }
+
+    // ── build_draft_admin_type_xml ──────────────────────────────
+
+    #[test]
+    fn draft_admin_type_xml() {
+        let xml = build_draft_admin_type_xml();
+        assert!(xml.contains("EntityType Name=\"DraftAdministrativeData\""));
+        assert!(xml.contains("PropertyRef Name=\"DraftUUID\""));
+        assert!(xml.contains("Name=\"DraftUUID\""));
+        assert!(xml.contains("Name=\"CreationDateTime\""));
+        assert!(xml.contains("Name=\"CreatedByUser\""));
+        assert!(xml.contains("Name=\"DraftIsCreatedByMe\""));
+        assert!(xml.contains("Name=\"LastChangeDateTime\""));
+        assert!(xml.contains("Name=\"LastChangedByUser\""));
+        assert!(xml.contains("Name=\"InProcessByUser\""));
+        assert!(xml.contains("Name=\"DraftIsProcessedByMe\""));
+    }
+
+    // ── build_draft_actions_xml ─────────────────────────────────
+
+    #[test]
+    fn draft_actions_xml() {
+        let xml = build_draft_actions_xml("Product");
+        assert!(xml.contains("Action Name=\"draftEdit\" IsBound=\"true\""));
+        assert!(xml.contains("Parameter Name=\"in\" Type=\"ProductsService.Product\""));
+        assert!(xml.contains("Parameter Name=\"PreserveChanges\" Type=\"Edm.Boolean\""));
+        assert!(xml.contains("ReturnType Type=\"ProductsService.Product\""));
+
+        assert!(xml.contains("Action Name=\"draftActivate\" IsBound=\"true\""));
+        assert!(xml.contains("Action Name=\"draftPrepare\" IsBound=\"true\""));
+        assert!(xml.contains("Parameter Name=\"SideEffectsQualifier\" Type=\"Edm.String\""));
+    }
+
+    // ── append_navigation_properties ────────────────────────────
+
+    #[test]
+    fn append_nav_props_collection() {
+        let mut xml = "<EntityType Name=\"Order\"></EntityType>".to_string();
+        let navs = vec![NavigationPropertyDef {
+            name: "Items",
+            target_type: "OrderItem",
+            is_collection: true,
+        }];
+        append_navigation_properties(&mut xml, &navs);
+        assert!(xml.contains("NavigationProperty Name=\"Items\" Type=\"Collection(ProductsService.OrderItem)\""));
+    }
+
+    #[test]
+    fn append_nav_props_single() {
+        let mut xml = "<EntityType Name=\"Contact\"></EntityType>".to_string();
+        let navs = vec![NavigationPropertyDef {
+            name: "Customer",
+            target_type: "Customer",
+            is_collection: false,
+        }];
+        append_navigation_properties(&mut xml, &navs);
+        assert!(xml.contains("NavigationProperty Name=\"Customer\" Type=\"ProductsService.Customer\""));
+        assert!(!xml.contains("Collection("));
+    }
+
+    #[test]
+    fn append_nav_props_multiple() {
+        let mut xml = "<EntityType Name=\"Order\"></EntityType>".to_string();
+        let navs = vec![
+            NavigationPropertyDef {
+                name: "Items",
+                target_type: "OrderItem",
+                is_collection: true,
+            },
+            NavigationPropertyDef {
+                name: "Customer",
+                target_type: "Customer",
+                is_collection: false,
+            },
+        ];
+        append_navigation_properties(&mut xml, &navs);
+        assert!(xml.contains("Name=\"Items\""));
+        assert!(xml.contains("Name=\"Customer\""));
+        // Both should be before </EntityType>
+        assert!(xml.ends_with("</EntityType>"));
+    }
+
+    #[test]
+    fn append_nav_props_empty() {
+        let original = "<EntityType Name=\"Simple\"></EntityType>".to_string();
+        let mut xml = original.clone();
+        append_navigation_properties(&mut xml, &[]);
+        assert_eq!(xml, original);
+    }
+}

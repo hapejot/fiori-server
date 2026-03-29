@@ -3,7 +3,7 @@ use std::fmt;
 use std::path::Path;
 
 use log::info;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::annotations::*;
@@ -30,47 +30,47 @@ fn leak_strs(v: &[String]) -> &'static [&'static str] {
 
 // ── JSON Config Schema ──────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct EntityConfig {
     pub set_name: String,
     pub key_field: String,
     pub type_name: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_set_name: Option<String>,
     pub fields: Vec<FieldConfig>,
     #[serde(default)]
     pub navigation_properties: Vec<NavPropertyConfig>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub annotations: Option<AnnotationsConfig>,
     /// Kachel-Konfiguration fuer das FLP.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tile: Option<TileConfig>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct TileConfig {
     pub title: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct FieldConfig {
     pub name: String,
     pub label: String,
     #[serde(default = "default_edm_string")]
     pub edm_type: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_length: Option<u32>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub precision: Option<u32>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scale: Option<u32>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub immutable: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub semantic_object: Option<String>,
 }
 
@@ -78,21 +78,25 @@ fn default_edm_string() -> String {
     "Edm.String".to_string()
 }
 
-#[derive(Deserialize, Clone)]
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+#[derive(Deserialize, Serialize, Clone)]
 pub struct NavPropertyConfig {
     pub name: String,
     pub target_type: String,
     pub target_set: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub is_collection: bool,
     /// Verknuepfungsfeld fuer $expand.
     /// 1:1 → Feld auf dieser Entitaet, das den Key der Ziel-Entitaet enthaelt.
     /// 1:n → Feld auf der Ziel-Entitaet, das den eigenen Key referenziert.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub foreign_key: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct AnnotationsConfig {
     #[serde(default)]
     pub selection_fields: Vec<String>,
@@ -111,22 +115,22 @@ pub struct AnnotationsConfig {
     pub table_facets: Vec<TableFacetConfig>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct LineItemConfig {
     pub name: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub importance: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub criticality_path: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub navigation_path: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub semantic_object: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct HeaderInfoConfig {
     pub type_name: String,
     pub type_name_plural: String,
@@ -134,24 +138,24 @@ pub struct HeaderInfoConfig {
     pub description_path: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct HeaderFacetConfig {
     pub data_point_qualifier: String,
     pub label: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct DataPointConfig {
     pub qualifier: String,
     pub value_path: String,
     pub title: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_value: Option<u32>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visualization: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct FacetSectionConfig {
     pub label: String,
     pub id: String,
@@ -159,13 +163,13 @@ pub struct FacetSectionConfig {
     pub field_group_label: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct FieldGroupConfig {
     pub qualifier: String,
     pub fields: Vec<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct TableFacetConfig {
     pub label: String,
     pub id: String,
@@ -532,4 +536,554 @@ pub fn create_generic_entities(configs: Vec<EntityConfig>) -> Vec<&'static dyn O
 /// Laedt und erzeugt generische Entitaeten in einem Schritt (Bequemlichkeit).
 pub fn load_generic_entities(config_dir: &Path) -> Vec<&'static dyn ODataEntity> {
     create_generic_entities(load_raw_configs(config_dir))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ── Helper: minimal EntityConfig ────────────────────────────
+
+    fn minimal_config() -> EntityConfig {
+        EntityConfig {
+            set_name: "TestItems".to_string(),
+            key_field: "ItemID".to_string(),
+            type_name: "TestItem".to_string(),
+            parent_set_name: None,
+            fields: vec![
+                FieldConfig {
+                    name: "ItemID".to_string(),
+                    label: "Item Nr.".to_string(),
+                    edm_type: "Edm.String".to_string(),
+                    max_length: Some(10),
+                    precision: None,
+                    scale: None,
+                    immutable: true,
+                    semantic_object: None,
+                },
+                FieldConfig {
+                    name: "Name".to_string(),
+                    label: "Name".to_string(),
+                    edm_type: "Edm.String".to_string(),
+                    max_length: Some(80),
+                    precision: None,
+                    scale: None,
+                    immutable: false,
+                    semantic_object: None,
+                },
+            ],
+            navigation_properties: vec![],
+            annotations: None,
+            tile: None,
+        }
+    }
+
+    fn full_config() -> EntityConfig {
+        EntityConfig {
+            set_name: "Orders".to_string(),
+            key_field: "OrderID".to_string(),
+            type_name: "Order".to_string(),
+            parent_set_name: None,
+            fields: vec![
+                FieldConfig {
+                    name: "OrderID".to_string(),
+                    label: "Auftragsnr.".to_string(),
+                    edm_type: "Edm.String".to_string(),
+                    max_length: Some(10),
+                    precision: None,
+                    scale: None,
+                    immutable: true,
+                    semantic_object: None,
+                },
+                FieldConfig {
+                    name: "Status".to_string(),
+                    label: "Status".to_string(),
+                    edm_type: "Edm.String".to_string(),
+                    max_length: Some(1),
+                    precision: None,
+                    scale: None,
+                    immutable: false,
+                    semantic_object: None,
+                },
+                FieldConfig {
+                    name: "Amount".to_string(),
+                    label: "Betrag".to_string(),
+                    edm_type: "Edm.Decimal".to_string(),
+                    max_length: None,
+                    precision: Some(15),
+                    scale: Some(2),
+                    immutable: false,
+                    semantic_object: None,
+                },
+            ],
+            navigation_properties: vec![
+                NavPropertyConfig {
+                    name: "Items".to_string(),
+                    target_type: "OrderItem".to_string(),
+                    target_set: "OrderItems".to_string(),
+                    is_collection: true,
+                    foreign_key: Some("OrderID".to_string()),
+                },
+            ],
+            annotations: Some(AnnotationsConfig {
+                selection_fields: vec!["Status".to_string()],
+                line_item: vec![
+                    LineItemConfig {
+                        name: "OrderID".to_string(),
+                        label: None,
+                        importance: Some("High".to_string()),
+                        criticality_path: None,
+                        navigation_path: None,
+                        semantic_object: None,
+                    },
+                    LineItemConfig {
+                        name: "Status".to_string(),
+                        label: None,
+                        importance: None,
+                        criticality_path: Some("StatusCriticality".to_string()),
+                        navigation_path: None,
+                        semantic_object: None,
+                    },
+                ],
+                header_info: HeaderInfoConfig {
+                    type_name: "Auftrag".to_string(),
+                    type_name_plural: "Auftraege".to_string(),
+                    title_path: "OrderID".to_string(),
+                    description_path: "Status".to_string(),
+                },
+                header_facets: vec![],
+                data_points: vec![],
+                facet_sections: vec![FacetSectionConfig {
+                    label: "Allgemein".to_string(),
+                    id: "General".to_string(),
+                    field_group_qualifier: "Main".to_string(),
+                    field_group_label: "Hauptdaten".to_string(),
+                }],
+                field_groups: vec![FieldGroupConfig {
+                    qualifier: "Main".to_string(),
+                    fields: vec!["OrderID".to_string(), "Status".to_string(), "Amount".to_string()],
+                }],
+                table_facets: vec![TableFacetConfig {
+                    label: "Positionen".to_string(),
+                    id: "ItemsFacet".to_string(),
+                    navigation_property: "Items".to_string(),
+                }],
+            }),
+            tile: Some(TileConfig {
+                title: "Auftraege".to_string(),
+                description: Some("Auftragsübersicht".to_string()),
+                icon: Some("sap-icon://sales-order".to_string()),
+            }),
+        }
+    }
+
+    fn child_config() -> EntityConfig {
+        EntityConfig {
+            set_name: "OrderItems".to_string(),
+            key_field: "ItemID".to_string(),
+            type_name: "OrderItem".to_string(),
+            parent_set_name: Some("Orders".to_string()),
+            fields: vec![
+                FieldConfig {
+                    name: "ItemID".to_string(),
+                    label: "Pos-Nr.".to_string(),
+                    edm_type: "Edm.String".to_string(),
+                    max_length: Some(10),
+                    precision: None,
+                    scale: None,
+                    immutable: true,
+                    semantic_object: None,
+                },
+                FieldConfig {
+                    name: "OrderID".to_string(),
+                    label: "Auftragsnr.".to_string(),
+                    edm_type: "Edm.String".to_string(),
+                    max_length: Some(10),
+                    precision: None,
+                    scale: None,
+                    immutable: true,
+                    semantic_object: Some("Orders".to_string()),
+                },
+            ],
+            navigation_properties: vec![],
+            annotations: Some(AnnotationsConfig {
+                selection_fields: vec![],
+                line_item: vec![
+                    LineItemConfig {
+                        name: "ItemID".to_string(),
+                        label: None,
+                        importance: None,
+                        criticality_path: None,
+                        navigation_path: None,
+                        semantic_object: None,
+                    },
+                ],
+                header_info: HeaderInfoConfig {
+                    type_name: "Position".to_string(),
+                    type_name_plural: "Positionen".to_string(),
+                    title_path: "ItemID".to_string(),
+                    description_path: "OrderID".to_string(),
+                },
+                header_facets: vec![],
+                data_points: vec![],
+                facet_sections: vec![],
+                field_groups: vec![],
+                table_facets: vec![],
+            }),
+            tile: None,
+        }
+    }
+
+    // ── Serde Roundtrip Tests ───────────────────────────────────
+
+    #[test]
+    fn config_serde_roundtrip_minimal() {
+        let config = minimal_config();
+        let json = serde_json::to_string_pretty(&config).unwrap();
+        let parsed: EntityConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.set_name, "TestItems");
+        assert_eq!(parsed.key_field, "ItemID");
+        assert_eq!(parsed.fields.len(), 2);
+        assert!(parsed.annotations.is_none());
+        assert!(parsed.tile.is_none());
+        assert!(parsed.parent_set_name.is_none());
+    }
+
+    #[test]
+    fn config_serde_roundtrip_full() {
+        let config = full_config();
+        let json = serde_json::to_string_pretty(&config).unwrap();
+        let parsed: EntityConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.set_name, "Orders");
+        assert_eq!(parsed.navigation_properties.len(), 1);
+        assert_eq!(parsed.navigation_properties[0].name, "Items");
+        assert!(parsed.navigation_properties[0].is_collection);
+        let ann = parsed.annotations.as_ref().unwrap();
+        assert_eq!(ann.selection_fields, vec!["Status"]);
+        assert_eq!(ann.line_item.len(), 2);
+        assert_eq!(ann.header_info.type_name, "Auftrag");
+        assert_eq!(ann.facet_sections.len(), 1);
+        assert_eq!(ann.field_groups.len(), 1);
+        assert_eq!(ann.table_facets.len(), 1);
+        let tile = parsed.tile.as_ref().unwrap();
+        assert_eq!(tile.title, "Auftraege");
+        assert!(tile.description.is_some());
+        assert!(tile.icon.is_some());
+    }
+
+    #[test]
+    fn config_serde_skip_serializing_defaults() {
+        let config = minimal_config();
+        let val: Value = serde_json::to_value(&config).unwrap();
+        // Optional None fields should not appear
+        assert!(val.get("parent_set_name").is_none());
+        assert!(val.get("annotations").is_none());
+        assert!(val.get("tile").is_none());
+        // immutable=false should not appear on field
+        let field0 = &val["fields"][0];
+        assert!(field0.get("immutable").is_none() ||
+            field0.get("immutable") == Some(&json!(true))); // only appears when true
+    }
+
+    #[test]
+    fn config_serde_child_with_parent() {
+        let config = child_config();
+        let json = serde_json::to_string_pretty(&config).unwrap();
+        let parsed: EntityConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.parent_set_name.as_deref(), Some("Orders"));
+        assert_eq!(parsed.fields[1].semantic_object.as_deref(), Some("Orders"));
+    }
+
+    #[test]
+    fn config_serde_immutable_roundtrip() {
+        let config = minimal_config();
+        let val: Value = serde_json::to_value(&config).unwrap();
+        // First field: immutable=true → must be present
+        assert_eq!(val["fields"][0]["immutable"], json!(true));
+        // Second field: immutable=false → must NOT be present
+        assert!(val["fields"][1].get("immutable").is_none());
+    }
+
+    #[test]
+    fn config_serde_decimal_field_roundtrip() {
+        let config = full_config();
+        let val: Value = serde_json::to_value(&config).unwrap();
+        let amount_field = &val["fields"][2];
+        assert_eq!(amount_field["edm_type"], "Edm.Decimal");
+        assert_eq!(amount_field["precision"], 15);
+        assert_eq!(amount_field["scale"], 2);
+        assert!(amount_field.get("max_length").is_none());
+    }
+
+    #[test]
+    fn config_deserialize_from_existing_json() {
+        // Parse a real config file from the workspace
+        let content = std::fs::read_to_string("config/entities/Customers.json")
+            .expect("Customers.json should exist");
+        let config: EntityConfig = serde_json::from_str(&content).unwrap();
+        assert_eq!(config.set_name, "Customers");
+        assert_eq!(config.key_field, "CustomerID");
+        assert!(!config.fields.is_empty());
+        assert!(config.annotations.is_some());
+        let ann = config.annotations.as_ref().unwrap();
+        assert!(!ann.line_item.is_empty());
+        assert!(!ann.facet_sections.is_empty());
+    }
+
+    #[test]
+    fn config_deserialize_serialize_preserves_real_file() {
+        // Roundtrip: parse real file → serialize → parse again → compare key fields
+        let content = std::fs::read_to_string("config/entities/Contacts.json")
+            .expect("Contacts.json should exist");
+        let config: EntityConfig = serde_json::from_str(&content).unwrap();
+        let serialized = serde_json::to_string_pretty(&config).unwrap();
+        let reparsed: EntityConfig = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(config.set_name, reparsed.set_name);
+        assert_eq!(config.key_field, reparsed.key_field);
+        assert_eq!(config.fields.len(), reparsed.fields.len());
+        assert_eq!(
+            config.navigation_properties.len(),
+            reparsed.navigation_properties.len()
+        );
+        let ann1 = config.annotations.as_ref().unwrap();
+        let ann2 = reparsed.annotations.as_ref().unwrap();
+        assert_eq!(ann1.line_item.len(), ann2.line_item.len());
+        assert_eq!(ann1.facet_sections.len(), ann2.facet_sections.len());
+        assert_eq!(ann1.field_groups.len(), ann2.field_groups.len());
+    }
+
+    // ── GenericEntity / ODataEntity Tests ───────────────────────
+
+    #[test]
+    fn generic_entity_basic_properties() {
+        let entity = GenericEntity::from_config(minimal_config());
+        assert_eq!(entity.set_name(), "TestItems");
+        assert_eq!(entity.key_field(), "ItemID");
+        assert_eq!(entity.type_name(), "TestItem");
+        assert!(entity.parent_set_name().is_none());
+        assert_eq!(entity.mock_data().len(), 0);
+    }
+
+    #[test]
+    fn generic_entity_fields_def() {
+        let entity = GenericEntity::from_config(minimal_config());
+        let fields = entity.fields_def().unwrap();
+        assert_eq!(fields.len(), 2);
+        assert_eq!(fields[0].name, "ItemID");
+        assert_eq!(fields[0].label, "Item Nr.");
+        assert!(fields[0].immutable);
+        assert_eq!(fields[0].max_length, Some(10));
+        assert_eq!(fields[1].name, "Name");
+        assert!(!fields[1].immutable);
+    }
+
+    #[test]
+    fn generic_entity_annotations() {
+        let entity = GenericEntity::from_config(full_config());
+        let ann = entity.annotations_def().unwrap();
+        assert_eq!(ann.selection_fields, &["Status"]);
+        assert_eq!(ann.line_item.len(), 2);
+        assert_eq!(ann.line_item[0].name, "OrderID");
+        assert_eq!(ann.line_item[0].importance, Some("High"));
+        assert_eq!(ann.header_info.type_name, "Auftrag");
+        assert_eq!(ann.header_info.type_name_plural, "Auftraege");
+        assert_eq!(ann.facet_sections.len(), 1);
+        assert_eq!(ann.facet_sections[0].id, "General");
+        assert_eq!(ann.table_facets.len(), 1);
+        assert_eq!(ann.table_facets[0].navigation_property, "Items");
+    }
+
+    #[test]
+    fn generic_entity_navigation_properties() {
+        let entity = GenericEntity::from_config(full_config());
+        let navs = entity.navigation_properties();
+        assert_eq!(navs.len(), 1);
+        assert_eq!(navs[0].name, "Items");
+        assert_eq!(navs[0].target_type, "OrderItem");
+        assert!(navs[0].is_collection);
+    }
+
+    #[test]
+    fn generic_entity_parent_set_name() {
+        let entity = GenericEntity::from_config(child_config());
+        assert_eq!(entity.parent_set_name(), Some("Orders"));
+    }
+
+    #[test]
+    fn generic_entity_entity_set_xml() {
+        let entity = GenericEntity::from_config(full_config());
+        let xml = entity.entity_set();
+        assert!(xml.contains("EntitySet Name=\"Orders\""));
+        assert!(xml.contains("EntityType=\"ProductsService.Order\""));
+        assert!(xml.contains("Path=\"Items\" Target=\"OrderItems\""));
+        assert!(xml.contains("SiblingEntity"));
+        assert!(xml.contains("DraftAdministrativeData"));
+    }
+
+    #[test]
+    fn generic_entity_entity_set_xml_no_nav() {
+        let entity = GenericEntity::from_config(minimal_config());
+        let xml = entity.entity_set();
+        assert!(xml.contains("EntitySet Name=\"TestItems\""));
+        // Only SiblingEntity + DraftAdministrativeData bindings
+        assert!(xml.contains("SiblingEntity"));
+        assert!(xml.contains("DraftAdministrativeData"));
+    }
+
+    #[test]
+    fn generic_entity_apps_json_with_tile() {
+        let entity = GenericEntity::from_config(full_config());
+        let (key, entry) = entity.apps_json_entry().unwrap();
+        assert_eq!(key, "Orders-display");
+        assert_eq!(entry["title"], "Auftraege");
+        assert_eq!(entry["semanticObject"], "Orders");
+        assert_eq!(entry["action"], "display");
+        assert_eq!(entry["description"], "Auftragsübersicht");
+        assert_eq!(entry["icon"], "sap-icon://sales-order");
+    }
+
+    #[test]
+    fn generic_entity_apps_json_without_tile() {
+        let entity = GenericEntity::from_config(minimal_config());
+        assert!(entity.apps_json_entry().is_none());
+    }
+
+    #[test]
+    fn generic_entity_expand_1n() {
+        let order_entity = GenericEntity::from_config(full_config());
+        let child_entity = GenericEntity::from_config(child_config());
+        let entities: Vec<&dyn ODataEntity> =
+            vec![&order_entity as &dyn ODataEntity, &child_entity as &dyn ODataEntity];
+
+        let mut store: HashMap<String, Vec<Value>> = HashMap::new();
+        store.insert("OrderItems".to_string(), vec![
+            json!({"ItemID": "I001", "OrderID": "O001"}),
+            json!({"ItemID": "I002", "OrderID": "O001"}),
+            json!({"ItemID": "I003", "OrderID": "O002"}),
+        ]);
+
+        let mut record = json!({"OrderID": "O001", "Status": "A"});
+        order_entity.expand_record(&mut record, &["Items"], &entities, &store);
+
+        let items = record["Items"].as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["ItemID"], "I001");
+        assert_eq!(items[1]["ItemID"], "I002");
+    }
+
+    #[test]
+    fn generic_entity_expand_1_1() {
+        let contact_config = EntityConfig {
+            set_name: "Contacts".to_string(),
+            key_field: "ContactID".to_string(),
+            type_name: "Contact".to_string(),
+            parent_set_name: None,
+            fields: vec![
+                FieldConfig {
+                    name: "ContactID".to_string(),
+                    label: "ID".to_string(),
+                    edm_type: "Edm.String".to_string(),
+                    max_length: None, precision: None, scale: None,
+                    immutable: true, semantic_object: None,
+                },
+                FieldConfig {
+                    name: "CustomerID".to_string(),
+                    label: "Kunde".to_string(),
+                    edm_type: "Edm.String".to_string(),
+                    max_length: None, precision: None, scale: None,
+                    immutable: false, semantic_object: None,
+                },
+            ],
+            navigation_properties: vec![NavPropertyConfig {
+                name: "Customer".to_string(),
+                target_type: "Customer".to_string(),
+                target_set: "Customers".to_string(),
+                is_collection: false,
+                foreign_key: Some("CustomerID".to_string()),
+            }],
+            annotations: None,
+            tile: None,
+        };
+        let customer_config = EntityConfig {
+            set_name: "Customers".to_string(),
+            key_field: "CustomerID".to_string(),
+            type_name: "Customer".to_string(),
+            parent_set_name: None,
+            fields: vec![FieldConfig {
+                name: "CustomerID".to_string(),
+                label: "ID".to_string(),
+                edm_type: "Edm.String".to_string(),
+                max_length: None, precision: None, scale: None,
+                immutable: true, semantic_object: None,
+            }],
+            navigation_properties: vec![],
+            annotations: None,
+            tile: None,
+        };
+
+        let contact_entity = GenericEntity::from_config(contact_config);
+        let customer_entity = GenericEntity::from_config(customer_config);
+        let entities: Vec<&dyn ODataEntity> =
+            vec![&contact_entity as &dyn ODataEntity, &customer_entity as &dyn ODataEntity];
+
+        let mut store: HashMap<String, Vec<Value>> = HashMap::new();
+        store.insert("Customers".to_string(), vec![
+            json!({"CustomerID": "C001", "Name": "Acme"}),
+            json!({"CustomerID": "C002", "Name": "Global"}),
+        ]);
+
+        let mut record = json!({"ContactID": "K001", "CustomerID": "C002"});
+        contact_entity.expand_record(&mut record, &["Customer"], &entities, &store);
+
+        assert_eq!(record["Customer"]["CustomerID"], "C002");
+        assert_eq!(record["Customer"]["Name"], "Global");
+    }
+
+    #[test]
+    fn generic_entity_expand_unknown_nav_ignored() {
+        let entity = GenericEntity::from_config(full_config());
+        let entities: Vec<&dyn ODataEntity> = vec![&entity as &dyn ODataEntity];
+        let store: HashMap<String, Vec<Value>> = HashMap::new();
+
+        let mut record = json!({"OrderID": "O001"});
+        entity.expand_record(&mut record, &["NonExistent"], &entities, &store);
+        // Record unchanged — no panic
+        assert!(record.get("NonExistent").is_none());
+    }
+
+    #[test]
+    fn generic_entity_debug_impl() {
+        let entity = GenericEntity::from_config(minimal_config());
+        let dbg = format!("{:?}", entity);
+        assert!(dbg.contains("TestItems"));
+        assert!(dbg.contains("TestItem"));
+    }
+
+    // ── load_raw_configs Tests ──────────────────────────────────
+
+    #[test]
+    fn load_raw_configs_from_workspace() {
+        let config_dir = Path::new("config/entities");
+        let configs = load_raw_configs(config_dir);
+        assert!(configs.len() >= 2, "expected at least 2 configs, got {}", configs.len());
+        let names: Vec<&str> = configs.iter().map(|c| c.set_name.as_str()).collect();
+        assert!(names.contains(&"Customers"));
+        assert!(names.contains(&"Contacts"));
+    }
+
+    #[test]
+    fn load_raw_configs_nonexistent_dir() {
+        let configs = load_raw_configs(Path::new("/tmp/nonexistent_dir_12345"));
+        assert!(configs.is_empty());
+    }
+
+    #[test]
+    fn create_generic_entities_preserves_count() {
+        let configs = vec![minimal_config(), full_config()];
+        let entities = create_generic_entities(configs);
+        assert_eq!(entities.len(), 2);
+        assert_eq!(entities[0].set_name(), "TestItems");
+        assert_eq!(entities[1].set_name(), "Orders");
+    }
 }
