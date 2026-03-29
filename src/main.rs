@@ -13,6 +13,13 @@ use axum::{
     routing::{get, post},
     Router,
 };
+
+// ── Eincompilierte statische Webapp-Dateien ─────────────────────────────
+pub const EMBEDDED_FLP_INIT_JS: &str = include_str!("../webapp/flp-init.js");
+pub const EMBEDDED_SETTINGS_JSON: &str = include_str!("../webapp/config/settings.json");
+pub const EMBEDDED_APPS_JSON: &str = include_str!("../webapp/config/apps.json");
+pub const EMBEDDED_I18N_PROPERTIES: &str = include_str!("../webapp/i18n/i18n.properties");
+pub const EMBEDDED_SANDBOX_CONFIG: &str = include_str!("../webapp/appconfig/fioriSandboxConfig.json");
 use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;

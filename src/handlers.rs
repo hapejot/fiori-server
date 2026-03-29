@@ -690,6 +690,32 @@ fn handle_sub_collection(
     ))
 }
 
+// ── Eincompilierte statische Dateien ────────────────────────────────
+fn serve_embedded_file(relative: &str) -> Option<Response> {
+    let (content, content_type) = match relative {
+        "flp-init.js" => (
+            crate::EMBEDDED_FLP_INIT_JS,
+            "application/javascript;charset=utf-8",
+        ),
+        "i18n/i18n.properties" => (
+            crate::EMBEDDED_I18N_PROPERTIES,
+            "text/plain;charset=utf-8",
+        ),
+        "appconfig/fioriSandboxConfig.json" => (
+            crate::EMBEDDED_SANDBOX_CONFIG,
+            "application/json;charset=utf-8",
+        ),
+        _ => return None,
+    };
+    let mut builder = Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", content_type);
+    for (k, v) in cors_headers() {
+        builder = builder.header(k, v);
+    }
+    Some(builder.body(Body::from(content)).unwrap())
+}
+
 // ── Static file serving ─────────────────────────────────────────────
 fn handle_static_files(path: &str, state: &AppState) -> Response {
     let raw_path = urlencoding::decode(path)
@@ -791,9 +817,24 @@ fn handle_static_files(path: &str, state: &AppState) -> Response {
         return builder.body(Body::from(state.flp_html.clone())).unwrap();
     }
 
+    // ── Eincompilierte Dateien (kein Dateisystem noetig) ────────────
+    if let Some(resp) = serve_embedded_file(&relative) {
+        return resp;
+    }
+
     let wa_dir = crate::webapp_dir();
     if !wa_dir.exists() {
-        return error_response(404, "webapp directory not found");
+        // Kein webapp-Verzeichnis: SPA-Fallback fuer extensionlose Routen
+        if Path::new(&relative).extension().is_none() && !raw_path.starts_with("/sap/") {
+            let mut builder = Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "text/html;charset=utf-8");
+            for (k, v) in cors_headers() {
+                builder = builder.header(k, v);
+            }
+            return builder.body(Body::from(state.flp_html.clone())).unwrap();
+        }
+        return error_response(404, &format!("Resource not found: {}", raw_path));
     }
 
     let candidate = wa_dir.join(&relative);

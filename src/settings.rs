@@ -52,22 +52,32 @@ struct ComponentBlock {
 
 impl Settings {
     /// Liest settings.json vom angegebenen Pfad.
-    /// Bei Fehler (Datei fehlt, Parse-Fehler) werden Defaults verwendet.
+    /// Fallback: eincompilierte Version, dann Defaults.
     pub fn load(path: &Path) -> Self {
+        // 1. Dateisystem
         let raw: Option<RawSettings> = std::fs::read_to_string(path)
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok());
 
-        match raw {
-            Some(r) => Self::from_raw(r),
-            None => {
-                println!(
-                    "  [settings] {} nicht gefunden oder ungueltig – verwende Defaults",
-                    path.display()
-                );
-                Self::defaults()
-            }
+        if let Some(r) = raw {
+            return Self::from_raw(r);
         }
+
+        // 2. Eincompilierte Version
+        if let Ok(r) = serde_json::from_str::<RawSettings>(crate::EMBEDDED_SETTINGS_JSON) {
+            println!(
+                "  [settings] {} nicht gefunden -- verwende eincompilierte Version",
+                path.display()
+            );
+            return Self::from_raw(r);
+        }
+
+        // 3. Defaults
+        println!(
+            "  [settings] {} nicht gefunden oder ungueltig -- verwende Defaults",
+            path.display()
+        );
+        Self::defaults()
     }
 
     fn defaults() -> Self {

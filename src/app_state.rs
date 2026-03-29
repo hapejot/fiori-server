@@ -133,20 +133,21 @@ impl AppStateBuilder {
 
         let flp_html = builders::build_flp_html(&settings);
 
-        // apps.json zusammenbauen: statische Datei + generische Entitaeten
+        // apps.json zusammenbauen: statische Datei (oder eincompiliert) + generische Entitaeten
         let apps_json = {
             let webapp_dir = std::env::current_dir().unwrap_or_default().join("webapp");
             let static_path = webapp_dir.join("config/apps.json");
-            let mut apps: serde_json::Map<String, Value> = if static_path.is_file() {
-                std::fs::read_to_string(&static_path)
-                    .ok()
-                    .and_then(|c| serde_json::from_str::<Value>(&c).ok())
-                    .and_then(|v| v.get("applications").cloned())
-                    .and_then(|v| v.as_object().cloned())
-                    .unwrap_or_default()
+            let base_json = if static_path.is_file() {
+                std::fs::read_to_string(&static_path).ok()
             } else {
-                serde_json::Map::new()
+                info!("  [apps.json] Datei nicht gefunden -- verwende eincompilierte Version");
+                Some(crate::EMBEDDED_APPS_JSON.to_string())
             };
+            let mut apps: serde_json::Map<String, Value> = base_json
+                .and_then(|c| serde_json::from_str::<Value>(&c).ok())
+                .and_then(|v| v.get("applications").cloned())
+                .and_then(|v| v.as_object().cloned())
+                .unwrap_or_default();
             // Generische Entitaeten einfuegen
             for entity in &entities {
                 if let Some((key, val)) = entity.apps_json_entry() {
