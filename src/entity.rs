@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 use serde_json::{json, Value};
+use tracing::info;
 
 use crate::annotations::*;
 use crate::BASE_PATH;
@@ -66,8 +67,14 @@ pub trait ODataEntity: Sync + Debug {
     /// EDMX Annotations-XML – wird automatisch aus annotations_def() erzeugt.
     fn annotations(&self) -> String {
         let mut xml = match (self.annotations_def(), self.fields_def()) {
-            (Some(def), Some(fields)) => build_annotations_xml(self.type_name(), def, fields),
-            (Some(def), None) => build_annotations_xml(self.type_name(), def, &[]),
+            (Some(def), Some(fields)) => {
+                info!("building annotations for {} with {} fields", self.set_name(), fields.len());
+                build_annotations_xml(self.type_name(), def, fields)
+            }
+            (Some(def), None) => {
+                info!("building annotations for {} without fields", self.set_name());
+                build_annotations_xml(self.type_name(), def, &[])
+            }
             _ => String::new(),
         };
         // UpdateRestrictions + Immutable-Annotations

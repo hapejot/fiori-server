@@ -62,13 +62,13 @@ impl ODataEntity for EntityFieldEntity {
         static DEF: AnnotationsDef = AnnotationsDef {
             selection_fields: &[],
             line_item: &[
-                LineItemField { name: "SortOrder",     label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "FieldName",     label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "Label",         label: None, importance: None,         criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "EdmType",       label: None, importance: None,         criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "MaxLength",     label: None, importance: None,         criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "IsImmutable",   label: None, importance: None,         criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "ShowInLineItem", label: None, importance: None,        criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "SortOrder",      label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "FieldName",      label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "Label",          label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "ShowInLineItem", label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "EdmType",        label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "MaxLength",      label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "IsImmutable",    label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
             ],
             header_info: HeaderInfoDef {
                 type_name: "Felddefinition",

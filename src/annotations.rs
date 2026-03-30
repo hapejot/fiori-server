@@ -1178,4 +1178,542 @@ mod tests {
         append_navigation_properties(&mut xml, &[]);
         assert_eq!(xml, original);
     }
+
+    // ── build_annotations_xml: additional coverage ──────────────
+
+    #[test]
+    fn annotations_xml_multiple_selection_fields() {
+        let def = AnnotationsDef {
+            selection_fields: &["ProductName", "Price", "Category"],
+            line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[],
+            field_groups: &[],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Test", &def, &[]);
+        assert!(xml.contains("<PropertyPath>ProductName</PropertyPath>"));
+        assert!(xml.contains("<PropertyPath>Price</PropertyPath>"));
+        assert!(xml.contains("<PropertyPath>Category</PropertyPath>"));
+    }
+
+    #[test]
+    fn annotations_xml_empty_selection_fields() {
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[],
+            field_groups: &[],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Test", &def, &[]);
+        assert!(xml.contains("<Annotation Term=\"UI.SelectionFields\">"));
+        assert!(xml.contains("<Collection></Collection>"));
+    }
+
+    #[test]
+    fn annotations_xml_semantic_object_takes_precedence_over_navigation_path() {
+        // When both semantic_object and navigation_path are set, semantic_object wins
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[LineItemField {
+                name: "CustomerID",
+                label: Some("Customer"),
+                importance: None,
+                criticality_path: None,
+                navigation_path: Some("Customer"),
+                semantic_object: Some("Customers"),
+            }],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[],
+            field_groups: &[],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Test", &def, &[]);
+        assert!(xml.contains("Record Type=\"UI.DataFieldWithIntentBasedNavigation\""));
+        assert!(!xml.contains("Record Type=\"UI.DataFieldWithNavigationPath\""));
+    }
+
+    #[test]
+    fn annotations_xml_multiple_data_points() {
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[
+                DataPointDef {
+                    qualifier: "Rating",
+                    value_path: "RatingValue",
+                    title: "Bewertung",
+                    max_value: Some(5),
+                    visualization: Some("Rating"),
+                },
+                DataPointDef {
+                    qualifier: "Progress",
+                    value_path: "Completion",
+                    title: "Fortschritt",
+                    max_value: Some(100),
+                    visualization: Some("Progress"),
+                },
+            ],
+            facet_sections: &[],
+            field_groups: &[],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Test", &def, &[]);
+        assert!(xml.contains("Qualifier=\"Rating\""));
+        assert!(xml.contains("Qualifier=\"Progress\""));
+        assert!(xml.contains("Property=\"Value\" Path=\"RatingValue\""));
+        assert!(xml.contains("Property=\"Value\" Path=\"Completion\""));
+        assert!(xml.contains("Property=\"MaximumValue\" Int=\"5\""));
+        assert!(xml.contains("Property=\"MaximumValue\" Int=\"100\""));
+        assert!(xml.contains("VisualizationType/Rating"));
+        assert!(xml.contains("VisualizationType/Progress"));
+    }
+
+    #[test]
+    fn annotations_xml_multiple_field_groups() {
+        let fields = vec![
+            FieldDef {
+                name: "Name", label: "Name", edm_type: "Edm.String",
+                max_length: None, precision: None, scale: None,
+                immutable: false, semantic_object: None,
+            },
+            FieldDef {
+                name: "Price", label: "Price", edm_type: "Edm.Decimal",
+                max_length: None, precision: None, scale: None,
+                immutable: false, semantic_object: None,
+            },
+        ];
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[],
+            field_groups: &[
+                FieldGroupDef { qualifier: "General", fields: &["Name"] },
+                FieldGroupDef { qualifier: "Pricing", fields: &["Price"] },
+            ],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Test", &def, &fields);
+        assert!(xml.contains("Qualifier=\"General\""));
+        assert!(xml.contains("Qualifier=\"Pricing\""));
+    }
+
+    #[test]
+    fn annotations_xml_multiple_facet_sections() {
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[
+                FacetSectionDef {
+                    label: "General", id: "GeneralSection",
+                    field_group_qualifier: "Main", field_group_label: "Main Data",
+                },
+                FacetSectionDef {
+                    label: "Details", id: "DetailsSection",
+                    field_group_qualifier: "Detail", field_group_label: "Detail Data",
+                },
+            ],
+            field_groups: &[],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Test", &def, &[]);
+        assert!(xml.contains("Property=\"ID\" String=\"GeneralSection\""));
+        assert!(xml.contains("Property=\"ID\" String=\"DetailsSection\""));
+        assert!(xml.contains("AnnotationPath=\"@UI.FieldGroup#Main\""));
+        assert!(xml.contains("AnnotationPath=\"@UI.FieldGroup#Detail\""));
+    }
+
+    #[test]
+    fn annotations_xml_mixed_facets_and_table_facets() {
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[FacetSectionDef {
+                label: "General", id: "GeneralSection",
+                field_group_qualifier: "Main", field_group_label: "Main",
+            }],
+            field_groups: &[],
+            table_facets: &[TableFacetDef {
+                label: "Items", id: "ItemsFacet",
+                navigation_property: "Items",
+            }],
+        };
+        let xml = build_annotations_xml("Order", &def, &[]);
+        // Both should be inside the UI.Facets collection
+        assert!(xml.contains("Record Type=\"UI.CollectionFacet\""));
+        assert!(xml.contains("AnnotationPath=\"Items/@UI.LineItem\""));
+    }
+
+    #[test]
+    fn annotations_xml_multiple_header_facets() {
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[
+                HeaderFacetDef { data_point_qualifier: "Rating", label: "Bewertung" },
+                HeaderFacetDef { data_point_qualifier: "Price", label: "Preis" },
+            ],
+            data_points: &[],
+            facet_sections: &[],
+            field_groups: &[],
+            table_facets: &[],
+        };
+        let xml = build_annotations_xml("Test", &def, &[]);
+        assert!(xml.contains("AnnotationPath=\"@UI.DataPoint#Rating\""));
+        assert!(xml.contains("AnnotationPath=\"@UI.DataPoint#Price\""));
+        assert!(xml.contains("Property=\"Label\" String=\"Bewertung\""));
+        assert!(xml.contains("Property=\"Label\" String=\"Preis\""));
+    }
+
+    #[test]
+    fn annotations_xml_field_group_unknown_field_uses_name_as_label() {
+        let def = AnnotationsDef {
+            selection_fields: &[],
+            line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[],
+            data_points: &[],
+            facet_sections: &[],
+            field_groups: &[FieldGroupDef {
+                qualifier: "Main",
+                fields: &["UnknownField"],
+            }],
+            table_facets: &[],
+        };
+        // Empty fields slice → field name used as fallback label
+        let xml = build_annotations_xml("Test", &def, &[]);
+        assert!(xml.contains("Property=\"Value\" Path=\"UnknownField\""));
+        assert!(xml.contains("Property=\"Label\" String=\"UnknownField\""));
+    }
+
+    #[test]
+    fn annotations_xml_no_semantic_object_property_annotations() {
+        // Fields without semantic_object should not produce property-level annotations
+        let xml = build_annotations_xml("Product", &simple_annotations(), &simple_fields());
+        assert!(!xml.contains("Common.SemanticObject"));
+    }
+
+    #[test]
+    fn annotations_xml_multiple_semantic_object_property_annotations() {
+        let fields = vec![
+            FieldDef {
+                name: "CustomerID", label: "Customer", edm_type: "Edm.String",
+                max_length: None, precision: None, scale: None,
+                immutable: false, semantic_object: Some("Customers"),
+            },
+            FieldDef {
+                name: "ProductID", label: "Product", edm_type: "Edm.String",
+                max_length: None, precision: None, scale: None,
+                immutable: false, semantic_object: Some("Products"),
+            },
+        ];
+        let def = AnnotationsDef {
+            selection_fields: &[], line_item: &[],
+            header_info: HeaderInfoDef {
+                type_name: "T", type_name_plural: "Ts",
+                title_path: "X", description_path: "Y",
+            },
+            header_facets: &[], data_points: &[],
+            facet_sections: &[], field_groups: &[], table_facets: &[],
+        };
+        let xml = build_annotations_xml("Order", &def, &fields);
+        assert!(xml.contains("Target=\"ProductsService.Order/CustomerID\""));
+        assert!(xml.contains("Common.SemanticObject\" String=\"Customers\""));
+        assert!(xml.contains("Target=\"ProductsService.Order/ProductID\""));
+        assert!(xml.contains("Common.SemanticObject\" String=\"Products\""));
+    }
+
+    // ── build_capabilities_annotations: additional coverage ─────
+
+    #[test]
+    fn capabilities_no_immutable_fields() {
+        let fields = vec![
+            FieldDef {
+                name: "Name", label: "Name", edm_type: "Edm.String",
+                max_length: None, precision: None, scale: None,
+                immutable: false, semantic_object: None,
+            },
+        ];
+        let xml = build_capabilities_annotations("Tests", "Test", &fields, true);
+        assert!(!xml.contains("Immutable"));
+        assert!(xml.contains("Common.Label\" String=\"Name\""));
+    }
+
+    #[test]
+    fn capabilities_empty_fields() {
+        let xml = build_capabilities_annotations("Tests", "Test", &[], true);
+        // Should still have EntitySet-level annotations
+        assert!(xml.contains("Target=\"ProductsService.EntityContainer/Tests\""));
+        assert!(xml.contains("Common.DraftRoot"));
+        // No property-level annotations
+        assert!(!xml.contains("Common.Label"));
+    }
+
+    #[test]
+    fn capabilities_multiple_immutable_fields() {
+        let fields = vec![
+            FieldDef {
+                name: "ID", label: "ID", edm_type: "Edm.String",
+                max_length: None, precision: None, scale: None,
+                immutable: true, semantic_object: None,
+            },
+            FieldDef {
+                name: "Code", label: "Code", edm_type: "Edm.String",
+                max_length: None, precision: None, scale: None,
+                immutable: true, semantic_object: None,
+            },
+            FieldDef {
+                name: "Name", label: "Name", edm_type: "Edm.String",
+                max_length: None, precision: None, scale: None,
+                immutable: false, semantic_object: None,
+            },
+        ];
+        let xml = build_capabilities_annotations("Tests", "Test", &fields, true);
+        // Count occurrences of Immutable
+        let count = xml.matches("Org.OData.Core.V1.Immutable").count();
+        assert_eq!(count, 2, "Expected exactly 2 immutable annotations");
+    }
+
+    // ── build_entity_type_xml: additional coverage ──────────────
+
+    #[test]
+    fn entity_type_xml_field_without_optional_attributes() {
+        let fields = vec![FieldDef {
+            name: "Description",
+            label: "Description",
+            edm_type: "Edm.String",
+            max_length: None,
+            precision: None,
+            scale: None,
+            immutable: false,
+            semantic_object: None,
+        }];
+        let xml = build_entity_type_xml("Simple", "ID", &fields);
+        assert!(xml.contains("Name=\"Description\""));
+        assert!(xml.contains("Type=\"Edm.String\""));
+        // Should NOT have MaxLength, Precision, or Scale
+        let desc_section = &xml[xml.find("Name=\"Description\"").unwrap()..];
+        let end = desc_section.find("/>").unwrap();
+        let prop = &desc_section[..end];
+        assert!(!prop.contains("MaxLength"));
+        assert!(!prop.contains("Precision"));
+        assert!(!prop.contains("Scale"));
+    }
+
+    #[test]
+    fn entity_type_xml_key_field_not_nullable() {
+        let fields = vec![
+            FieldDef {
+                name: "OrderID", label: "Order", edm_type: "Edm.Int32",
+                max_length: None, precision: None, scale: None,
+                immutable: true, semantic_object: None,
+            },
+            FieldDef {
+                name: "Description", label: "Desc", edm_type: "Edm.String",
+                max_length: None, precision: None, scale: None,
+                immutable: false, semantic_object: None,
+            },
+        ];
+        let xml = build_entity_type_xml("Order", "OrderID", &fields);
+        // Key field (same name in both fields and key_field param) => Nullable="false"
+        assert!(xml.contains("Name=\"OrderID\""));
+        assert!(xml.contains("Nullable=\"false\""));
+        // Non-key field should NOT have Nullable="false"
+        let desc_section = &xml[xml.find("Name=\"Description\"").unwrap()..];
+        let end = desc_section.find("/>").unwrap();
+        let prop = &desc_section[..end];
+        assert!(!prop.contains("Nullable"));
+    }
+
+    #[test]
+    fn entity_type_xml_non_key_field_is_nullable() {
+        let fields = vec![FieldDef {
+            name: "Description",
+            label: "Desc",
+            edm_type: "Edm.String",
+            max_length: None,
+            precision: None,
+            scale: None,
+            immutable: false,
+            semantic_object: None,
+        }];
+        let xml = build_entity_type_xml("Test", "ID", &fields);
+        let desc_section = &xml[xml.find("Name=\"Description\"").unwrap()..];
+        let end = desc_section.find("/>").unwrap();
+        let prop = &desc_section[..end];
+        assert!(!prop.contains("Nullable"));
+    }
+
+    // ── build_draft_actions_xml: additional coverage ─────────────
+
+    #[test]
+    fn draft_actions_xml_uses_correct_namespace() {
+        let xml = build_draft_actions_xml("Order");
+        assert!(xml.contains("Type=\"ProductsService.Order\""));
+        assert!(!xml.contains("Type=\"ProductsService.Product\""));
+    }
+
+    #[test]
+    fn draft_actions_xml_all_three_actions_present() {
+        let xml = build_draft_actions_xml("Test");
+        let edit_count = xml.matches("Name=\"draftEdit\"").count();
+        let activate_count = xml.matches("Name=\"draftActivate\"").count();
+        let prepare_count = xml.matches("Name=\"draftPrepare\"").count();
+        assert_eq!(edit_count, 1);
+        assert_eq!(activate_count, 1);
+        assert_eq!(prepare_count, 1);
+    }
+
+    // ── Comprehensive integration-style test ────────────────────
+
+    #[test]
+    fn annotations_xml_full_definition() {
+        let fields = vec![
+            FieldDef {
+                name: "OrderID", label: "Order Nr.", edm_type: "Edm.String",
+                max_length: Some(10), precision: None, scale: None,
+                immutable: true, semantic_object: None,
+            },
+            FieldDef {
+                name: "CustomerID", label: "Customer", edm_type: "Edm.String",
+                max_length: Some(10), precision: None, scale: None,
+                immutable: false, semantic_object: Some("Customers"),
+            },
+            FieldDef {
+                name: "TotalAmount", label: "Total", edm_type: "Edm.Decimal",
+                max_length: None, precision: Some(15), scale: Some(2),
+                immutable: false, semantic_object: None,
+            },
+            FieldDef {
+                name: "Status", label: "Status", edm_type: "Edm.String",
+                max_length: Some(20), precision: None, scale: None,
+                immutable: false, semantic_object: None,
+            },
+        ];
+        let def = AnnotationsDef {
+            selection_fields: &["CustomerID", "Status"],
+            line_item: &[
+                LineItemField {
+                    name: "OrderID", label: None,
+                    importance: Some("High"), criticality_path: None,
+                    navigation_path: None, semantic_object: None,
+                },
+                LineItemField {
+                    name: "CustomerID", label: None,
+                    importance: None, criticality_path: None,
+                    navigation_path: None, semantic_object: Some("Customers"),
+                },
+                LineItemField {
+                    name: "Status", label: None,
+                    importance: Some("Medium"),
+                    criticality_path: Some("StatusCriticality"),
+                    navigation_path: None, semantic_object: None,
+                },
+            ],
+            header_info: HeaderInfoDef {
+                type_name: "Order", type_name_plural: "Orders",
+                title_path: "OrderID", description_path: "CustomerID",
+            },
+            header_facets: &[
+                HeaderFacetDef { data_point_qualifier: "Total", label: "Total Amount" },
+            ],
+            data_points: &[
+                DataPointDef {
+                    qualifier: "Total", value_path: "TotalAmount",
+                    title: "Total Amount", max_value: None, visualization: None,
+                },
+            ],
+            facet_sections: &[
+                FacetSectionDef {
+                    label: "General", id: "GeneralSection",
+                    field_group_qualifier: "Main", field_group_label: "Order Data",
+                },
+                FacetSectionDef {
+                    label: "Financial", id: "FinancialSection",
+                    field_group_qualifier: "Finance", field_group_label: "Financial Data",
+                },
+            ],
+            field_groups: &[
+                FieldGroupDef { qualifier: "Main", fields: &["OrderID", "CustomerID", "Status"] },
+                FieldGroupDef { qualifier: "Finance", fields: &["TotalAmount"] },
+            ],
+            table_facets: &[
+                TableFacetDef {
+                    label: "Items", id: "ItemsFacet",
+                    navigation_property: "Items",
+                },
+            ],
+        };
+        let xml = build_annotations_xml("Order", &def, &fields);
+
+        // Verify all major sections present
+        assert!(xml.contains("Target=\"ProductsService.Order\""));
+        assert!(xml.contains("UI.SelectionFields"));
+        assert!(xml.contains("UI.LineItem"));
+        assert!(xml.contains("UI.HeaderInfo"));
+        assert!(xml.contains("UI.HeaderFacets"));
+        assert!(xml.contains("UI.DataPoint"));
+        assert!(xml.contains("UI.Facets"));
+        assert!(xml.contains("UI.FieldGroup"));
+
+        // Verify field group with semantic object uses intent-based navigation
+        assert!(xml.contains("Qualifier=\"Main\""));
+        // CustomerID in FieldGroup Main should be DataFieldWithIntentBasedNavigation
+        let main_fg = &xml[xml.find("Qualifier=\"Main\"").unwrap()..];
+        let main_fg_end = main_fg.find("</Annotation>").unwrap();
+        let main_fg_section = &main_fg[..main_fg_end];
+        assert!(main_fg_section.contains("UI.DataFieldWithIntentBasedNavigation"));
+        assert!(main_fg_section.contains("SemanticObject\" String=\"Customers\""));
+
+        // Property-level semantic object annotation
+        assert!(xml.contains("Target=\"ProductsService.Order/CustomerID\""));
+        assert!(xml.contains("Common.SemanticObject\" String=\"Customers\""));
+    }
 }
