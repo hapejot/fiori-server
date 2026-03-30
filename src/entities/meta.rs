@@ -1,25 +1,42 @@
-use std::collections::HashMap;
 use std::path::Path;
 
 use log::info;
-use serde_json::{json, Value};
+use serde_json::Value;
+
+#[cfg(test)]
+use crate::entity::value_list_id;
+#[cfg(test)]
+use serde_json::json;
+#[cfg(test)]
+use std::collections::HashMap;
 
 use super::generic::{
-    AnnotationsConfig, DataPointConfig, EntityConfig, FacetSectionConfig, FieldConfig,
-    FieldGroupConfig, HeaderFacetConfig, HeaderInfoConfig, LineItemConfig, NavPropertyConfig,
-    TableFacetConfig, TileConfig,
+    AnnotationsConfig, EntityConfig, FacetSectionConfig, FieldConfig, FieldGroupConfig,
+    HeaderInfoConfig, LineItemConfig, NavPropertyConfig, TableFacetConfig, TileConfig,
 };
 
 /// Erzeugt Meta-Entity-Daten aus den geladenen EntityConfig-Structs.
-/// Gibt (EntityConfigs, EntityFields, EntityFacets, EntityNavigations, EntityTableFacets) zurueck.
-pub fn generate_meta_data(
+/// Gibt (EntityConfigs, EntityFields, EntityFacets, EntityNavigations, EntityTableFacets,
+///       FieldValueLists, FieldValueListItems) zurueck.
+#[cfg(test)]
+fn generate_meta_data(
     configs: &[EntityConfig],
-) -> (Vec<Value>, Vec<Value>, Vec<Value>, Vec<Value>, Vec<Value>) {
+) -> (
+    Vec<Value>,
+    Vec<Value>,
+    Vec<Value>,
+    Vec<Value>,
+    Vec<Value>,
+    Vec<Value>,
+    Vec<Value>,
+) {
     let mut config_records = Vec::new();
     let mut field_records = Vec::new();
     let mut facet_records = Vec::new();
     let mut nav_records = Vec::new();
     let mut table_facet_records = Vec::new();
+    let mut value_list_records = Vec::new();
+    let mut value_list_item_records = Vec::new();
 
     for config in configs {
         let tile = config.tile.as_ref();
@@ -67,6 +84,7 @@ pub fn generate_meta_data(
                 "Scale":                  field.scale,
                 "IsImmutable":            field.immutable,
                 "SemanticObject":         field.semantic_object.as_deref().unwrap_or(""),
+                "ValueSource":            field.value_source.as_deref().unwrap_or(""),
                 "SortOrder":              idx as u32,
                 "ShowInLineItem":         li.is_some(),
                 "LineItemImportance":     li.and_then(|l| l.importance.as_deref()).unwrap_or(""),
@@ -124,15 +142,53 @@ pub fn generate_meta_data(
                 "SortOrder":      idx as u32,
             }));
         }
+
+        // ── FieldValueLists + Items-Datensaetze ─────────────────────
+        for vl in &config.value_lists {
+            let list_id = value_list_id(&vl.list_name);
+            value_list_records.push(json!({
+                "ID":          list_id,
+                "ListName":    vl.list_name,
+                "Description": vl.description,
+            }));
+            for (idx, entry) in vl.entries.iter().enumerate() {
+                // Deterministischer GUID aus ListName + Code
+                let raw = format!("{}_{}", vl.list_name, entry.code);
+                let hash = value_list_id(&raw);
+                value_list_item_records.push(json!({
+                    "ID":          hash,
+                    "ListID":      list_id,
+                    "Code":        entry.code,
+                    "Description": entry.description,
+                    "SortOrder":   idx as u32,
+                }));
+            }
+        }
     }
 
-    (config_records, field_records, facet_records, nav_records, table_facet_records)
+    (
+        config_records,
+        field_records,
+        facet_records,
+        nav_records,
+        table_facet_records,
+        value_list_records,
+        value_list_item_records,
+    )
 }
 
-/// Schreibt Meta-Entity-Daten als JSON-Dateien ins Data-Verzeichnis.
-pub fn write_meta_data(data_dir: &Path, configs: &[EntityConfig]) {
-    let (configs_data, fields_data, facets_data, nav_data, table_facet_data) =
-        generate_meta_data(configs);
+/// Schreibt Meta-Entity-Daten als JSON-Dateien ins Data-Verzeichnis (Test-Hilfe).
+#[cfg(test)]
+fn write_meta_data(data_dir: &Path, configs: &[EntityConfig]) {
+    let (
+        configs_data,
+        fields_data,
+        facets_data,
+        nav_data,
+        table_facet_data,
+        value_lists_data,
+        value_list_items_data,
+    ) = generate_meta_data(configs);
 
     std::fs::create_dir_all(data_dir).ok();
 
@@ -141,7 +197,11 @@ pub fn write_meta_data(data_dir: &Path, configs: &[EntityConfig]) {
         match serde_json::to_string_pretty(data) {
             Ok(json) => {
                 if let Err(e) = std::fs::write(&path, json) {
-                    eprintln!("  WARNUNG: Konnte {} nicht schreiben: {}", path.display(), e);
+                    eprintln!(
+                        "  WARNUNG: Konnte {} nicht schreiben: {}",
+                        path.display(),
+                        e
+                    );
                 } else {
                     info!("  Meta-Daten: {} ({} Eintraege)", name, data.len());
                 }
@@ -155,33 +215,35 @@ pub fn write_meta_data(data_dir: &Path, configs: &[EntityConfig]) {
     write_json("EntityFacets", &facets_data);
     write_json("EntityNavigations", &nav_data);
     write_json("EntityTableFacets", &table_facet_data);
+
+    // Wertelisten nur ueberschreiben wenn Configs tatsaechlich welche definieren,
+    // damit manuell gepflegte Seed-Daten erhalten bleiben.
+    if !value_lists_data.is_empty() {
+        write_json("FieldValueLists", &value_lists_data);
+        write_json("FieldValueListItems", &value_list_items_data);
+    }
 }
 
-/// Publiziert Meta-Entity-Datensaetze zurueck in eine Config-JSON-Datei.
+/// Rekonstruiert `Vec<EntityConfig>` direkt aus den Meta-JSON-Dateien im Data-Verzeichnis.
 ///
-/// Baut EntityConfig-Structs aus den Meta-Datensaetzen auf und serialisiert diese,
-/// sodass die gleichen Typen fuer Ein- und Ausgabe verwendet werden.
-///
-/// Nicht nachverfolgte Felder (header_facets, data_points,
-/// Navigations-Pfad-LineItems) werden aus der Originaldatei beibehalten.
-pub fn publish_entity_config(
-    config_dir: &Path,
-    set_name: &str,
-    data_store: &dyn crate::data_store::DataStore,
-) -> Result<Value, String> {
-    let get_records = |name: &str| -> Vec<Value> { data_store.get_records(name) };
+/// Dies ist der Startup-Pfad: die Meta-Tabellen (EntityConfigs.json, EntityFields.json, …)
+/// sind die einzige Quelle der Wahrheit. Separate Config-Dateien werden nicht benoetigt.
+pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
+    let read_json = |name: &str| -> Vec<Value> {
+        let path = data_dir.join(format!("{}.json", name));
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str(&c).ok())
+            .unwrap_or_default()
+    };
 
-    // ── 1. EntityConfigs-Datensatz finden ────────────────────────
-    let all_configs = get_records("EntityConfigs");
-    let config_record = all_configs
-        .iter()
-        .find(|r| {
-            r.get("SetName").and_then(|v| v.as_str()) == Some(set_name)
-                && r.get("IsActiveEntity")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true)
-        })
-        .ok_or_else(|| format!("Entity-Config '{}' nicht gefunden", set_name))?;
+    let all_configs = read_json("EntityConfigs");
+    let all_fields = read_json("EntityFields");
+    let all_facets = read_json("EntityFacets");
+    let all_navs = read_json("EntityNavigations");
+    let all_table_facets = read_json("EntityTableFacets");
+    let all_vl = read_json("FieldValueLists");
+    let all_vl_items = read_json("FieldValueListItems");
 
     let str_val = |record: &Value, field: &str| -> String {
         record
@@ -190,7 +252,6 @@ pub fn publish_entity_config(
             .unwrap_or("")
             .to_string()
     };
-
     let opt_str = |record: &Value, field: &str| -> Option<String> {
         record
             .get(field)
@@ -199,239 +260,231 @@ pub fn publish_entity_config(
             .map(String::from)
     };
 
-    // ── 2. Zugehoerige Meta-Datensaetze sammeln ─────────────────
-    let filter_active = |records: Vec<Value>| -> Vec<Value> {
+    let filter_sorted = |records: &[Value], set_name: &str| -> Vec<Value> {
         let mut filtered: Vec<Value> = records
-            .into_iter()
-            .filter(|r| {
-                r.get("SetName").and_then(|v| v.as_str()) == Some(set_name)
-                    && r.get("IsActiveEntity")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(true)
-            })
+            .iter()
+            .filter(|r| r.get("SetName").and_then(|v| v.as_str()) == Some(set_name))
+            .cloned()
             .collect();
         filtered.sort_by_key(|f| f.get("SortOrder").and_then(|v| v.as_i64()).unwrap_or(999));
         filtered
     };
 
-    let field_records = filter_active(get_records("EntityFields"));
-    let facet_records = filter_active(get_records("EntityFacets"));
-    let nav_records = filter_active(get_records("EntityNavigations"));
-    let table_facet_records = filter_active(get_records("EntityTableFacets"));
-
-    // ── 3. Originaldatei laden (fuer nicht-nachverfolgte Felder) ─
-    let config_path = config_dir.join(format!("{}.json", set_name));
-    let original: Option<Value> = if config_path.is_file() {
-        std::fs::read_to_string(&config_path)
-            .ok()
-            .and_then(|c| serde_json::from_str(&c).ok())
-    } else {
-        None
-    };
-
-    // ── 4. FieldConfig-Structs aufbauen ─────────────────────────
-    let fields: Vec<FieldConfig> = field_records
+    all_configs
         .iter()
-        .map(|f| FieldConfig {
-            name: str_val(f, "FieldName"),
-            label: str_val(f, "Label"),
-            edm_type: str_val(f, "EdmType"),
-            max_length: f
-                .get("MaxLength")
-                .and_then(|v| v.as_u64())
-                .map(|v| v as u32)
-                .filter(|&v| v > 0),
-            precision: f
-                .get("Precision")
-                .and_then(|v| v.as_u64())
-                .map(|v| v as u32)
-                .filter(|&v| v > 0),
-            scale: f
-                .get("Scale")
-                .and_then(|v| v.as_u64())
-                .map(|v| v as u32)
-                .filter(|&v| v > 0),
-            immutable: f
-                .get("IsImmutable")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false),
-            semantic_object: opt_str(f, "SemanticObject"),
-        })
-        .collect();
+        .map(|cr| {
+            let set_name = str_val(cr, "SetName");
+            let field_records = filter_sorted(&all_fields, &set_name);
+            let facet_records = filter_sorted(&all_facets, &set_name);
+            let nav_records = filter_sorted(&all_navs, &set_name);
+            let table_facet_records = filter_sorted(&all_table_facets, &set_name);
 
-    // ── 5. LineItem-Eintraege aus Field-Metadaten ───────────────
-    let mut line_items: Vec<LineItemConfig> = field_records
-        .iter()
-        .filter(|f| {
-            f.get("ShowInLineItem")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-        })
-        .map(|f| LineItemConfig {
-            name: str_val(f, "FieldName"),
-            label: opt_str(f, "LineItemLabel"),
-            importance: opt_str(f, "LineItemImportance"),
-            criticality_path: opt_str(f, "LineItemCriticalityPath"),
-            navigation_path: None,
-            semantic_object: opt_str(f, "LineItemSemanticObject"),
-        })
-        .collect();
+            // Fields
+            let fields: Vec<FieldConfig> = field_records
+                .iter()
+                .map(|f| FieldConfig {
+                    name: str_val(f, "FieldName"),
+                    label: str_val(f, "Label"),
+                    edm_type: str_val(f, "EdmType"),
+                    max_length: f
+                        .get("MaxLength")
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v as u32)
+                        .filter(|&v| v > 0),
+                    precision: f
+                        .get("Precision")
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v as u32)
+                        .filter(|&v| v > 0),
+                    scale: f
+                        .get("Scale")
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v as u32)
+                        .filter(|&v| v > 0),
+                    immutable: f
+                        .get("IsImmutable")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
+                    semantic_object: opt_str(f, "SemanticObject"),
+                    value_source: opt_str(f, "ValueSource"),
+                })
+                .collect();
 
-    // Navigations-Pfad-LineItems aus Original beibehalten (z.B. "Customer/CustomerName")
-    if let Some(orig_li) = original
-        .as_ref()
-        .and_then(|o| o.get("annotations"))
-        .and_then(|a| a.get("line_item"))
-        .and_then(|v| v.as_array())
-    {
-        for item in orig_li {
-            if let Some(name) = item.get("name").and_then(|v| v.as_str()) {
-                if name.contains('/') {
-                    if let Ok(li) = serde_json::from_value::<LineItemConfig>(item.clone()) {
-                        line_items.push(li);
+            // LineItems
+            let line_items: Vec<LineItemConfig> = field_records
+                .iter()
+                .filter(|f| {
+                    f.get("ShowInLineItem")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
+                })
+                .map(|f| LineItemConfig {
+                    name: str_val(f, "FieldName"),
+                    label: opt_str(f, "LineItemLabel"),
+                    importance: opt_str(f, "LineItemImportance"),
+                    criticality_path: opt_str(f, "LineItemCriticalityPath"),
+                    navigation_path: None,
+                    semantic_object: opt_str(f, "LineItemSemanticObject"),
+                })
+                .collect();
+
+            // FacetSections + FieldGroups
+            let facet_sections: Vec<FacetSectionConfig> = facet_records
+                .iter()
+                .map(|f| FacetSectionConfig {
+                    label: str_val(f, "SectionLabel"),
+                    id: str_val(f, "SectionId"),
+                    field_group_qualifier: str_val(f, "FieldGroupQualifier"),
+                    field_group_label: str_val(f, "FieldGroupLabel"),
+                })
+                .collect();
+            let field_groups: Vec<FieldGroupConfig> = facet_records
+                .iter()
+                .map(|f| {
+                    let fields_str = str_val(f, "FieldGroupFields");
+                    FieldGroupConfig {
+                        qualifier: str_val(f, "FieldGroupQualifier"),
+                        fields: fields_str
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect(),
                     }
-                }
+                })
+                .collect();
+
+            // NavigationProperties
+            let navigation_properties: Vec<NavPropertyConfig> = nav_records
+                .iter()
+                .map(|n| NavPropertyConfig {
+                    name: str_val(n, "NavName"),
+                    target_type: str_val(n, "TargetType"),
+                    target_set: str_val(n, "TargetSet"),
+                    is_collection: n
+                        .get("IsCollection")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
+                    foreign_key: opt_str(n, "ForeignKey"),
+                })
+                .collect();
+
+            // TableFacets
+            let table_facets: Vec<TableFacetConfig> = table_facet_records
+                .iter()
+                .map(|tf| TableFacetConfig {
+                    label: str_val(tf, "FacetLabel"),
+                    id: str_val(tf, "FacetId"),
+                    navigation_property: str_val(tf, "NavigationProperty"),
+                })
+                .collect();
+
+            // SelectionFields
+            let sf_str = str_val(cr, "SelectionFields");
+            let selection_fields: Vec<String> = sf_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            // HeaderInfo
+            let header_info = HeaderInfoConfig {
+                type_name: str_val(cr, "HeaderTypeName"),
+                type_name_plural: str_val(cr, "HeaderTypeNamePlural"),
+                title_path: str_val(cr, "HeaderTitlePath"),
+                description_path: str_val(cr, "HeaderDescriptionPath"),
+            };
+
+            // Tile
+            let tile_title = str_val(cr, "TileTitle");
+            let tile = if !tile_title.is_empty() {
+                Some(TileConfig {
+                    title: tile_title,
+                    description: opt_str(cr, "TileDescription"),
+                    icon: opt_str(cr, "TileIcon"),
+                })
+            } else {
+                None
+            };
+
+            // Value Lists
+            let value_lists: Vec<super::generic::FieldValueListConfig> = all_vl
+                .iter()
+                .map(|vl| {
+                    let id = str_val(vl, "ID");
+                    let entries = all_vl_items
+                        .iter()
+                        .filter(|item| item.get("ListID").and_then(|v| v.as_str()) == Some(&id))
+                        .map(|item| super::generic::FieldValueListEntry {
+                            code: str_val(item, "Code"),
+                            description: str_val(item, "Description"),
+                        })
+                        .collect();
+                    super::generic::FieldValueListConfig {
+                        list_name: str_val(vl, "ListName"),
+                        description: str_val(vl, "Description"),
+                        entries,
+                    }
+                })
+                .collect();
+
+            // Annotations
+            let annotations = AnnotationsConfig {
+                selection_fields,
+                line_item: line_items,
+                header_info,
+                header_facets: vec![],
+                data_points: vec![],
+                facet_sections,
+                field_groups,
+                table_facets,
+            };
+
+            EntityConfig {
+                set_name,
+                key_field: str_val(cr, "KeyField"),
+                type_name: str_val(cr, "TypeName"),
+                parent_set_name: opt_str(cr, "ParentSetName"),
+                fields,
+                navigation_properties,
+                annotations: Some(annotations),
+                tile,
+                value_lists,
             }
-        }
-    }
-
-    // ── 6. FacetSections + FieldGroups ──────────────────────────
-    let facet_sections: Vec<FacetSectionConfig> = facet_records
-        .iter()
-        .map(|f| FacetSectionConfig {
-            label: str_val(f, "SectionLabel"),
-            id: str_val(f, "SectionId"),
-            field_group_qualifier: str_val(f, "FieldGroupQualifier"),
-            field_group_label: str_val(f, "FieldGroupLabel"),
         })
-        .collect();
+        .collect()
+}
 
-    let field_groups: Vec<FieldGroupConfig> = facet_records
-        .iter()
-        .map(|f| {
-            let fields_str = str_val(f, "FieldGroupFields");
-            FieldGroupConfig {
-                qualifier: str_val(f, "FieldGroupQualifier"),
-                fields: fields_str
-                    .split(',')
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect(),
-            }
+/// Publiziert Meta-Entity-Aenderungen: persistiert die Data-Store-Datensaetze
+/// in die JSON-Dateien im Data-Verzeichnis.
+///
+/// Gibt den EntityConfigs-Datensatz des publizierten EntitySets zurueck.
+pub fn publish_entity_config(
+    set_name: &str,
+    data_store: &dyn crate::data_store::DataStore,
+) -> Result<Value, String> {
+    let config_record = data_store
+        .get_records("EntityConfigs")
+        .into_iter()
+        .find(|r| {
+            r.get("SetName").and_then(|v| v.as_str()) == Some(set_name)
+                && r.get("IsActiveEntity")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true)
         })
-        .collect();
+        .ok_or_else(|| format!("Entity-Config '{}' nicht gefunden", set_name))?;
 
-    // ── 7. NavigationProperties ─────────────────────────────────
-    let navigation_properties: Vec<NavPropertyConfig> = nav_records
-        .iter()
-        .map(|n| NavPropertyConfig {
-            name: str_val(n, "NavName"),
-            target_type: str_val(n, "TargetType"),
-            target_set: str_val(n, "TargetSet"),
-            is_collection: n
-                .get("IsCollection")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false),
-            foreign_key: opt_str(n, "ForeignKey"),
-        })
-        .collect();
+    data_store.commit();
 
-    // ── 8. TableFacets ──────────────────────────────────────────
-    let table_facets: Vec<TableFacetConfig> = table_facet_records
-        .iter()
-        .map(|tf| TableFacetConfig {
-            label: str_val(tf, "FacetLabel"),
-            id: str_val(tf, "FacetId"),
-            navigation_property: str_val(tf, "NavigationProperty"),
-        })
-        .collect();
+    info!("  Config publiziert: {}", set_name);
 
-    // ── 9. SelectionFields ──────────────────────────────────────
-    let sf_str = str_val(config_record, "SelectionFields");
-    let selection_fields: Vec<String> = sf_str
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-
-    // ── 10. Nicht-nachverfolgte Felder aus Original ─────────────
-    let header_facets: Vec<HeaderFacetConfig> = original
-        .as_ref()
-        .and_then(|o| o.get("annotations"))
-        .and_then(|a| a.get("header_facets"))
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_default();
-
-    let data_points: Vec<DataPointConfig> = original
-        .as_ref()
-        .and_then(|o| o.get("annotations"))
-        .and_then(|a| a.get("data_points"))
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_default();
-
-    // ── 11. HeaderInfo ──────────────────────────────────────────
-    let header_info = HeaderInfoConfig {
-        type_name: str_val(config_record, "HeaderTypeName"),
-        type_name_plural: str_val(config_record, "HeaderTypeNamePlural"),
-        title_path: str_val(config_record, "HeaderTitlePath"),
-        description_path: str_val(config_record, "HeaderDescriptionPath"),
-    };
-
-    // ── 12. Annotations zusammenbauen ───────────────────────────
-    let annotations = AnnotationsConfig {
-        selection_fields,
-        line_item: line_items,
-        header_info,
-        header_facets,
-        data_points,
-        facet_sections,
-        field_groups,
-        table_facets,
-    };
-
-    // ── 13. Tile ────────────────────────────────────────────────
-    let tile_title = str_val(config_record, "TileTitle");
-    let tile = if !tile_title.is_empty() {
-        Some(TileConfig {
-            title: tile_title,
-            description: opt_str(config_record, "TileDescription"),
-            icon: opt_str(config_record, "TileIcon"),
-        })
-    } else {
-        None
-    };
-
-    // ── 14. EntityConfig aufbauen und serialisieren ─────────────
-    let entity_config = EntityConfig {
-        set_name: set_name.to_string(),
-        key_field: str_val(config_record, "KeyField"),
-        type_name: str_val(config_record, "TypeName"),
-        parent_set_name: opt_str(config_record, "ParentSetName"),
-        fields,
-        navigation_properties,
-        annotations: Some(annotations),
-        tile,
-    };
-
-    std::fs::create_dir_all(config_dir).map_err(|e| format!("Verzeichnis-Fehler: {}", e))?;
-    let json_str = serde_json::to_string_pretty(&entity_config)
-        .map_err(|e| format!("JSON-Fehler: {}", e))?;
-    std::fs::write(&config_path, &json_str)
-        .map_err(|e| format!("Schreib-Fehler: {}", e))?;
-
-    info!(
-        "  Config publiziert: {} -> {}",
-        set_name,
-        config_path.display()
-    );
-
-    Ok(config_record.clone())
+    Ok(config_record)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::data_store::*;
+    use crate::entity::ODataEntity;
     use serde_json::json;
     use std::collections::HashMap;
     use std::sync::RwLock;
@@ -454,6 +507,7 @@ mod tests {
                     scale: None,
                     immutable: true,
                     semantic_object: None,
+                    value_source: None,
                 },
                 FieldConfig {
                     name: "ProductName".to_string(),
@@ -464,6 +518,7 @@ mod tests {
                     scale: None,
                     immutable: false,
                     semantic_object: None,
+                    value_source: None,
                 },
                 FieldConfig {
                     name: "Price".to_string(),
@@ -474,6 +529,7 @@ mod tests {
                     scale: Some(2),
                     immutable: false,
                     semantic_object: None,
+                    value_source: None,
                 },
             ],
             navigation_properties: vec![NavPropertyConfig {
@@ -532,6 +588,7 @@ mod tests {
                 description: Some("Produktkatalog".to_string()),
                 icon: Some("sap-icon://product".to_string()),
             }),
+            value_lists: vec![],
         }
     }
 
@@ -540,18 +597,17 @@ mod tests {
         config.set_name = "Orders".to_string();
         config.key_field = "OrderID".to_string();
         config.type_name = "Order".to_string();
-        config.fields = vec![
-            FieldConfig {
-                name: "OrderID".to_string(),
-                label: "Auftragsnr.".to_string(),
-                edm_type: "Edm.String".to_string(),
-                max_length: Some(10),
-                precision: None,
-                scale: None,
-                immutable: true,
-                semantic_object: None,
-            },
-        ];
+        config.fields = vec![FieldConfig {
+            name: "OrderID".to_string(),
+            label: "Auftragsnr.".to_string(),
+            edm_type: "Edm.String".to_string(),
+            max_length: Some(10),
+            precision: None,
+            scale: None,
+            immutable: true,
+            semantic_object: None,
+            value_source: None,
+        }];
         config.navigation_properties = vec![NavPropertyConfig {
             name: "Items".to_string(),
             target_type: "OrderItem".to_string(),
@@ -594,14 +650,23 @@ mod tests {
 
     impl MockDataStore {
         fn from_meta(configs: &[EntityConfig]) -> Self {
-            let (config_records, field_records, facet_records, nav_records, table_facet_records) =
-                generate_meta_data(configs);
+            let (
+                config_records,
+                field_records,
+                facet_records,
+                nav_records,
+                table_facet_records,
+                value_list_records,
+                value_list_item_records,
+            ) = generate_meta_data(configs);
             let mut store = HashMap::new();
             store.insert("EntityConfigs".to_string(), config_records);
             store.insert("EntityFields".to_string(), field_records);
             store.insert("EntityFacets".to_string(), facet_records);
             store.insert("EntityNavigations".to_string(), nav_records);
             store.insert("EntityTableFacets".to_string(), table_facet_records);
+            store.insert("FieldValueLists".to_string(), value_list_records);
+            store.insert("FieldValueListItems".to_string(), value_list_item_records);
             Self {
                 store: RwLock::new(store),
             }
@@ -609,14 +674,26 @@ mod tests {
     }
 
     impl DataStore for MockDataStore {
-        fn get_collection(&self, _: &str, _: &ODataQuery, _: Option<&ParentKey>) -> Result<Value, StoreError> {
+        fn get_collection(
+            &self,
+            _: &str,
+            _: &ODataQuery,
+            _: Option<&ParentKey>,
+        ) -> Result<Value, StoreError> {
             Ok(json!({"value": []}))
         }
-        fn count(&self, _: &str, _: &ODataQuery, _: Option<&ParentKey>) -> usize { 0 }
+        fn count(&self, _: &str, _: &ODataQuery, _: Option<&ParentKey>) -> usize {
+            0
+        }
         fn read_entity(&self, _: &str, _: &EntityKey, _: &ODataQuery) -> Result<Value, StoreError> {
             Err(StoreError::NotFound("mock".to_string()))
         }
-        fn create_entity(&self, _: &str, _: &Value, _: Option<&ParentKey>) -> Result<Value, StoreError> {
+        fn create_entity(
+            &self,
+            _: &str,
+            _: &Value,
+            _: Option<&ParentKey>,
+        ) -> Result<Value, StoreError> {
             Err(StoreError::BadRequest("mock".to_string()))
         }
         fn patch_entity(&self, _: &str, _: &EntityKey, _: &Value) -> Result<Value, StoreError> {
@@ -638,9 +715,15 @@ mod tests {
             Err(StoreError::NotFound("mock".to_string()))
         }
         fn get_records(&self, set_name: &str) -> Vec<Value> {
-            self.store.read().unwrap().get(set_name).cloned().unwrap_or_default()
+            self.store
+                .read()
+                .unwrap()
+                .get(set_name)
+                .cloned()
+                .unwrap_or_default()
         }
         fn commit(&self) {}
+        fn update_entities(&self, _: Vec<&'static dyn ODataEntity>) {}
     }
 
     // ── generate_meta_data Tests ────────────────────────────────
@@ -648,7 +731,7 @@ mod tests {
     #[test]
     fn meta_generates_config_record() {
         let configs = vec![test_config()];
-        let (config_records, _, _, _, _) = generate_meta_data(&configs);
+        let (config_records, _, _, _, _, _, _) = generate_meta_data(&configs);
         assert_eq!(config_records.len(), 1);
         let cr = &config_records[0];
         assert_eq!(cr["SetName"], "Products");
@@ -667,7 +750,7 @@ mod tests {
     #[test]
     fn meta_generates_field_records() {
         let configs = vec![test_config()];
-        let (_, field_records, _, _, _) = generate_meta_data(&configs);
+        let (_, field_records, _, _, _, _, _) = generate_meta_data(&configs);
         assert_eq!(field_records.len(), 3);
 
         // First field: ProductID (immutable, in line_item with High importance)
@@ -701,7 +784,7 @@ mod tests {
     #[test]
     fn meta_generates_facet_records() {
         let configs = vec![test_config()];
-        let (_, _, facet_records, _, _) = generate_meta_data(&configs);
+        let (_, _, facet_records, _, _, _, _) = generate_meta_data(&configs);
         assert_eq!(facet_records.len(), 1);
         let fr = &facet_records[0];
         assert_eq!(fr["FacetID"], "Products_General");
@@ -716,7 +799,7 @@ mod tests {
     #[test]
     fn meta_generates_nav_records() {
         let configs = vec![test_config()];
-        let (_, _, _, nav_records, _) = generate_meta_data(&configs);
+        let (_, _, _, nav_records, _, _, _) = generate_meta_data(&configs);
         assert_eq!(nav_records.len(), 1);
         let nr = &nav_records[0];
         assert_eq!(nr["NavID"], "Products_Supplier");
@@ -730,7 +813,7 @@ mod tests {
     #[test]
     fn meta_generates_table_facet_records() {
         let configs = vec![config_with_table_facets()];
-        let (_, _, _, _, table_facet_records) = generate_meta_data(&configs);
+        let (_, _, _, _, table_facet_records, _, _) = generate_meta_data(&configs);
         assert_eq!(table_facet_records.len(), 1);
         let tf = &table_facet_records[0];
         assert_eq!(tf["TableFacetID"], "Orders_ItemsFacet");
@@ -750,14 +833,19 @@ mod tests {
                 name: "ID".to_string(),
                 label: "ID".to_string(),
                 edm_type: "Edm.String".to_string(),
-                max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: None,
+                max_length: None,
+                precision: None,
+                scale: None,
+                immutable: false,
+                semantic_object: None,
+                value_source: None,
             }],
             navigation_properties: vec![],
             annotations: None,
             tile: None,
+            value_lists: vec![],
         };
-        let (configs, fields, facets, navs, tfs) = generate_meta_data(&[config]);
+        let (configs, fields, facets, navs, tfs, _, _) = generate_meta_data(&[config]);
         assert_eq!(configs.len(), 1);
         assert_eq!(fields.len(), 1);
         assert_eq!(facets.len(), 0);
@@ -772,7 +860,7 @@ mod tests {
     #[test]
     fn meta_multiple_configs() {
         let configs = vec![test_config(), config_with_table_facets()];
-        let (config_records, field_records, facet_records, nav_records, tf_records) =
+        let (config_records, field_records, facet_records, nav_records, tf_records, _, _) =
             generate_meta_data(&configs);
         assert_eq!(config_records.len(), 2);
         assert_eq!(config_records[0]["SetName"], "Products");
@@ -798,14 +886,19 @@ mod tests {
                 name: "ItemID".to_string(),
                 label: "Pos".to_string(),
                 edm_type: "Edm.String".to_string(),
-                max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: None,
+                max_length: None,
+                precision: None,
+                scale: None,
+                immutable: false,
+                semantic_object: None,
+                value_source: None,
             }],
             navigation_properties: vec![],
             annotations: None,
             tile: None,
+            value_lists: vec![],
         };
-        let (config_records, _, _, _, _) = generate_meta_data(&[config]);
+        let (config_records, _, _, _, _, _, _) = generate_meta_data(&[config]);
         assert_eq!(config_records[0]["ParentSetName"], "Orders");
     }
 
@@ -820,53 +913,54 @@ mod tests {
                 name: "CustomerID".to_string(),
                 label: "Kunde".to_string(),
                 edm_type: "Edm.String".to_string(),
-                max_length: None, precision: None, scale: None,
+                max_length: None,
+                precision: None,
+                scale: None,
                 immutable: false,
                 semantic_object: Some("Customers".to_string()),
+                value_source: None,
             }],
             navigation_properties: vec![],
             annotations: None,
             tile: None,
+            value_lists: vec![],
         };
-        let (_, field_records, _, _, _) = generate_meta_data(&[config]);
+        let (_, field_records, _, _, _, _, _) = generate_meta_data(&[config]);
         assert_eq!(field_records[0]["SemanticObject"], "Customers");
     }
 
-    // ── Roundtrip: generate_meta_data → publish_entity_config ───
+    // ── Roundtrip: generate_meta_data → write → reconstruct ─────
 
     #[test]
-    fn meta_roundtrip_publish_reconstructs_config() {
-        let original = test_config();
-        let mock_store = MockDataStore::from_meta(&[original]);
-
+    fn meta_roundtrip_reconstructs_config() {
         let tmp_dir = std::env::temp_dir().join("fiori_test_meta_roundtrip");
         let _ = std::fs::remove_dir_all(&tmp_dir);
-        std::fs::create_dir_all(&tmp_dir).unwrap();
 
-        let result = publish_entity_config(&tmp_dir, "Products", &mock_store);
-        assert!(result.is_ok());
+        write_meta_data(&tmp_dir, &[test_config()]);
 
-        // Read back the written file and deserialize as EntityConfig
-        let written = std::fs::read_to_string(tmp_dir.join("Products.json")).unwrap();
-        let reconstructed: EntityConfig = serde_json::from_str(&written).unwrap();
+        let reconstructed = reconstruct_configs_from_data(&tmp_dir);
+        assert_eq!(reconstructed.len(), 1);
+        let r = &reconstructed[0];
 
-        assert_eq!(reconstructed.set_name, "Products");
-        assert_eq!(reconstructed.key_field, "ProductID");
-        assert_eq!(reconstructed.type_name, "Product");
-        assert_eq!(reconstructed.fields.len(), 3);
-        assert_eq!(reconstructed.fields[0].name, "ProductID");
-        assert_eq!(reconstructed.fields[0].max_length, Some(10));
-        assert!(reconstructed.fields[0].immutable);
-        assert_eq!(reconstructed.fields[2].name, "Price");
-        assert_eq!(reconstructed.fields[2].edm_type, "Edm.Decimal");
-        assert_eq!(reconstructed.fields[2].precision, Some(15));
-        assert_eq!(reconstructed.fields[2].scale, Some(2));
-        assert_eq!(reconstructed.navigation_properties.len(), 1);
-        assert_eq!(reconstructed.navigation_properties[0].name, "Supplier");
-        assert_eq!(reconstructed.navigation_properties[0].foreign_key,
-            Some("SupplierID".to_string()));
+        assert_eq!(r.set_name, "Products");
+        assert_eq!(r.key_field, "ProductID");
+        assert_eq!(r.type_name, "Product");
+        assert_eq!(r.fields.len(), 3);
+        assert_eq!(r.fields[0].name, "ProductID");
+        assert_eq!(r.fields[0].max_length, Some(10));
+        assert!(r.fields[0].immutable);
+        assert_eq!(r.fields[2].name, "Price");
+        assert_eq!(r.fields[2].edm_type, "Edm.Decimal");
+        assert_eq!(r.fields[2].precision, Some(15));
+        assert_eq!(r.fields[2].scale, Some(2));
+        assert_eq!(r.navigation_properties.len(), 1);
+        assert_eq!(r.navigation_properties[0].name, "Supplier");
+        assert_eq!(
+            r.navigation_properties[0].foreign_key,
+            Some("SupplierID".to_string())
+        );
 
-        let ann = reconstructed.annotations.unwrap();
+        let ann = r.annotations.as_ref().unwrap();
         assert_eq!(ann.selection_fields, vec!["ProductName"]);
         assert_eq!(ann.line_item.len(), 2);
         assert_eq!(ann.line_item[0].name, "ProductID");
@@ -876,9 +970,12 @@ mod tests {
         assert_eq!(ann.facet_sections.len(), 1);
         assert_eq!(ann.facet_sections[0].id, "General");
         assert_eq!(ann.field_groups.len(), 1);
-        assert_eq!(ann.field_groups[0].fields, vec!["ProductID", "ProductName", "Price"]);
+        assert_eq!(
+            ann.field_groups[0].fields,
+            vec!["ProductID", "ProductName", "Price"]
+        );
 
-        let tile = reconstructed.tile.unwrap();
+        let tile = r.tile.as_ref().unwrap();
         assert_eq!(tile.title, "Produkte");
         assert_eq!(tile.description, Some("Produktkatalog".to_string()));
         assert_eq!(tile.icon, Some("sap-icon://product".to_string()));
@@ -888,26 +985,22 @@ mod tests {
 
     #[test]
     fn meta_roundtrip_with_table_facets() {
-        let original = config_with_table_facets();
-        let mock_store = MockDataStore::from_meta(&[original]);
-
         let tmp_dir = std::env::temp_dir().join("fiori_test_meta_table_facets");
         let _ = std::fs::remove_dir_all(&tmp_dir);
-        std::fs::create_dir_all(&tmp_dir).unwrap();
 
-        let result = publish_entity_config(&tmp_dir, "Orders", &mock_store);
-        assert!(result.is_ok());
+        write_meta_data(&tmp_dir, &[config_with_table_facets()]);
 
-        let written = std::fs::read_to_string(tmp_dir.join("Orders.json")).unwrap();
-        let reconstructed: EntityConfig = serde_json::from_str(&written).unwrap();
+        let reconstructed = reconstruct_configs_from_data(&tmp_dir);
+        assert_eq!(reconstructed.len(), 1);
+        let r = &reconstructed[0];
 
-        assert_eq!(reconstructed.navigation_properties.len(), 1);
-        assert!(reconstructed.navigation_properties[0].is_collection);
-        let ann = reconstructed.annotations.unwrap();
+        assert_eq!(r.navigation_properties.len(), 1);
+        assert!(r.navigation_properties[0].is_collection);
+        let ann = r.annotations.as_ref().unwrap();
         assert_eq!(ann.table_facets.len(), 1);
         assert_eq!(ann.table_facets[0].navigation_property, "Items");
         assert_eq!(ann.table_facets[0].label, "Positionen");
-        assert!(reconstructed.tile.is_none());
+        assert!(r.tile.is_none());
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
     }
@@ -915,124 +1008,21 @@ mod tests {
     #[test]
     fn meta_publish_not_found() {
         let mock_store = MockDataStore::from_meta(&[test_config()]);
-        let tmp_dir = std::env::temp_dir().join("fiori_test_meta_not_found");
-        let _ = std::fs::remove_dir_all(&tmp_dir);
 
-        let result = publish_entity_config(&tmp_dir, "NonExistent", &mock_store);
+        let result = publish_entity_config("NonExistent", &mock_store);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("nicht gefunden"));
-
-        let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 
     #[test]
-    fn meta_publish_preserves_nav_path_line_items() {
-        // Write an "original" config with navigation-path line items
-        let tmp_dir = std::env::temp_dir().join("fiori_test_meta_nav_li");
-        let _ = std::fs::remove_dir_all(&tmp_dir);
-        std::fs::create_dir_all(&tmp_dir).unwrap();
-
-        // Simulate existing config file with nav-path line item
-        let original_json = json!({
-            "set_name": "Products",
-            "key_field": "ProductID",
-            "type_name": "Product",
-            "fields": [],
-            "annotations": {
-                "selection_fields": [],
-                "line_item": [
-                    {"name": "ProductID"},
-                    {"name": "Supplier/SupplierName", "label": "Lieferant"}
-                ],
-                "header_info": {
-                    "type_name": "Produkt",
-                    "type_name_plural": "Produkte",
-                    "title_path": "ProductName",
-                    "description_path": "ProductID"
-                },
-                "header_facets": [],
-                "data_points": [],
-                "facet_sections": [],
-                "field_groups": [],
-                "table_facets": []
-            }
-        });
-        std::fs::write(
-            tmp_dir.join("Products.json"),
-            serde_json::to_string_pretty(&original_json).unwrap(),
-        ).unwrap();
-
+    fn meta_publish_returns_config_record() {
         let mock_store = MockDataStore::from_meta(&[test_config()]);
-        let result = publish_entity_config(&tmp_dir, "Products", &mock_store);
+
+        let result = publish_entity_config("Products", &mock_store);
         assert!(result.is_ok());
-
-        let written = std::fs::read_to_string(tmp_dir.join("Products.json")).unwrap();
-        let reconstructed: EntityConfig = serde_json::from_str(&written).unwrap();
-        let ann = reconstructed.annotations.unwrap();
-
-        // Should have the original field-based line items + the nav-path one
-        let nav_li: Vec<&LineItemConfig> = ann.line_item.iter()
-            .filter(|li| li.name.contains('/'))
-            .collect();
-        assert_eq!(nav_li.len(), 1);
-        assert_eq!(nav_li[0].name, "Supplier/SupplierName");
-        assert_eq!(nav_li[0].label, Some("Lieferant".to_string()));
-
-        let _ = std::fs::remove_dir_all(&tmp_dir);
-    }
-
-    #[test]
-    fn meta_publish_preserves_header_facets_from_original() {
-        let tmp_dir = std::env::temp_dir().join("fiori_test_meta_hf");
-        let _ = std::fs::remove_dir_all(&tmp_dir);
-        std::fs::create_dir_all(&tmp_dir).unwrap();
-
-        // Write original config with header_facets and data_points
-        let original_json = json!({
-            "set_name": "Products",
-            "key_field": "ProductID",
-            "type_name": "Product",
-            "fields": [],
-            "annotations": {
-                "selection_fields": [],
-                "line_item": [],
-                "header_info": {
-                    "type_name": "Produkt",
-                    "type_name_plural": "Produkte",
-                    "title_path": "ProductName",
-                    "description_path": "ProductID"
-                },
-                "header_facets": [
-                    {"data_point_qualifier": "Price", "label": "Preis"}
-                ],
-                "data_points": [
-                    {"qualifier": "Price", "value_path": "Price", "title": "Preis"}
-                ],
-                "facet_sections": [],
-                "field_groups": [],
-                "table_facets": []
-            }
-        });
-        std::fs::write(
-            tmp_dir.join("Products.json"),
-            serde_json::to_string_pretty(&original_json).unwrap(),
-        ).unwrap();
-
-        let mock_store = MockDataStore::from_meta(&[test_config()]);
-        let result = publish_entity_config(&tmp_dir, "Products", &mock_store);
-        assert!(result.is_ok());
-
-        let written = std::fs::read_to_string(tmp_dir.join("Products.json")).unwrap();
-        let reconstructed: EntityConfig = serde_json::from_str(&written).unwrap();
-        let ann = reconstructed.annotations.unwrap();
-
-        assert_eq!(ann.header_facets.len(), 1);
-        assert_eq!(ann.header_facets[0].data_point_qualifier, "Price");
-        assert_eq!(ann.data_points.len(), 1);
-        assert_eq!(ann.data_points[0].qualifier, "Price");
-        assert_eq!(ann.data_points[0].value_path, "Price");
-
-        let _ = std::fs::remove_dir_all(&tmp_dir);
+        let record = result.unwrap();
+        assert_eq!(record["SetName"], "Products");
+        assert_eq!(record["KeyField"], "ProductID");
     }
 
     // ── write_meta_data Tests ───────────────────────────────────
@@ -1059,34 +1049,30 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 
-    // ── Full cycle: config → meta → publish → re-parse ──────────
+    // ── Full cycle: config → meta → reconstruct ─────────────────
 
     #[test]
     fn meta_full_cycle_identity() {
-        // This test verifies the core guarantee: config → generate_meta_data → publish → deserialize
+        // config → generate_meta_data → write → reconstruct_configs_from_data
         // produces an EntityConfig structurally matching the original.
-        let original = test_config();
-        let mock_store = MockDataStore::from_meta(&[original]);
-
         let tmp_dir = std::env::temp_dir().join("fiori_test_meta_cycle");
         let _ = std::fs::remove_dir_all(&tmp_dir);
-        std::fs::create_dir_all(&tmp_dir).unwrap();
 
-        publish_entity_config(&tmp_dir, "Products", &mock_store).unwrap();
+        write_meta_data(&tmp_dir, &[test_config()]);
+        let reconstructed = reconstruct_configs_from_data(&tmp_dir);
+        assert_eq!(reconstructed.len(), 1);
 
-        let written = std::fs::read_to_string(tmp_dir.join("Products.json")).unwrap();
-        let reconstructed: EntityConfig = serde_json::from_str(&written).unwrap();
-
-        // Serialize both and compare the JSON values for structural equality
         let original_val = serde_json::to_value(&test_config()).unwrap();
-        let reconstructed_val = serde_json::to_value(&reconstructed).unwrap();
+        let reconstructed_val = serde_json::to_value(&reconstructed[0]).unwrap();
 
-        // Compare all top-level and nested fields
         assert_eq!(original_val["set_name"], reconstructed_val["set_name"]);
         assert_eq!(original_val["key_field"], reconstructed_val["key_field"]);
         assert_eq!(original_val["type_name"], reconstructed_val["type_name"]);
         assert_eq!(original_val["fields"], reconstructed_val["fields"]);
-        assert_eq!(original_val["navigation_properties"], reconstructed_val["navigation_properties"]);
+        assert_eq!(
+            original_val["navigation_properties"],
+            reconstructed_val["navigation_properties"]
+        );
         assert_eq!(original_val["tile"], reconstructed_val["tile"]);
 
         let orig_ann = &original_val["annotations"];
@@ -1101,38 +1087,28 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 
-    // ── Real workspace config roundtrip ─────────────────────────
+    // ── Real workspace data roundtrip ───────────────────────────
 
     #[test]
-    fn meta_roundtrip_real_workspace_configs() {
-        use super::super::generic::load_raw_configs;
+    fn meta_reconstruct_from_real_workspace_data() {
+        let data_dir = Path::new("data");
+        let configs = reconstruct_configs_from_data(data_dir);
+        assert!(!configs.is_empty(), "Expected configs from workspace data");
 
-        let config_dir = Path::new("config/entities");
-        let raw_configs = load_raw_configs(config_dir);
-        assert!(!raw_configs.is_empty(), "Expected configs from workspace");
-
-        let mock_store = MockDataStore::from_meta(&raw_configs);
-
-        let tmp_dir = std::env::temp_dir().join("fiori_test_meta_real");
-        let _ = std::fs::remove_dir_all(&tmp_dir);
-        std::fs::create_dir_all(&tmp_dir).unwrap();
-
-        for config in &raw_configs {
-            let result = publish_entity_config(&tmp_dir, &config.set_name, &mock_store);
-            assert!(result.is_ok(), "Failed to publish {}: {:?}", config.set_name, result.err());
-
-            // Verify the written file can be re-parsed
-            let path = tmp_dir.join(format!("{}.json", config.set_name));
-            let content = std::fs::read_to_string(&path).unwrap();
-            let reparsed: EntityConfig = serde_json::from_str(&content)
-                .unwrap_or_else(|e| panic!("Failed to reparse {}: {}", config.set_name, e));
-            assert_eq!(reparsed.set_name, config.set_name);
-            assert_eq!(reparsed.key_field, config.key_field);
-            assert_eq!(reparsed.type_name, config.type_name);
-            assert_eq!(reparsed.fields.len(), config.fields.len());
-            assert_eq!(reparsed.navigation_properties.len(), config.navigation_properties.len());
+        for config in &configs {
+            assert!(!config.set_name.is_empty());
+            assert!(!config.key_field.is_empty());
+            assert!(!config.type_name.is_empty());
+            assert!(
+                !config.fields.is_empty(),
+                "Entity {} has no fields",
+                config.set_name
+            );
+            assert!(
+                config.annotations.is_some(),
+                "Entity {} has no annotations",
+                config.set_name
+            );
         }
-
-        let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 }

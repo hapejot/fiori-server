@@ -12,6 +12,24 @@ pub struct FieldDef {
     pub immutable: bool,
     /// Semantic Object fuer Intent-Based Navigation (z.B. "Products").
     pub semantic_object: Option<&'static str>,
+    /// Name einer Werteliste (z.B. "EdmTypes") – erzeugt Common.ValueList
+    /// mit CollectionPath="FieldValueListItems", Out=Code, Display=Description.
+    pub value_source: Option<&'static str>,
+    /// Flexible ValueList-Definition – überschreibt value_source wenn gesetzt.
+    /// Erlaubt beliebige CollectionPath, Key- und Display-Felder.
+    pub value_list: Option<&'static ValueListDef>,
+}
+
+/// Flexible ValueList-Konfiguration fuer Custom-Wertehilfen.
+pub struct ValueListDef {
+    /// OData-EntitySet (z.B. "FieldValueLists", "EntityConfigs")
+    pub collection_path: &'static str,
+    /// Feld im Ziel-EntitySet, das als Out-Parameter zurueckgegeben wird
+    pub key_property: &'static str,
+    /// Optionales Display-Only-Feld
+    pub display_property: Option<&'static str>,
+    /// true → Dropdown (Common.ValueListWithFixedValues), false → Dialog
+    pub fixed_values: bool,
 }
 
 /// LineItem-Referenz mit Annotation-spezifischen Attributen.
@@ -33,6 +51,9 @@ pub struct NavigationPropertyDef {
     pub target_type: &'static str,
     /// true fuer 1:n Kompositionen (erzeugt Collection-Typ)
     pub is_collection: bool,
+    /// Fremdschluessel-Feld auf dem Kind (bei 1:n) bzw. auf this (bei 1:1).
+    /// Wenn None, wird der Schluesselname des Parents verwendet.
+    pub foreign_key: Option<&'static str>,
 }
 
 /// DataPoint fuer den Object-Page-Header.
@@ -371,6 +392,8 @@ pub fn build_annotations_xml(
 pub fn build_capabilities_annotations(
     entity_set_name: &str,
     entity_type_name: &str,
+    key_field: &str,
+    title_field: Option<&str>,
     fields: &[FieldDef],
     is_draft_root: bool,
 ) -> String {
@@ -430,13 +453,95 @@ pub fn build_capabilities_annotations(
             "<Annotation Term=\"Common.Label\" String=\"{}\"/>",
             f.label
         ));
+        if f.edm_type == "Edm.Guid" {
+            x.push_str("<Annotation Term=\"UI.Hidden\" Bool=\"true\"/>");
+        }
         if f.immutable {
             x.push_str("<Annotation Term=\"Org.OData.Core.V1.Immutable\" Bool=\"true\"/>");
+        }
+        // Common.Text auf dem Schluesselfeld → zeigt title_field statt der ID
+        if f.name == key_field {
+            if let Some(tf) = title_field {
+                if tf != key_field {
+                    x.push_str(&format!(
+                        "<Annotation Term=\"Common.Text\" Path=\"{}\"/>",
+                        tf
+                    ));
+                    x.push_str("<Annotation Term=\"UI.TextArrangement\" EnumMember=\"UI.TextArrangementType/TextOnly\"/>");
+                }
+            }
+        }
+        // Flexible ValueList (takes precedence) or classic value_source
+        if let Some(vl) = f.value_list {
+            emit_value_list_annotation(&mut x, f.name, vl, None);
+        } else if let Some(vs) = f.value_source {
+            // Classic: Common.ValueList → zeigt auf FieldValueListItems
+            // gefiltert nach ListID (UUID der FieldValueList, direkt in value_source)
+            let classic_vl = ValueListDef {
+                collection_path: "FieldValueListItems",
+                key_property: "Code",
+                display_property: Some("Description"),
+                fixed_values: true,
+            };
+            emit_value_list_annotation(&mut x, f.name, &classic_vl, Some(vs));
         }
         x.push_str("</Annotations>");
     }
 
     x
+}
+
+/// Erzeugt Common.ValueList-Annotation aus einer ValueListDef.
+/// Bei `list_id_filter` wird ein ValueListParameterConstant auf ListID gesetzt,
+/// um nur Items der angegebenen FieldValueList anzuzeigen.
+fn emit_value_list_annotation(x: &mut String, local_property: &str, vl: &ValueListDef, list_id_filter: Option<&str>) {
+    x.push_str("<Annotation Term=\"Common.ValueList\">");
+    x.push_str("<Record Type=\"Common.ValueListType\">");
+    x.push_str(&format!(
+        "<PropertyValue Property=\"CollectionPath\" String=\"{}\"/>",
+        vl.collection_path
+    ));
+    x.push_str("<PropertyValue Property=\"Parameters\">");
+    x.push_str("<Collection>");
+    // Out-Parameter: key_property → lokale Property
+    x.push_str("<Record Type=\"Common.ValueListParameterOut\">");
+    x.push_str(&format!(
+        "<PropertyValue Property=\"LocalDataProperty\" PropertyPath=\"{}\"/>",
+        local_property
+    ));
+    x.push_str(&format!(
+        "<PropertyValue Property=\"ValueListProperty\" String=\"{}\"/>",
+        vl.key_property
+    ));
+    x.push_str("</Record>");
+    // Optional: Display-Only
+    if let Some(dp) = vl.display_property {
+        x.push_str("<Record Type=\"Common.ValueListParameterDisplayOnly\">");
+        x.push_str(&format!(
+            "<PropertyValue Property=\"ValueListProperty\" String=\"{}\"/>",
+            dp
+        ));
+        x.push_str("</Record>");
+    }
+    // Constant filter: restrict to items of the specified list (by ListID UUID)
+    if let Some(list_id) = list_id_filter {
+        x.push_str("<Record Type=\"Common.ValueListParameterConstant\">");
+        x.push_str(&format!(
+            "<PropertyValue Property=\"ValueListProperty\" String=\"ListID\"/>",
+        ));
+        x.push_str(&format!(
+            "<PropertyValue Property=\"Constant\" String=\"{}\"/>",
+            list_id
+        ));
+        x.push_str("</Record>");
+    }
+    x.push_str("</Collection>");
+    x.push_str("</PropertyValue>");
+    x.push_str("</Record>");
+    x.push_str("</Annotation>");
+    if vl.fixed_values {
+        x.push_str("<Annotation Term=\"Common.ValueListWithFixedValues\" Bool=\"true\"/>");
+    }
 }
 
 /// Erzeugt das EntityType-XML aus Typ-Name, Schluesselfeld und Property-Definitionen.
@@ -574,7 +679,7 @@ mod tests {
                 precision: None,
                 scale: None,
                 immutable: true,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "ProductName",
@@ -584,7 +689,7 @@ mod tests {
                 precision: None,
                 scale: None,
                 immutable: false,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "Price",
@@ -594,7 +699,7 @@ mod tests {
                 precision: Some(15),
                 scale: Some(2),
                 immutable: false,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
         ]
     }
@@ -678,8 +783,7 @@ mod tests {
                 importance: None,
                 criticality_path: None,
                 navigation_path: None,
-                semantic_object: Some("Customers"),
-            }],
+                semantic_object: Some("Customers")}],
             header_info: HeaderInfoDef {
                 type_name: "T", type_name_plural: "Ts",
                 title_path: "X", description_path: "Y",
@@ -919,8 +1023,7 @@ mod tests {
             precision: None,
             scale: None,
             immutable: false,
-            semantic_object: Some("Customers"),
-        }];
+            semantic_object: Some("Customers"), value_source: None, value_list: None,        }];
         let def = AnnotationsDef {
             selection_fields: &[],
             line_item: &[],
@@ -954,8 +1057,7 @@ mod tests {
             precision: None,
             scale: None,
             immutable: false,
-            semantic_object: Some("Customers"),
-        }];
+            semantic_object: Some("Customers"), value_source: None, value_list: None,        }];
         let def = AnnotationsDef {
             selection_fields: &[],
             line_item: &[],
@@ -987,7 +1089,7 @@ mod tests {
 
     #[test]
     fn capabilities_draft_root() {
-        let xml = build_capabilities_annotations("Products", "Product", &simple_fields(), true);
+        let xml = build_capabilities_annotations("Products", "Product", "ProductID", Some("ProductName"), &simple_fields(), true);
         assert!(xml.contains("Annotations Target=\"ProductsService.EntityContainer/Products\""));
         assert!(xml.contains("Org.OData.Capabilities.V1.UpdateRestrictions"));
         assert!(xml.contains("Property=\"Updatable\" Bool=\"true\""));
@@ -1001,7 +1103,7 @@ mod tests {
 
     #[test]
     fn capabilities_draft_node() {
-        let xml = build_capabilities_annotations("OrderItems", "OrderItem", &simple_fields(), false);
+        let xml = build_capabilities_annotations("OrderItems", "OrderItem", "ProductID", None, &simple_fields(), false);
         assert!(xml.contains("Annotations Target=\"ProductsService.EntityContainer/OrderItems\""));
         assert!(xml.contains("Annotation Term=\"Common.DraftNode\""));
         assert!(xml.contains("Record Type=\"Common.DraftNodeType\""));
@@ -1013,7 +1115,7 @@ mod tests {
 
     #[test]
     fn capabilities_per_property_labels() {
-        let xml = build_capabilities_annotations("Products", "Product", &simple_fields(), true);
+        let xml = build_capabilities_annotations("Products", "Product", "ProductID", Some("ProductName"), &simple_fields(), true);
         assert!(xml.contains("Annotations Target=\"ProductsService.Product/ProductID\""));
         assert!(xml.contains("Common.Label\" String=\"Product Nr.\""));
         assert!(xml.contains("Annotations Target=\"ProductsService.Product/ProductName\""));
@@ -1024,7 +1126,7 @@ mod tests {
 
     #[test]
     fn capabilities_immutable_annotation() {
-        let xml = build_capabilities_annotations("Products", "Product", &simple_fields(), true);
+        let xml = build_capabilities_annotations("Products", "Product", "ProductID", Some("ProductName"), &simple_fields(), true);
         // ProductID is immutable
         let product_id_section = &xml[xml.find("Product/ProductID").unwrap()..];
         let section_end = product_id_section.find("</Annotations>").unwrap();
@@ -1131,6 +1233,7 @@ mod tests {
             name: "Items",
             target_type: "OrderItem",
             is_collection: true,
+            foreign_key: None,
         }];
         append_navigation_properties(&mut xml, &navs);
         assert!(xml.contains("NavigationProperty Name=\"Items\" Type=\"Collection(ProductsService.OrderItem)\""));
@@ -1143,6 +1246,7 @@ mod tests {
             name: "Customer",
             target_type: "Customer",
             is_collection: false,
+            foreign_key: None,
         }];
         append_navigation_properties(&mut xml, &navs);
         assert!(xml.contains("NavigationProperty Name=\"Customer\" Type=\"ProductsService.Customer\""));
@@ -1157,11 +1261,13 @@ mod tests {
                 name: "Items",
                 target_type: "OrderItem",
                 is_collection: true,
+                foreign_key: None,
             },
             NavigationPropertyDef {
                 name: "Customer",
                 target_type: "Customer",
                 is_collection: false,
+                foreign_key: None,
             },
         ];
         append_navigation_properties(&mut xml, &navs);
@@ -1233,8 +1339,7 @@ mod tests {
                 importance: None,
                 criticality_path: None,
                 navigation_path: Some("Customer"),
-                semantic_object: Some("Customers"),
-            }],
+                semantic_object: Some("Customers")}],
             header_info: HeaderInfoDef {
                 type_name: "T", type_name_plural: "Ts",
                 title_path: "X", description_path: "Y",
@@ -1297,12 +1402,12 @@ mod tests {
             FieldDef {
                 name: "Name", label: "Name", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "Price", label: "Price", edm_type: "Edm.Decimal",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None,
             },
         ];
         let def = AnnotationsDef {
@@ -1446,12 +1551,11 @@ mod tests {
             FieldDef {
                 name: "CustomerID", label: "Customer", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: Some("Customers"),
-            },
+                immutable: false, semantic_object: Some("Customers"), value_source: None, value_list: None,            },
             FieldDef {
                 name: "ProductID", label: "Product", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: Some("Products"),
+                immutable: false, semantic_object: Some("Products"), value_source: None, value_list: None,
             },
         ];
         let def = AnnotationsDef {
@@ -1478,17 +1582,17 @@ mod tests {
             FieldDef {
                 name: "Name", label: "Name", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None,
             },
         ];
-        let xml = build_capabilities_annotations("Tests", "Test", &fields, true);
+        let xml = build_capabilities_annotations("Tests", "Test", "Name", None, &fields, true);
         assert!(!xml.contains("Immutable"));
         assert!(xml.contains("Common.Label\" String=\"Name\""));
     }
 
     #[test]
     fn capabilities_empty_fields() {
-        let xml = build_capabilities_annotations("Tests", "Test", &[], true);
+        let xml = build_capabilities_annotations("Tests", "Test", "ID", None, &[], true);
         // Should still have EntitySet-level annotations
         assert!(xml.contains("Target=\"ProductsService.EntityContainer/Tests\""));
         assert!(xml.contains("Common.DraftRoot"));
@@ -1502,20 +1606,20 @@ mod tests {
             FieldDef {
                 name: "ID", label: "ID", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: true, semantic_object: None,
+                immutable: true, semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "Code", label: "Code", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: true, semantic_object: None,
+                immutable: true, semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "Name", label: "Name", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None,
             },
         ];
-        let xml = build_capabilities_annotations("Tests", "Test", &fields, true);
+        let xml = build_capabilities_annotations("Tests", "Test", "ID", None, &fields, true);
         // Count occurrences of Immutable
         let count = xml.matches("Org.OData.Core.V1.Immutable").count();
         assert_eq!(count, 2, "Expected exactly 2 immutable annotations");
@@ -1533,7 +1637,7 @@ mod tests {
             precision: None,
             scale: None,
             immutable: false,
-            semantic_object: None,
+            semantic_object: None, value_source: None, value_list: None,
         }];
         let xml = build_entity_type_xml("Simple", "ID", &fields);
         assert!(xml.contains("Name=\"Description\""));
@@ -1553,12 +1657,12 @@ mod tests {
             FieldDef {
                 name: "OrderID", label: "Order", edm_type: "Edm.Int32",
                 max_length: None, precision: None, scale: None,
-                immutable: true, semantic_object: None,
+                immutable: true, semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "Description", label: "Desc", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None,
             },
         ];
         let xml = build_entity_type_xml("Order", "OrderID", &fields);
@@ -1582,7 +1686,7 @@ mod tests {
             precision: None,
             scale: None,
             immutable: false,
-            semantic_object: None,
+            semantic_object: None, value_source: None, value_list: None,
         }];
         let xml = build_entity_type_xml("Test", "ID", &fields);
         let desc_section = &xml[xml.find("Name=\"Description\"").unwrap()..];
@@ -1619,22 +1723,21 @@ mod tests {
             FieldDef {
                 name: "OrderID", label: "Order Nr.", edm_type: "Edm.String",
                 max_length: Some(10), precision: None, scale: None,
-                immutable: true, semantic_object: None,
+                immutable: true, semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "CustomerID", label: "Customer", edm_type: "Edm.String",
                 max_length: Some(10), precision: None, scale: None,
-                immutable: false, semantic_object: Some("Customers"),
-            },
+                immutable: false, semantic_object: Some("Customers"), value_source: None, value_list: None,            },
             FieldDef {
                 name: "TotalAmount", label: "Total", edm_type: "Edm.Decimal",
                 max_length: None, precision: Some(15), scale: Some(2),
-                immutable: false, semantic_object: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "Status", label: "Status", edm_type: "Edm.String",
                 max_length: Some(20), precision: None, scale: None,
-                immutable: false, semantic_object: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None,
             },
         ];
         let def = AnnotationsDef {
@@ -1648,8 +1751,7 @@ mod tests {
                 LineItemField {
                     name: "CustomerID", label: None,
                     importance: None, criticality_path: None,
-                    navigation_path: None, semantic_object: Some("Customers"),
-                },
+                    navigation_path: None, semantic_object: Some("Customers"),                },
                 LineItemField {
                     name: "Status", label: None,
                     importance: Some("Medium"),
@@ -1715,5 +1817,115 @@ mod tests {
         // Property-level semantic object annotation
         assert!(xml.contains("Target=\"ProductsService.Order/CustomerID\""));
         assert!(xml.contains("Common.SemanticObject\" String=\"Customers\""));
+    }
+
+    #[test]
+    fn capabilities_value_source_emits_value_list() {
+        // value_source now stores the UUID of the FieldValueList directly
+        let list_uuid = "ea102ff5-5777-5155-b0c3-8dd507435f93";
+        let fields = vec![
+            FieldDef {
+                name: "EdmType", label: "Datentyp", edm_type: "Edm.String",
+                max_length: Some(30), precision: None, scale: None,
+                immutable: false, semantic_object: None, value_source: Some(list_uuid), value_list: None,
+            },
+            FieldDef {
+                name: "Name", label: "Name", edm_type: "Edm.String",
+                max_length: None, precision: None, scale: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None,
+            },
+        ];
+        let xml = build_capabilities_annotations("Tests", "Test", "EdmType", None, &fields, true);
+
+        // ValueList annotation on EdmType
+        assert!(xml.contains("Common.ValueList"));
+        assert!(xml.contains("CollectionPath\" String=\"FieldValueListItems\""));
+        assert!(xml.contains("LocalDataProperty\" PropertyPath=\"EdmType\""));
+        assert!(xml.contains("ValueListProperty\" String=\"Code\""));
+        assert!(xml.contains("ValueListProperty\" String=\"Description\""));
+        assert!(xml.contains("Common.ValueListWithFixedValues\" Bool=\"true\""));
+        // ListID should appear as a ValueListParameterConstant with the UUID
+        assert!(xml.contains("Common.ValueListParameterConstant"));
+        assert!(xml.contains("ValueListProperty\" String=\"ListID\""));
+        assert!(xml.contains(&format!("Constant\" String=\"{}\"", list_uuid)));
+
+        // No ValueList on Name (value_source is None)
+        let name_section_start = xml.find("Target=\"ProductsService.Test/Name\"").unwrap();
+        let name_section = &xml[name_section_start..];
+        let name_section_end = name_section.find("</Annotations>").unwrap();
+        let name_section = &name_section[..name_section_end];
+        assert!(!name_section.contains("Common.ValueList"));
+    }
+
+    #[test]
+    fn value_list_def_emits_custom_collection() {
+        static VL: ValueListDef = ValueListDef {
+            collection_path: "FieldValueLists",
+            key_property: "ListName",
+            display_property: Some("Description"),
+            fixed_values: false,
+        };
+        let fields = vec![
+            FieldDef {
+                name: "ValueSource", label: "Werteliste", edm_type: "Edm.String",
+                max_length: Some(40), precision: None, scale: None,
+                immutable: false, semantic_object: None, value_source: None,
+                value_list: Some(&VL),
+            },
+        ];
+        let xml = build_capabilities_annotations("Tests", "Test", "ValueSource", None, &fields, true);
+
+        assert!(xml.contains("Common.ValueList"));
+        assert!(xml.contains("CollectionPath\" String=\"FieldValueLists\""));
+        assert!(xml.contains("LocalDataProperty\" PropertyPath=\"ValueSource\""));
+        assert!(xml.contains("ValueListProperty\" String=\"ListName\""));
+        assert!(xml.contains("ValueListProperty\" String=\"Description\""));
+        // fixed_values=false → no ValueListWithFixedValues annotation
+        assert!(!xml.contains("Common.ValueListWithFixedValues"));
+    }
+
+    #[test]
+    fn capabilities_common_text_on_key_field() {
+        let xml = build_capabilities_annotations("Products", "Product", "ProductID", Some("ProductName"), &simple_fields(), true);
+        // Key field should have Common.Text pointing to title_field
+        let key_section_start = xml.find("Product/ProductID").unwrap();
+        let key_section = &xml[key_section_start..];
+        let key_section_end = key_section.find("</Annotations>").unwrap();
+        let key_section = &key_section[..key_section_end];
+        assert!(key_section.contains("Common.Text\" Path=\"ProductName\""));
+        assert!(key_section.contains("UI.TextArrangement\" EnumMember=\"UI.TextArrangementType/TextOnly\""));
+
+        // Non-key field should NOT have Common.Text
+        let name_section_start = xml.find("Product/ProductName").unwrap();
+        let name_section = &xml[name_section_start..];
+        let name_section_end = name_section.find("</Annotations>").unwrap();
+        let name_section = &name_section[..name_section_end];
+        assert!(!name_section.contains("Common.Text"));
+    }
+
+    #[test]
+    fn capabilities_no_common_text_when_key_equals_title() {
+        // When key_field == title_field, no Common.Text should be emitted
+        let fields = vec![
+            FieldDef {
+                name: "SetName", label: "EntitySet", edm_type: "Edm.String",
+                max_length: Some(40), precision: None, scale: None,
+                immutable: true, semantic_object: None, value_source: None, value_list: None,
+            },
+        ];
+        let xml = build_capabilities_annotations("EntityConfigs", "EntityConfig", "SetName", Some("SetName"), &fields, true);
+        let key_section_start = xml.find("EntityConfig/SetName").unwrap();
+        let key_section = &xml[key_section_start..];
+        let key_section_end = key_section.find("</Annotations>").unwrap();
+        let key_section = &key_section[..key_section_end];
+        assert!(!key_section.contains("Common.Text"));
+        assert!(!key_section.contains("UI.TextArrangement"));
+    }
+
+    #[test]
+    fn capabilities_no_common_text_when_title_none() {
+        let xml = build_capabilities_annotations("Tests", "Test", "ID", None, &simple_fields(), true);
+        assert!(!xml.contains("Common.Text"));
+        assert!(!xml.contains("UI.TextArrangement"));
     }
 }

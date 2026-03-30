@@ -275,14 +275,18 @@ pub fn query_collection_from(entity: &dyn ODataEntity, data: &[Value], qs: &Hash
                 .into_iter()
                 .map(|r| {
                     if let Some(obj) = r.as_object() {
-                        let filtered: serde_json::Map<String, Value> = obj
-                            .iter()
-                            .filter(|(k, _)| {
-                                fields.contains(&k.as_str())
-                                    || expanded_names.iter().any(|n| n == k.as_str())
-                            })
-                            .map(|(k, v)| (k.clone(), v.clone()))
-                            .collect();
+                        let mut filtered = serde_json::Map::new();
+                        // Include requested fields, defaulting to null if absent
+                        for &f in &fields {
+                            let val = obj.get(f).cloned().unwrap_or(Value::Null);
+                            filtered.insert(f.to_string(), val);
+                        }
+                        // Keep expanded nav properties
+                        for nav in &expanded_names {
+                            if let Some(v) = obj.get(nav.as_str()) {
+                                filtered.insert(nav.clone(), v.clone());
+                            }
+                        }
                         Value::Object(filtered)
                     } else {
                         r
@@ -306,4 +310,197 @@ pub fn query_collection_from(entity: &dyn ODataEntity, data: &[Value], qs: &Hash
     }
 
     body
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::annotations::*;
+    use std::collections::HashMap;
+
+    #[derive(Debug)]
+    struct TestEntity;
+    impl ODataEntity for TestEntity {
+        fn set_name(&self) -> &'static str { "Tests" }
+        fn key_field(&self) -> &'static str { "ID" }
+        fn type_name(&self) -> &'static str { "Test" }
+        fn mock_data(&self) -> Vec<Value> { vec![] }
+        fn entity_set(&self) -> String { String::new() }
+        fn fields_def(&self) -> Option<&'static [FieldDef]> {
+            static FIELDS: &[FieldDef] = &[
+                FieldDef { name: "ID", label: "ID", edm_type: "Edm.String", max_length: Some(10), precision: None, scale: None, immutable: true, semantic_object: None, value_source: None, value_list: None },
+                FieldDef { name: "Name", label: "Name", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None },
+                FieldDef { name: "Extra", label: "Extra", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None },
+            ];
+            Some(FIELDS)
+        }
+    }
+
+    fn make_qs(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
+    fn empty_ds() -> HashMap<String, Vec<Value>> { HashMap::new() }
+
+    // ── $select tests ───────────────────────────────────────────
+
+    #[test]
+    fn select_returns_only_requested_fields() {
+        let entity = TestEntity;
+        let data = vec![json!({"ID": "1", "Name": "Alice", "Extra": "x"})];
+        let qs = make_qs(&[("$select", "ID,Name")]);
+        let result = query_collection_from(&entity, &data, &qs, &[], &empty_ds());
+        let row = &result["value"][0];
+        assert_eq!(row["ID"], "1");
+        assert_eq!(row["Name"], "Alice");
+        assert!(row.get("Extra").is_none());
+    }
+
+    #[test]
+    fn select_includes_missing_fields_as_null() {
+        let entity = TestEntity;
+        // Record that does NOT have the "Extra" key at all
+        let data = vec![json!({"ID": "1", "Name": "Alice"})];
+        let qs = make_qs(&[("$select", "ID,Name,Extra")]);
+        let result = query_collection_from(&entity, &data, &qs, &[], &empty_ds());
+        let row = &result["value"][0];
+        assert_eq!(row["ID"], "1");
+        assert_eq!(row["Name"], "Alice");
+        // Extra must be present as null, not absent
+        assert!(row.get("Extra").is_some(), "missing field should be included");
+        assert!(row["Extra"].is_null(), "missing field should be null");
+    }
+
+    #[test]
+    fn select_preserves_expanded_nav_properties() {
+        let entity = TestEntity;
+        let mut data = vec![json!({"ID": "1", "Name": "Alice", "Children": [{"x": 1}]})];
+        let qs = make_qs(&[("$select", "ID"), ("$expand", "Children")]);
+        let result = query_collection_from(&entity, &data, &qs, &[], &empty_ds());
+        let row = &result["value"][0];
+        assert_eq!(row["ID"], "1");
+        assert!(row.get("Children").is_some(), "expanded nav should be kept");
+        assert!(row.get("Name").is_none(), "non-selected field should be removed");
+    }
+
+    #[test]
+    fn select_empty_string_returns_all_fields() {
+        let entity = TestEntity;
+        let data = vec![json!({"ID": "1", "Name": "Alice", "Extra": "x"})];
+        let qs = make_qs(&[("$select", "")]);
+        let result = query_collection_from(&entity, &data, &qs, &[], &empty_ds());
+        let row = &result["value"][0];
+        assert_eq!(row["ID"], "1");
+        assert_eq!(row["Name"], "Alice");
+        assert_eq!(row["Extra"], "x");
+    }
+
+    #[test]
+    fn select_without_param_returns_all_fields() {
+        let entity = TestEntity;
+        let data = vec![json!({"ID": "1", "Name": "Alice", "Extra": "x"})];
+        let qs = make_qs(&[]);
+        let result = query_collection_from(&entity, &data, &qs, &[], &empty_ds());
+        let row = &result["value"][0];
+        assert_eq!(row["ID"], "1");
+        assert_eq!(row["Name"], "Alice");
+        assert_eq!(row["Extra"], "x");
+    }
+
+    // ── parse_expand_names tests ────────────────────────────────
+
+    #[test]
+    fn parse_expand_simple() {
+        assert_eq!(parse_expand_names("Items,Details"), vec!["Items", "Details"]);
+    }
+
+    #[test]
+    fn parse_expand_with_nested_options() {
+        let names = parse_expand_names("DraftAdministrativeData($select=DraftUUID,InProcessByUser),Items");
+        assert_eq!(names, vec!["DraftAdministrativeData", "Items"]);
+    }
+
+    #[test]
+    fn parse_expand_empty() {
+        assert!(parse_expand_names("").is_empty());
+    }
+
+    // ── parse_query_string tests ────────────────────────────────
+
+    #[test]
+    fn parse_query_string_basic() {
+        let qs = parse_query_string("$filter=Name eq 'X'&$top=10");
+        assert_eq!(qs.get("$filter").unwrap(), "Name eq 'X'");
+        assert_eq!(qs.get("$top").unwrap(), "10");
+    }
+
+    #[test]
+    fn parse_query_string_empty() {
+        assert!(parse_query_string("").is_empty());
+    }
+
+    // ── match_filter tests ──────────────────────────────────────
+
+    #[test]
+    fn filter_eq_string() {
+        let rec = json!({"Name": "Alice"});
+        assert!(match_filter(&rec, "Name eq 'Alice'"));
+        assert!(!match_filter(&rec, "Name eq 'Bob'"));
+    }
+
+    #[test]
+    fn filter_ne() {
+        let rec = json!({"Status": "A"});
+        assert!(match_filter(&rec, "Status ne 'B'"));
+        assert!(!match_filter(&rec, "Status ne 'A'"));
+    }
+
+    #[test]
+    fn filter_numeric_comparison() {
+        let rec = json!({"Price": 100});
+        assert!(match_filter(&rec, "Price gt 50"));
+        assert!(!match_filter(&rec, "Price lt 50"));
+        assert!(match_filter(&rec, "Price ge 100"));
+        assert!(match_filter(&rec, "Price le 100"));
+    }
+
+    #[test]
+    fn filter_and_combination() {
+        let rec = json!({"Name": "Alice", "Status": "A"});
+        assert!(match_filter(&rec, "Name eq 'Alice' and Status eq 'A'"));
+        assert!(!match_filter(&rec, "Name eq 'Alice' and Status eq 'B'"));
+    }
+
+    #[test]
+    fn filter_contains_passes_through() {
+        // contains() is not parsed by the regex-based filter — it falls through as true
+        let rec = json!({"Name": "Alice Wonder"});
+        assert!(match_filter(&rec, "contains(Name,'Wonder')"));
+        assert!(match_filter(&rec, "contains(Name,'Bob')"));
+    }
+
+    #[test]
+    fn filter_boolean_eq() {
+        let rec = json!({"IsActive": true});
+        assert!(match_filter(&rec, "IsActive eq true"));
+        assert!(!match_filter(&rec, "IsActive eq false"));
+    }
+
+    // ── compare_values tests ────────────────────────────────────
+
+    #[test]
+    fn compare_numbers() {
+        assert_eq!(compare_values(&json!(1), &json!(2)), std::cmp::Ordering::Less);
+        assert_eq!(compare_values(&json!(3), &json!(3)), std::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn compare_strings() {
+        assert_eq!(compare_values(&json!("a"), &json!("b")), std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn compare_booleans() {
+        assert_eq!(compare_values(&json!(false), &json!(true)), std::cmp::Ordering::Less);
+    }
 }

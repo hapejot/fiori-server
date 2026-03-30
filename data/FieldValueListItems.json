@@ -1,0 +1,58 @@
+[
+  {
+    "ID": "77da0a0c-8524-5318-a388-8081a4fc53be",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
+    "Code": "Edm.String",
+    "Description": "Zeichenkette",
+    "SortOrder": 0
+  },
+  {
+    "ID": "7cf2ff87-1c3d-502a-bd2f-740bbbedbf56",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
+    "Code": "Edm.Int32",
+    "Description": "Ganzzahl",
+    "SortOrder": 1
+  },
+  {
+    "ID": "d7d1cb37-9b7c-5d59-9f60-6cc36421658c",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
+    "Code": "Edm.Int64",
+    "Description": "Lange Ganzzahl",
+    "SortOrder": 2
+  },
+  {
+    "ID": "78caa83b-3ec4-5499-b1e2-f9da15979512",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
+    "Code": "Edm.Decimal",
+    "Description": "Dezimalzahl",
+    "SortOrder": 3
+  },
+  {
+    "ID": "a6030e6b-b847-547a-8744-0969c73801c0",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
+    "Code": "Edm.Boolean",
+    "Description": "Wahrheitswert",
+    "SortOrder": 4
+  },
+  {
+    "ID": "22c2fa10-edc0-5764-8a81-7fe12443be1a",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
+    "Code": "Edm.DateTimeOffset",
+    "Description": "Datum und Uhrzeit",
+    "SortOrder": 5
+  },
+  {
+    "ID": "ee84b175-b6a6-5ff2-8927-bc50082c59d3",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
+    "Code": "Edm.Date",
+    "Description": "Datum",
+    "SortOrder": 6
+  },
+  {
+    "ID": "4b4397ac-f66e-5a47-b4e8-7db2394fe8ae",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
+    "Code": "Edm.Guid",
+    "Description": "GUID",
+    "SortOrder": 7
+  }
+]

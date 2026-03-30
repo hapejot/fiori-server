@@ -28,12 +28,12 @@ impl ODataEntity for EntityTableFacetEntity {
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
-            FieldDef { name: "TableFacetID",       label: "TableFacet-ID",      edm_type: "Edm.String", max_length: Some(80),  precision: None, scale: None, immutable: true,  semantic_object: None },
-            FieldDef { name: "SetName",            label: "EntitySet",           edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: true,  semantic_object: None },
-            FieldDef { name: "FacetLabel",         label: "Label",              edm_type: "Edm.String", max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "FacetId",            label: "Facet-ID",           edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "NavigationProperty", label: "Navigation Property", edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "SortOrder",          label: "Reihenfolge",        edm_type: "Edm.Int32",  max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None },
+            FieldDef { name: "TableFacetID",       label: "TableFacet-ID",      edm_type: "Edm.String", max_length: Some(80),  precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "SetName",            label: "EntitySet",           edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "FacetLabel",         label: "Label",              edm_type: "Edm.String", max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "FacetId",            label: "Facet-ID",           edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "NavigationProperty", label: "Navigation Property", edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "SortOrder",          label: "Reihenfolge",        edm_type: "Edm.Int32",  max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
         ];
         Some(FIELDS)
     }

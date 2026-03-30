@@ -3,9 +3,21 @@ use std::fmt::Debug;
 
 use serde_json::{json, Value};
 use tracing::info;
+use uuid::Uuid;
 
 use crate::annotations::*;
 use crate::BASE_PATH;
+
+/// Fester Namespace-UUID fuer deterministische Value-List-IDs (UUID v5).
+const VALUE_LIST_NS: Uuid = Uuid::from_bytes([
+    0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1,
+    0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
+]);
+
+/// Erzeugt eine deterministische UUID v5 fuer eine Werteliste anhand ihres Namens.
+pub fn value_list_id(list_name: &str) -> String {
+    Uuid::new_v5(&VALUE_LIST_NS, list_name.as_bytes()).to_string()
+}
 
 /// Basisklasse (Trait) fuer eine OData-Entitaet.
 ///
@@ -34,6 +46,12 @@ pub trait ODataEntity: Sync + Debug {
     /// Eltern-EntitySet bei Kompositionen (z.B. "Orders" fuer OrderItems).
     fn parent_set_name(&self) -> Option<&'static str> {
         None
+    }
+    /// Primaeres Textfeld, das anstelle des Schluessels angezeigt wird.
+    /// Default: HeaderInfo.title_path (falls vorhanden).
+    /// Erzeugt Common.Text + UI.TextArrangement auf dem Schluesselfeld.
+    fn title_field(&self) -> Option<&'static str> {
+        self.annotations_def().map(|d| d.header_info.title_path)
     }
     /// EDMX EntityType-XML – wird automatisch aus fields_def() erzeugt
     /// oder kann manuell ueberschrieben werden.
@@ -83,6 +101,8 @@ pub trait ODataEntity: Sync + Debug {
             xml.push_str(&build_capabilities_annotations(
                 self.set_name(),
                 self.type_name(),
+                self.key_field(),
+                self.title_field(),
                 fields,
                 is_draft_root,
             ));

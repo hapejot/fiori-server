@@ -1,7 +1,9 @@
+use std::sync::LazyLock;
+
 use serde_json::{json, Value};
 
 use crate::annotations::*;
-use crate::entity::ODataEntity;
+use crate::entity::{value_list_id, ODataEntity};
 use crate::NAMESPACE;
 
 #[derive(Debug)]
@@ -27,25 +29,30 @@ impl ODataEntity for EntityFieldEntity {
     }
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
-        static FIELDS: &[FieldDef] = &[
-            FieldDef { name: "FieldID",              label: "Feld-ID",            edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: true,  semantic_object: None },
-            FieldDef { name: "SetName",              label: "EntitySet",           edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: true,  semantic_object: None },
-            FieldDef { name: "FieldName",            label: "Feldname",            edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "Label",                label: "Bezeichnung",         edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "EdmType",              label: "Datentyp",            edm_type: "Edm.String",  max_length: Some(30),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "MaxLength",            label: "Max. Laenge",         edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "Precision",            label: "Praezision",          edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "Scale",                label: "Dezimalstellen",      edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "IsImmutable",          label: "Unveraenderlich",     edm_type: "Edm.Boolean", max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "SemanticObject",       label: "Semantic Object",     edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "SortOrder",            label: "Reihenfolge",         edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "ShowInLineItem",       label: "In Liste",            edm_type: "Edm.Boolean", max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "LineItemImportance",   label: "Wichtigkeit",         edm_type: "Edm.String",  max_length: Some(10),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "LineItemLabel",        label: "Listen-Label",        edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "LineItemCriticalityPath", label: "Kritikalitaets-Pfad", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "LineItemSemanticObject", label: "Listen-Sem.Object", edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-        ];
-        Some(FIELDS)
+        static FIELDS: LazyLock<Vec<FieldDef>> = LazyLock::new(|| {
+            // value_source speichert die UUID der FieldValueList, nicht den Namen
+            let edm_types_id: &'static str = Box::leak(value_list_id("EdmTypes").into_boxed_str());
+            vec![
+            FieldDef { name: "FieldID",              label: "Feld-ID",            edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "SetName",              label: "EntitySet",           edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "FieldName",            label: "Feldname",            edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "Label",                label: "Bezeichnung",         edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "EdmType",              label: "Datentyp",            edm_type: "Edm.String",  max_length: Some(30),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: Some(edm_types_id) , value_list: None},
+            FieldDef { name: "MaxLength",            label: "Max. Laenge",         edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "Precision",            label: "Praezision",          edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "Scale",                label: "Dezimalstellen",      edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "IsImmutable",          label: "Unveraenderlich",     edm_type: "Edm.Boolean", max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "SemanticObject",       label: "Semantic Object",     edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "ValueSource",          label: "Werteliste",          edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: Some(&ValueListDef { collection_path: "FieldValueLists", key_property: "ID", display_property: Some("ListName"), fixed_values: false })},
+            FieldDef { name: "SortOrder",            label: "Reihenfolge",         edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "ShowInLineItem",       label: "In Liste",            edm_type: "Edm.Boolean", max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "LineItemImportance",   label: "Wichtigkeit",         edm_type: "Edm.String",  max_length: Some(10),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "LineItemLabel",        label: "Listen-Label",        edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "LineItemCriticalityPath", label: "Kritikalitaets-Pfad", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "LineItemSemanticObject", label: "Listen-Sem.Object", edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            ]
+        });
+        Some(FIELDS.as_slice())
     }
 
     fn entity_set(&self) -> String {
@@ -83,7 +90,7 @@ impl ODataEntity for EntityFieldEntity {
                 FacetSectionDef { label: "Listen-Konfiguration", id: "LineItemProps", field_group_qualifier: "LineItemProps", field_group_label: "LineItem" },
             ],
             field_groups: &[
-                FieldGroupDef { qualifier: "FieldProps",    fields: &["FieldID", "SetName", "FieldName", "Label", "EdmType", "MaxLength", "Precision", "Scale", "IsImmutable", "SemanticObject", "SortOrder"] },
+                FieldGroupDef { qualifier: "FieldProps",    fields: &["FieldID", "SetName", "FieldName", "Label", "EdmType", "MaxLength", "Precision", "Scale", "IsImmutable", "SemanticObject", "ValueSource", "SortOrder"] },
                 FieldGroupDef { qualifier: "LineItemProps", fields: &["ShowInLineItem", "LineItemImportance", "LineItemLabel", "LineItemCriticalityPath", "LineItemSemanticObject"] },
             ],
             table_facets: &[],

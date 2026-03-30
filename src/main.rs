@@ -27,7 +27,8 @@ use tower_http::trace::TraceLayer;
 use app_state::AppState;
 use entities::{
     EntityConfigEntity, EntityFacetEntity, EntityFieldEntity, EntityNavigationEntity,
-    EntityTableFacetEntity, OrderEntity, OrderItemEntity, ProductEntity,
+    EntityTableFacetEntity, FieldValueListEntity, FieldValueListItemEntity,
+    OrderEntity, OrderItemEntity, ProductEntity,
 };
 use handlers::*;
 use settings::Settings;
@@ -81,15 +82,10 @@ async fn main() {
     println!("  Druecke Ctrl+C zum Beenden\n");
 
     let data_dir = std::env::current_dir().unwrap_or_default().join("data");
-    let config_dir = std::env::current_dir()
-        .unwrap_or_default()
-        .join("config")
-        .join("entities");
 
-    // Zwei-Schritt-Laden: erst rohe Configs, daraus Meta-Daten generieren,
-    // dann generische Entitaeten erzeugen.
-    let raw_configs = entities::generic::load_raw_configs(&config_dir);
-    entities::meta::write_meta_data(&data_dir, &raw_configs);
+    // Meta-Tabellen im Data-Verzeichnis sind die einzige Quelle der Wahrheit.
+    // EntityConfigs rekonstruieren und daraus generische Entitaeten erzeugen.
+    let raw_configs = entities::meta::reconstruct_configs_from_data(&data_dir);
     let generic_entities = entities::generic::create_generic_entities(raw_configs);
 
     let mut builder = AppState::builder()
@@ -102,7 +98,9 @@ async fn main() {
         .entity(&EntityFieldEntity)
         .entity(&EntityFacetEntity)
         .entity(&EntityNavigationEntity)
-        .entity(&EntityTableFacetEntity);
+        .entity(&EntityTableFacetEntity)
+        .entity(&FieldValueListEntity)
+        .entity(&FieldValueListItemEntity);
     for ge in generic_entities {
         builder = builder.entity(ge);
     }
@@ -112,7 +110,7 @@ async fn main() {
 
     // Routen fuer jedes registrierte EntitySet dynamisch erzeugen
     let mut entity_routes = Router::new();
-    for entity in app_state.entities.iter() {
+    for entity in app_state.entities.read().unwrap().iter() {
         let set = entity.set_name();
         entity_routes = entity_routes
             .route(

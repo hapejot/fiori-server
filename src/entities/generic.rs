@@ -1,10 +1,7 @@
-use std::collections::HashMap;
-use std::fmt;
-use std::path::Path;
-
-use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
+use std::fmt;
 
 use crate::annotations::*;
 use crate::entity::ODataEntity;
@@ -45,6 +42,9 @@ pub struct EntityConfig {
     /// Kachel-Konfiguration fuer das FLP.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tile: Option<TileConfig>,
+    /// Benannte Wertelisten fuer Felder mit festen Werten.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub value_lists: Vec<FieldValueListConfig>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -72,6 +72,9 @@ pub struct FieldConfig {
     pub immutable: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub semantic_object: Option<String>,
+    /// Name einer Werteliste (z.B. "EdmTypes") fuer Fixed-Value-Dropdown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value_source: Option<String>,
 }
 
 fn default_edm_string() -> String {
@@ -176,6 +179,22 @@ pub struct TableFacetConfig {
     pub navigation_property: String,
 }
 
+/// Definiert eine benannte Werteliste mit festen Eintraegen.
+#[derive(Deserialize, Serialize, Clone)]
+pub struct FieldValueListConfig {
+    pub list_name: String,
+    #[serde(default)]
+    pub description: String,
+    pub entries: Vec<FieldValueListEntry>,
+}
+
+/// Ein einzelner Eintrag in einer Werteliste (Code + Beschreibung).
+#[derive(Deserialize, Serialize, Clone)]
+pub struct FieldValueListEntry {
+    pub code: String,
+    pub description: String,
+}
+
 // ── Konvertierung Config → static Annotation-Structs ────────────────────
 
 fn convert_field(f: &FieldConfig) -> FieldDef {
@@ -188,6 +207,8 @@ fn convert_field(f: &FieldConfig) -> FieldDef {
         scale: f.scale,
         immutable: f.immutable,
         semantic_object: leak_opt(&f.semantic_object),
+        value_source: leak_opt(&f.value_source),
+        value_list: None,
     }
 }
 
@@ -196,6 +217,7 @@ fn convert_nav_property(n: &NavPropertyConfig) -> NavigationPropertyDef {
         name: leak_str(&n.name),
         target_type: leak_str(&n.target_type),
         is_collection: n.is_collection,
+        foreign_key: n.foreign_key.as_deref().map(|s| leak_str(&s.to_string())),
     }
 }
 
@@ -418,10 +440,7 @@ impl ODataEntity for GenericEntity {
 
             if nav.is_collection {
                 // 1:n – foreign_key auf dem Kind verweist auf unseren Key
-                let fk = nav
-                    .foreign_key
-                    .as_deref()
-                    .unwrap_or(self.key_field);
+                let fk = nav.foreign_key.as_deref().unwrap_or(self.key_field);
                 let key_val = record
                     .get(self.key_field)
                     .and_then(|v| v.as_str())
@@ -437,10 +456,7 @@ impl ODataEntity for GenericEntity {
                 }
             } else {
                 // 1:1 – foreign_key ist das Feld auf diesem Record, das den Ziel-Key enthaelt
-                let fk = nav
-                    .foreign_key
-                    .as_deref()
-                    .unwrap_or(target.key_field());
+                let fk = nav.foreign_key.as_deref().unwrap_or(target.key_field());
                 let fk_val = record
                     .get(fk)
                     .and_then(|v| v.as_str())
@@ -459,68 +475,6 @@ impl ODataEntity for GenericEntity {
     }
 }
 
-// ── Laden aus Verzeichnis ───────────────────────────────────────────────
-
-/// Laedt alle Entity-Konfigurationen aus einem Verzeichnis als rohe Structs.
-pub fn load_raw_configs(config_dir: &Path) -> Vec<EntityConfig> {
-    let mut configs: Vec<EntityConfig> = Vec::new();
-
-    if !config_dir.is_dir() {
-        info!(
-            "Kein Entity-Config-Verzeichnis: {} – uebersprungen",
-            config_dir.display()
-        );
-        return configs;
-    }
-
-    let mut entries: Vec<_> = match std::fs::read_dir(config_dir) {
-        Ok(rd) => rd.filter_map(|e| e.ok()).collect(),
-        Err(e) => {
-            eprintln!(
-                "  WARNUNG: Konnte {} nicht lesen: {}",
-                config_dir.display(),
-                e
-            );
-            return configs;
-        }
-    };
-    entries.sort_by_key(|e| e.file_name());
-
-    for entry in entries {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
-        }
-        match std::fs::read_to_string(&path) {
-            Ok(content) => match serde_json::from_str::<EntityConfig>(&content) {
-                Ok(config) => {
-                    info!(
-                        "  Generische Entitaet geladen: {} ({})",
-                        config.set_name, config.type_name
-                    );
-                    configs.push(config);
-                }
-                Err(e) => {
-                    eprintln!(
-                        "  WARNUNG: Konnte {} nicht parsen: {}",
-                        path.display(),
-                        e
-                    );
-                }
-            },
-            Err(e) => {
-                eprintln!(
-                    "  WARNUNG: Konnte {} nicht lesen: {}",
-                    path.display(),
-                    e
-                );
-            }
-        }
-    }
-
-    configs
-}
-
 /// Wandelt rohe EntityConfigs in registrierbare ODataEntity-Instanzen um.
 pub fn create_generic_entities(configs: Vec<EntityConfig>) -> Vec<&'static dyn ODataEntity> {
     configs
@@ -533,11 +487,6 @@ pub fn create_generic_entities(configs: Vec<EntityConfig>) -> Vec<&'static dyn O
         .collect()
 }
 
-/// Laedt und erzeugt generische Entitaeten in einem Schritt (Bequemlichkeit).
-pub fn load_generic_entities(config_dir: &Path) -> Vec<&'static dyn ODataEntity> {
-    create_generic_entities(load_raw_configs(config_dir))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,6 +494,7 @@ mod tests {
 
     // ── Helper: minimal EntityConfig ────────────────────────────
 
+    /// Simple EntityConfig named TestItems
     fn minimal_config() -> EntityConfig {
         EntityConfig {
             set_name: "TestItems".to_string(),
@@ -561,6 +511,7 @@ mod tests {
                     scale: None,
                     immutable: true,
                     semantic_object: None,
+                    value_source: None,
                 },
                 FieldConfig {
                     name: "Name".to_string(),
@@ -571,14 +522,17 @@ mod tests {
                     scale: None,
                     immutable: false,
                     semantic_object: None,
+                    value_source: None,
                 },
             ],
             navigation_properties: vec![],
             annotations: None,
             tile: None,
+            value_lists: vec![],
         }
     }
 
+    /// Complex EntityConfig named Orders mit Navigation, Annotations und Tile
     fn full_config() -> EntityConfig {
         EntityConfig {
             set_name: "Orders".to_string(),
@@ -595,6 +549,7 @@ mod tests {
                     scale: None,
                     immutable: true,
                     semantic_object: None,
+                    value_source: None,
                 },
                 FieldConfig {
                     name: "Status".to_string(),
@@ -605,6 +560,7 @@ mod tests {
                     scale: None,
                     immutable: false,
                     semantic_object: None,
+                    value_source: None,
                 },
                 FieldConfig {
                     name: "Amount".to_string(),
@@ -615,17 +571,16 @@ mod tests {
                     scale: Some(2),
                     immutable: false,
                     semantic_object: None,
+                    value_source: None,
                 },
             ],
-            navigation_properties: vec![
-                NavPropertyConfig {
-                    name: "Items".to_string(),
-                    target_type: "OrderItem".to_string(),
-                    target_set: "OrderItems".to_string(),
-                    is_collection: true,
-                    foreign_key: Some("OrderID".to_string()),
-                },
-            ],
+            navigation_properties: vec![NavPropertyConfig {
+                name: "Items".to_string(),
+                target_type: "OrderItem".to_string(),
+                target_set: "OrderItems".to_string(),
+                is_collection: true,
+                foreign_key: Some("OrderID".to_string()),
+            }],
             annotations: Some(AnnotationsConfig {
                 selection_fields: vec!["Status".to_string()],
                 line_item: vec![
@@ -662,7 +617,11 @@ mod tests {
                 }],
                 field_groups: vec![FieldGroupConfig {
                     qualifier: "Main".to_string(),
-                    fields: vec!["OrderID".to_string(), "Status".to_string(), "Amount".to_string()],
+                    fields: vec![
+                        "OrderID".to_string(),
+                        "Status".to_string(),
+                        "Amount".to_string(),
+                    ],
                 }],
                 table_facets: vec![TableFacetConfig {
                     label: "Positionen".to_string(),
@@ -675,6 +634,7 @@ mod tests {
                 description: Some("Auftragsübersicht".to_string()),
                 icon: Some("sap-icon://sales-order".to_string()),
             }),
+            value_lists: vec![],
         }
     }
 
@@ -694,6 +654,7 @@ mod tests {
                     scale: None,
                     immutable: true,
                     semantic_object: None,
+                    value_source: None,
                 },
                 FieldConfig {
                     name: "OrderID".to_string(),
@@ -704,21 +665,20 @@ mod tests {
                     scale: None,
                     immutable: true,
                     semantic_object: Some("Orders".to_string()),
+                    value_source: None,
                 },
             ],
             navigation_properties: vec![],
             annotations: Some(AnnotationsConfig {
                 selection_fields: vec![],
-                line_item: vec![
-                    LineItemConfig {
-                        name: "ItemID".to_string(),
-                        label: None,
-                        importance: None,
-                        criticality_path: None,
-                        navigation_path: None,
-                        semantic_object: None,
-                    },
-                ],
+                line_item: vec![LineItemConfig {
+                    name: "ItemID".to_string(),
+                    label: None,
+                    importance: None,
+                    criticality_path: None,
+                    navigation_path: None,
+                    semantic_object: None,
+                }],
                 header_info: HeaderInfoConfig {
                     type_name: "Position".to_string(),
                     type_name_plural: "Positionen".to_string(),
@@ -732,6 +692,7 @@ mod tests {
                 table_facets: vec![],
             }),
             tile: None,
+            value_lists: vec![],
         }
     }
 
@@ -782,8 +743,8 @@ mod tests {
         assert!(val.get("tile").is_none());
         // immutable=false should not appear on field
         let field0 = &val["fields"][0];
-        assert!(field0.get("immutable").is_none() ||
-            field0.get("immutable") == Some(&json!(true))); // only appears when true
+        assert!(field0.get("immutable").is_none() || field0.get("immutable") == Some(&json!(true)));
+        // only appears when true
     }
 
     #[test]
@@ -953,15 +914,20 @@ mod tests {
     fn generic_entity_expand_1n() {
         let order_entity = GenericEntity::from_config(full_config());
         let child_entity = GenericEntity::from_config(child_config());
-        let entities: Vec<&dyn ODataEntity> =
-            vec![&order_entity as &dyn ODataEntity, &child_entity as &dyn ODataEntity];
+        let entities: Vec<&dyn ODataEntity> = vec![
+            &order_entity as &dyn ODataEntity,
+            &child_entity as &dyn ODataEntity,
+        ];
 
         let mut store: HashMap<String, Vec<Value>> = HashMap::new();
-        store.insert("OrderItems".to_string(), vec![
-            json!({"ItemID": "I001", "OrderID": "O001"}),
-            json!({"ItemID": "I002", "OrderID": "O001"}),
-            json!({"ItemID": "I003", "OrderID": "O002"}),
-        ]);
+        store.insert(
+            "OrderItems".to_string(),
+            vec![
+                json!({"ItemID": "I001", "OrderID": "O001"}),
+                json!({"ItemID": "I002", "OrderID": "O001"}),
+                json!({"ItemID": "I003", "OrderID": "O002"}),
+            ],
+        );
 
         let mut record = json!({"OrderID": "O001", "Status": "A"});
         order_entity.expand_record(&mut record, &["Items"], &entities, &store);
@@ -984,15 +950,23 @@ mod tests {
                     name: "ContactID".to_string(),
                     label: "ID".to_string(),
                     edm_type: "Edm.String".to_string(),
-                    max_length: None, precision: None, scale: None,
-                    immutable: true, semantic_object: None,
+                    max_length: None,
+                    precision: None,
+                    scale: None,
+                    immutable: true,
+                    semantic_object: None,
+                    value_source: None,
                 },
                 FieldConfig {
                     name: "CustomerID".to_string(),
                     label: "Kunde".to_string(),
                     edm_type: "Edm.String".to_string(),
-                    max_length: None, precision: None, scale: None,
-                    immutable: false, semantic_object: None,
+                    max_length: None,
+                    precision: None,
+                    scale: None,
+                    immutable: false,
+                    semantic_object: None,
+                    value_source: None,
                 },
             ],
             navigation_properties: vec![NavPropertyConfig {
@@ -1004,6 +978,7 @@ mod tests {
             }],
             annotations: None,
             tile: None,
+            value_lists: vec![],
         };
         let customer_config = EntityConfig {
             set_name: "Customers".to_string(),
@@ -1014,24 +989,34 @@ mod tests {
                 name: "CustomerID".to_string(),
                 label: "ID".to_string(),
                 edm_type: "Edm.String".to_string(),
-                max_length: None, precision: None, scale: None,
-                immutable: true, semantic_object: None,
+                max_length: None,
+                precision: None,
+                scale: None,
+                immutable: true,
+                semantic_object: None,
+                value_source: None,
             }],
             navigation_properties: vec![],
             annotations: None,
             tile: None,
+            value_lists: vec![],
         };
 
         let contact_entity = GenericEntity::from_config(contact_config);
         let customer_entity = GenericEntity::from_config(customer_config);
-        let entities: Vec<&dyn ODataEntity> =
-            vec![&contact_entity as &dyn ODataEntity, &customer_entity as &dyn ODataEntity];
+        let entities: Vec<&dyn ODataEntity> = vec![
+            &contact_entity as &dyn ODataEntity,
+            &customer_entity as &dyn ODataEntity,
+        ];
 
         let mut store: HashMap<String, Vec<Value>> = HashMap::new();
-        store.insert("Customers".to_string(), vec![
-            json!({"CustomerID": "C001", "Name": "Acme"}),
-            json!({"CustomerID": "C002", "Name": "Global"}),
-        ]);
+        store.insert(
+            "Customers".to_string(),
+            vec![
+                json!({"CustomerID": "C001", "Name": "Acme"}),
+                json!({"CustomerID": "C002", "Name": "Global"}),
+            ],
+        );
 
         let mut record = json!({"ContactID": "K001", "CustomerID": "C002"});
         contact_entity.expand_record(&mut record, &["Customer"], &entities, &store);
@@ -1060,23 +1045,7 @@ mod tests {
         assert!(dbg.contains("TestItem"));
     }
 
-    // ── load_raw_configs Tests ──────────────────────────────────
-
-    #[test]
-    fn load_raw_configs_from_workspace() {
-        let config_dir = Path::new("config/entities");
-        let configs = load_raw_configs(config_dir);
-        assert!(configs.len() >= 2, "expected at least 2 configs, got {}", configs.len());
-        let names: Vec<&str> = configs.iter().map(|c| c.set_name.as_str()).collect();
-        assert!(names.contains(&"Customers"));
-        assert!(names.contains(&"Contacts"));
-    }
-
-    #[test]
-    fn load_raw_configs_nonexistent_dir() {
-        let configs = load_raw_configs(Path::new("/tmp/nonexistent_dir_12345"));
-        assert!(configs.is_empty());
-    }
+    // ── create_generic_entities Tests ─────────────────────────
 
     #[test]
     fn create_generic_entities_preserves_count() {

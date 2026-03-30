@@ -26,28 +26,28 @@ impl ODataEntity for EntityConfigEntity {
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
-            FieldDef { name: "SetName",              label: "EntitySet",          edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: true,  semantic_object: None },
-            FieldDef { name: "KeyField",             label: "Schluesselfeld",     edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "TypeName",             label: "Entity-Typ",         edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "ParentSetName",        label: "Eltern-EntitySet",   edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "TileTitle",            label: "Kachel-Titel",       edm_type: "Edm.String", max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "TileDescription",      label: "Kachel-Beschreibung",edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "TileIcon",             label: "Kachel-Icon",        edm_type: "Edm.String", max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "HeaderTypeName",       label: "Typ-Name",           edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "HeaderTypeNamePlural",  label: "Typ-Name Plural",   edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "HeaderTitlePath",      label: "Titel-Pfad",         edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "HeaderDescriptionPath", label: "Beschreibungs-Pfad",edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "SelectionFields",      label: "Suchfelder",         edm_type: "Edm.String", max_length: Some(200), precision: None, scale: None, immutable: false, semantic_object: None },
+            FieldDef { name: "SetName",              label: "EntitySet",          edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "KeyField",             label: "Schluesselfeld",     edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "TypeName",             label: "Entity-Typ",         edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "ParentSetName",        label: "Eltern-EntitySet",   edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "TileTitle",            label: "Kachel-Titel",       edm_type: "Edm.String", max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "TileDescription",      label: "Kachel-Beschreibung",edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "TileIcon",             label: "Kachel-Icon",        edm_type: "Edm.String", max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "HeaderTypeName",       label: "Typ-Name",           edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "HeaderTypeNamePlural",  label: "Typ-Name Plural",   edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "HeaderTitlePath",      label: "Titel-Pfad",         edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "HeaderDescriptionPath", label: "Beschreibungs-Pfad",edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "SelectionFields",      label: "Suchfelder",         edm_type: "Edm.String", max_length: Some(200), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
         ];
         Some(FIELDS)
     }
 
     fn navigation_properties(&self) -> &'static [NavigationPropertyDef] {
         static NAV: &[NavigationPropertyDef] = &[
-            NavigationPropertyDef { name: "Fields",       target_type: "EntityField",       is_collection: true },
-            NavigationPropertyDef { name: "Facets",       target_type: "EntityFacet",       is_collection: true },
-            NavigationPropertyDef { name: "Navigations",  target_type: "EntityNavigation",  is_collection: true },
-            NavigationPropertyDef { name: "TableFacets",  target_type: "EntityTableFacet",  is_collection: true },
+            NavigationPropertyDef { name: "Fields",       target_type: "EntityField",       is_collection: true, foreign_key: None },
+            NavigationPropertyDef { name: "Facets",       target_type: "EntityFacet",       is_collection: true, foreign_key: None },
+            NavigationPropertyDef { name: "Navigations",  target_type: "EntityNavigation",  is_collection: true, foreign_key: None },
+            NavigationPropertyDef { name: "TableFacets",  target_type: "EntityTableFacet",  is_collection: true, foreign_key: None },
         ];
         NAV
     }
@@ -140,7 +140,7 @@ impl ODataEntity for EntityConfigEntity {
 
     fn annotations_def(&self) -> Option<&'static AnnotationsDef> {
         static DEF: AnnotationsDef = AnnotationsDef {
-            selection_fields: &[],
+            selection_fields: &["SetName", "TypeName"],
             line_item: &[
                 LineItemField { name: "SetName",              label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
                 LineItemField { name: "TypeName",             label: None, importance: None,         criticality_path: None, navigation_path: None, semantic_object: None },

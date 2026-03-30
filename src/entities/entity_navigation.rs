@@ -28,14 +28,14 @@ impl ODataEntity for EntityNavigationEntity {
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
-            FieldDef { name: "NavID",         label: "Nav-ID",          edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: true,  semantic_object: None },
-            FieldDef { name: "SetName",       label: "EntitySet",       edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: true,  semantic_object: None },
-            FieldDef { name: "NavName",       label: "Name",            edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "TargetType",    label: "Ziel-Typ",        edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "TargetSet",     label: "Ziel-EntitySet",  edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "IsCollection",  label: "Ist Kollektion",  edm_type: "Edm.Boolean", max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "ForeignKey",    label: "Fremdschluessel", edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None },
-            FieldDef { name: "SortOrder",     label: "Reihenfolge",     edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None },
+            FieldDef { name: "NavID",         label: "Nav-ID",          edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "SetName",       label: "EntitySet",       edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "NavName",       label: "Name",            edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "TargetType",    label: "Ziel-Typ",        edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "TargetSet",     label: "Ziel-EntitySet",  edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "IsCollection",  label: "Ist Kollektion",  edm_type: "Edm.Boolean", max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "ForeignKey",    label: "Fremdschluessel", edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "SortOrder",     label: "Reihenfolge",     edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
         ];
         Some(FIELDS)
     }

@@ -5,6 +5,7 @@ use std::sync::RwLock;
 
 use log::info;
 use serde_json::{json, Value};
+use uuid::Uuid;
 
 use crate::entity::ODataEntity;
 use crate::query::query_collection_from;
@@ -444,6 +445,9 @@ pub trait DataStore: Send + Sync {
 
     // ── Persistence ──
     fn commit(&self);
+
+    // ── Entity Updates ──
+    fn update_entities(&self, entities: Vec<&'static dyn ODataEntity>);
 }
 
 // ── InMemoryDataStore ───────────────────────────────────────────────
@@ -452,7 +456,7 @@ pub trait DataStore: Send + Sync {
 /// Loads all data on initialization, persists on commit().
 pub struct InMemoryDataStore {
     store: RwLock<HashMap<String, Vec<Value>>>,
-    entities: Vec<&'static dyn ODataEntity>,
+    entities: RwLock<Vec<&'static dyn ODataEntity>>,
     data_dir: PathBuf,
 }
 
@@ -478,13 +482,15 @@ impl InMemoryDataStore {
 
         Self {
             store: RwLock::new(store),
-            entities,
+            entities: RwLock::new(entities),
             data_dir,
         }
     }
 
     fn find_entity(&self, set_name: &str) -> Option<&'static dyn ODataEntity> {
         self.entities
+            .read()
+            .unwrap()
             .iter()
             .find(|e| e.set_name() == set_name)
             .copied()
@@ -510,8 +516,8 @@ impl InMemoryDataStore {
         Ok((key_value, is_active))
     }
 
-    fn entities_slice(&self) -> &[&'static dyn ODataEntity] {
-        &self.entities
+    fn entities_snapshot(&self) -> Vec<&'static dyn ODataEntity> {
+        self.entities.read().unwrap().clone()
     }
 }
 
@@ -525,6 +531,7 @@ impl DataStore for InMemoryDataStore {
         let entity = self
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
+        let entities_snap = self.entities_snapshot();
         let store = self.store.read().unwrap();
         let qs = query.to_query_map();
 
@@ -545,13 +552,22 @@ impl DataStore for InMemoryDataStore {
                     })?;
                 let parent_is_active = parent_ref.key.is_active();
 
+                // Fremdschluessel-Feld auf dem Kind ermitteln:
+                // NavigationProperty.foreign_key hat Vorrang, sonst parent_key_field.
+                let child_fk = parent_entity
+                    .navigation_properties()
+                    .iter()
+                    .find(|np| np.target_type == entity.type_name())
+                    .and_then(|np| np.foreign_key)
+                    .unwrap_or(parent_key_field);
+
                 let child_records: Vec<Value> = store
                     .get(set_name)
                     .map(|records| {
                         records
                             .iter()
                             .filter(|r| {
-                                r.get(parent_key_field).and_then(|v| v.as_str())
+                                r.get(child_fk).and_then(|v| v.as_str())
                                     == Some(parent_key_value)
                                     && r.get("IsActiveEntity").and_then(|v| v.as_bool())
                                         == Some(parent_is_active)
@@ -564,7 +580,7 @@ impl DataStore for InMemoryDataStore {
                     entity,
                     &child_records,
                     &qs,
-                    self.entities_slice(),
+                    &entities_snap,
                     &store,
                 ))
             }
@@ -575,14 +591,14 @@ impl DataStore for InMemoryDataStore {
                         entity,
                         data,
                         &qs,
-                        self.entities_slice(),
+                        &entities_snap,
                         &store,
                     )),
                     None => Ok(query_collection_from(
                         entity,
                         &entity.mock_data(),
                         &qs,
-                        self.entities_slice(),
+                        &entities_snap,
                         &store,
                     )),
                 }
@@ -640,6 +656,7 @@ impl DataStore for InMemoryDataStore {
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
         let (key_value, is_active) = self.resolve_key(set_name, key)?;
+        let entities_snap = self.entities_snapshot();
         let store = self.store.read().unwrap();
         let qs = query.to_query_map();
 
@@ -666,7 +683,7 @@ impl DataStore for InMemoryDataStore {
                     .map(|e| e.nav_property.clone())
                     .collect();
                 let nav_refs: Vec<&str> = nav_names.iter().map(|s| s.as_str()).collect();
-                entity.expand_record(&mut result, &nav_refs, self.entities_slice(), &store);
+                entity.expand_record(&mut result, &nav_refs, &entities_snap, &store);
                 if nav_refs.iter().any(|n| *n == "DraftAdministrativeData") {
                     inject_draft_admin_data(&mut result, entity.key_field());
                 }
@@ -695,7 +712,8 @@ impl DataStore for InMemoryDataStore {
                         .key
                         .resolve_key_value(parent_entity.key_field())
                         .unwrap_or("");
-                    obj.entry(parent_entity.key_field().to_string())
+                    let child_fk = resolve_child_fk(parent_entity, entity);
+                    obj.entry(child_fk.to_string())
                         .or_insert_with(|| json!(parent_key_value));
                 }
             }
@@ -703,11 +721,7 @@ impl DataStore for InMemoryDataStore {
             // Generate key if not present
             let key_field = entity.key_field();
             if !obj.contains_key(key_field) {
-                let existing = store.get(set_name).map(|r| r.len()).unwrap_or(0);
-                obj.insert(
-                    key_field.to_string(),
-                    json!(format!("NEW{:04}", existing + 1)),
-                );
+                obj.insert(key_field.to_string(), json!(Uuid::new_v4().to_string()));
             }
 
             // Draft flags
@@ -797,6 +811,7 @@ impl DataStore for InMemoryDataStore {
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
         let (key_value, is_active) = self.resolve_key(set_name, key)?;
+        let entities_snap = self.entities_snapshot();
         let mut store = self.store.write().unwrap();
 
         let found = store
@@ -820,7 +835,7 @@ impl DataStore for InMemoryDataStore {
                     }
                 }
                 // Remove child drafts
-                remove_child_drafts(&mut store, entity, key_value, self.entities_slice());
+                remove_child_drafts(&mut store, entity, key_value, &entities_snap);
             }
         }
 
@@ -836,6 +851,7 @@ impl DataStore for InMemoryDataStore {
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
         let (key_value, _) = self.resolve_key(set_name, key)?;
+        let entities_snap = self.entities_snapshot();
         let mut store = self.store.write().unwrap();
 
         let records = store.get_mut(set_name).ok_or_else(|| {
@@ -848,6 +864,8 @@ impl DataStore for InMemoryDataStore {
                     StoreError::NotFound("Active entity not found".to_string())
                 })?
                 .clone();
+
+        info!("  [draftEdit] {}('{}') – creating draft from active", set_name, key_value);
 
         // Mark active as having a draft
         if let Some(active_rec) =
@@ -866,7 +884,7 @@ impl DataStore for InMemoryDataStore {
         records.push(draft_rec);
 
         // Copy children as drafts
-        copy_children_as_drafts(&mut store, entity, key_value, self.entities_slice());
+        copy_children_as_drafts(&mut store, entity, key_value, &entities_snap);
 
         Ok(result)
     }
@@ -880,11 +898,14 @@ impl DataStore for InMemoryDataStore {
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
         let (key_value, _) = self.resolve_key(set_name, key)?;
+        let entities_snap = self.entities_snapshot();
         let mut store = self.store.write().unwrap();
 
         let records = store.get_mut(set_name).ok_or_else(|| {
             StoreError::NotFound(format!("Entity set '{}' not found", set_name))
         })?;
+
+        info!("  [draftActivate] {}('{}') – activating draft", set_name, key_value);
 
         let draft_rec =
             find_record(records, entity.key_field(), key_value, false)
@@ -923,7 +944,7 @@ impl DataStore for InMemoryDataStore {
         let result = find_record(records, entity.key_field(), key_value, true).cloned();
 
         // Activate children
-        activate_children(&mut store, entity, key_value, self.entities_slice());
+        activate_children(&mut store, entity, key_value, &entities_snap);
 
         match result {
             Some(mut r) => {
@@ -950,6 +971,8 @@ impl DataStore for InMemoryDataStore {
         let records = store.get(set_name).ok_or_else(|| {
             StoreError::NotFound(format!("Entity set '{}' not found", set_name))
         })?;
+
+        info!("  [draftPrepare] {}('{}') is_active={}", set_name, key_value, is_active);
 
         let record = find_record(records, entity.key_field(), key_value, is_active)
             .ok_or_else(|| {
@@ -997,8 +1020,9 @@ impl DataStore for InMemoryDataStore {
     }
 
     fn commit(&self) {
+        let entities_snap = self.entities_snapshot();
         let store = self.store.read().unwrap();
-        for entity in &self.entities {
+        for entity in &entities_snap {
             let set_name = entity.set_name();
             if let Some(records) = store.get(set_name) {
                 let active: Vec<&Value> = records
@@ -1034,6 +1058,31 @@ impl DataStore for InMemoryDataStore {
             }
         }
     }
+
+    fn update_entities(&self, new_entities: Vec<&'static dyn ODataEntity>) {
+        // Register any new entity sets that don't have data yet
+        let mut store = self.store.write().unwrap();
+        for entity in &new_entities {
+            let set_name = entity.set_name();
+            if !store.contains_key(set_name) {
+                // Load data from disk for newly added entities
+                let mut records = load_entity_data(set_name, &self.data_dir, *entity);
+                for record in &mut records {
+                    if let Some(obj) = record.as_object_mut() {
+                        obj.entry("IsActiveEntity".to_string())
+                            .or_insert(Value::Bool(true));
+                        obj.entry("HasActiveEntity".to_string())
+                            .or_insert(Value::Bool(false));
+                        obj.entry("HasDraftEntity".to_string())
+                            .or_insert(Value::Bool(false));
+                    }
+                }
+                store.insert(set_name.to_string(), records);
+            }
+        }
+        drop(store);
+        *self.entities.write().unwrap() = new_entities;
+    }
 }
 
 // ── Internal helpers (moved from draft.rs for InMemoryDataStore) ────
@@ -1060,23 +1109,37 @@ fn inject_draft_admin_data(record: &mut Value, key_field: &str) {
     }
 }
 
+/// Resolve the FK field name on the child that points back to the parent.
+/// Uses NavigationProperty.foreign_key if declared, otherwise falls back to parent key_field.
+fn resolve_child_fk<'a>(
+    parent_entity: &'a dyn ODataEntity,
+    child_entity: &'a dyn ODataEntity,
+) -> &'a str {
+    parent_entity
+        .navigation_properties()
+        .iter()
+        .find(|np| np.target_type == child_entity.type_name())
+        .and_then(|np| np.foreign_key)
+        .unwrap_or(parent_entity.key_field())
+}
+
 fn copy_children_as_drafts(
     store: &mut HashMap<String, Vec<Value>>,
     parent_entity: &dyn ODataEntity,
     parent_key_value: &str,
     entities: &[&dyn ODataEntity],
 ) {
-    let parent_key_field = parent_entity.key_field();
     for child in entities {
         if child.parent_set_name() != Some(parent_entity.set_name()) {
             continue;
         }
+        let child_fk = resolve_child_fk(parent_entity, *child);
         let drafts: Vec<Value> = store
             .get(child.set_name())
             .map(|recs| {
                 recs.iter()
                     .filter(|r| {
-                        r.get(parent_key_field).and_then(|v| v.as_str())
+                        r.get(child_fk).and_then(|v| v.as_str())
                             == Some(parent_key_value)
                             && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(true)
                     })
@@ -1100,24 +1163,25 @@ fn activate_children(
     parent_key_value: &str,
     entities: &[&dyn ODataEntity],
 ) {
-    let parent_key_field = parent_entity.key_field();
     for child in entities {
         if child.parent_set_name() != Some(parent_entity.set_name()) {
             continue;
         }
+        let child_fk = resolve_child_fk(parent_entity, *child);
         if let Some(child_records) = store.get_mut(child.set_name()) {
             let draft_items: Vec<Value> = child_records
                 .iter()
                 .filter(|r| {
-                    r.get(parent_key_field).and_then(|v| v.as_str())
+                    r.get(child_fk).and_then(|v| v.as_str())
                         == Some(parent_key_value)
                         && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(false)
                 })
                 .cloned()
                 .collect();
 
+            // Remove all records for this parent (active + draft)
             child_records.retain(|r| {
-                r.get(parent_key_field).and_then(|v| v.as_str()) != Some(parent_key_value)
+                r.get(child_fk).and_then(|v| v.as_str()) != Some(parent_key_value)
             });
 
             for mut item in draft_items {
@@ -1134,14 +1198,14 @@ fn remove_child_drafts(
     parent_key_value: &str,
     entities: &[&dyn ODataEntity],
 ) {
-    let parent_key_field = parent_entity.key_field();
     for child in entities {
         if child.parent_set_name() != Some(parent_entity.set_name()) {
             continue;
         }
+        let child_fk = resolve_child_fk(parent_entity, *child);
         if let Some(child_recs) = store.get_mut(child.set_name()) {
             child_recs.retain(|r| {
-                !(r.get(parent_key_field).and_then(|v| v.as_str())
+                !(r.get(child_fk).and_then(|v| v.as_str())
                     == Some(parent_key_value)
                     && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(false))
             });
@@ -1415,10 +1479,10 @@ mod tests {
         fn entity_set(&self) -> String { String::new() }
         fn fields_def(&self) -> Option<&'static [FieldDef]> {
             static FIELDS: &[FieldDef] = &[
-                FieldDef { name: "ProductID", label: "Product ID", edm_type: "Edm.String", max_length: Some(10), precision: None, scale: None, immutable: true, semantic_object: None },
-                FieldDef { name: "ProductName", label: "Name", edm_type: "Edm.String", max_length: Some(80), precision: None, scale: None, immutable: false, semantic_object: None },
-                FieldDef { name: "Price", label: "Price", edm_type: "Edm.Decimal", max_length: None, precision: Some(10), scale: Some(2), immutable: false, semantic_object: None },
-                FieldDef { name: "Status", label: "Status", edm_type: "Edm.String", max_length: Some(1), precision: None, scale: None, immutable: false, semantic_object: None },
+                FieldDef { name: "ProductID", label: "Product ID", edm_type: "Edm.String", max_length: Some(10), precision: None, scale: None, immutable: true, semantic_object: None, value_source: None , value_list: None},
+                FieldDef { name: "ProductName", label: "Name", edm_type: "Edm.String", max_length: Some(80), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+                FieldDef { name: "Price", label: "Price", edm_type: "Edm.Decimal", max_length: None, precision: Some(10), scale: Some(2), immutable: false, semantic_object: None, value_source: None , value_list: None},
+                FieldDef { name: "Status", label: "Status", edm_type: "Edm.String", max_length: Some(1), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
             ];
             Some(FIELDS)
         }
@@ -2061,5 +2125,335 @@ mod tests {
             active.get("HasDraftEntity").unwrap().as_bool().unwrap(),
             false
         );
+    }
+
+    // ── FieldValueList draft tests (custom FK: ListID) ──────────────
+
+    #[derive(Debug)]
+    struct TestValueListEntity;
+
+    impl ODataEntity for TestValueListEntity {
+        fn set_name(&self) -> &'static str { "FieldValueLists" }
+        fn key_field(&self) -> &'static str { "ID" }
+        fn type_name(&self) -> &'static str { "FieldValueList" }
+        fn mock_data(&self) -> Vec<Value> {
+            vec![
+                json!({"ID": "VL-001", "ListName": "EdmTypes", "Description": "OData EDM Datentypen"}),
+                json!({"ID": "VL-002", "ListName": "StatusCodes", "Description": "Status"}),
+            ]
+        }
+        fn entity_set(&self) -> String { String::new() }
+        fn fields_def(&self) -> Option<&'static [FieldDef]> {
+            static FIELDS: &[FieldDef] = &[
+                FieldDef { name: "ID",          label: "ID",           edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None, value_list: None },
+                FieldDef { name: "ListName",    label: "Listenname",   edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None },
+                FieldDef { name: "Description", label: "Beschreibung", edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None },
+            ];
+            Some(FIELDS)
+        }
+        fn navigation_properties(&self) -> &'static [NavigationPropertyDef] {
+            static NAV: &[NavigationPropertyDef] = &[
+                NavigationPropertyDef { name: "Items", target_type: "FieldValueListItem", is_collection: true, foreign_key: Some("ListID") },
+            ];
+            NAV
+        }
+    }
+
+    #[derive(Debug)]
+    struct TestValueListItemEntity;
+
+    impl ODataEntity for TestValueListItemEntity {
+        fn set_name(&self) -> &'static str { "FieldValueListItems" }
+        fn key_field(&self) -> &'static str { "ID" }
+        fn type_name(&self) -> &'static str { "FieldValueListItem" }
+        fn mock_data(&self) -> Vec<Value> {
+            vec![
+                json!({"ID": "ITEM-001", "ListID": "VL-001", "Code": "Edm.String",  "Description": "Zeichenkette", "SortOrder": 0}),
+                json!({"ID": "ITEM-002", "ListID": "VL-001", "Code": "Edm.Int32",   "Description": "Ganzzahl",     "SortOrder": 1}),
+                json!({"ID": "ITEM-003", "ListID": "VL-002", "Code": "Active",      "Description": "Aktiv",        "SortOrder": 0}),
+            ]
+        }
+        fn entity_set(&self) -> String { String::new() }
+        fn parent_set_name(&self) -> Option<&'static str> { Some("FieldValueLists") }
+        fn fields_def(&self) -> Option<&'static [FieldDef]> {
+            static FIELDS: &[FieldDef] = &[
+                FieldDef { name: "ID",          label: "ID",           edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None, value_list: None },
+                FieldDef { name: "ListID",      label: "Listen-ID",    edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None, value_list: None },
+                FieldDef { name: "Code",        label: "Code",         edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None },
+                FieldDef { name: "Description", label: "Beschreibung", edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None },
+                FieldDef { name: "SortOrder",   label: "Reihenfolge",  edm_type: "Edm.Int32",  max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None },
+            ];
+            Some(FIELDS)
+        }
+    }
+
+    fn create_vl_store() -> InMemoryDataStore {
+        let data_dir = std::env::temp_dir().join("fiori-test-vl-nonexistent");
+        let entities: Vec<&'static dyn ODataEntity> = vec![
+            &TestValueListEntity,
+            &TestValueListItemEntity,
+        ];
+        InMemoryDataStore::new(data_dir, entities)
+    }
+
+    #[test]
+    fn vl_read_items_via_parent() {
+        let store = create_vl_store();
+        let parent = ParentKey::new(
+            "FieldValueLists",
+            EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "true")]),
+        );
+        let q = ODataQuery::empty();
+        let result = store.get_collection("FieldValueListItems", &q, Some(&parent)).unwrap();
+        let values = result.get("value").unwrap().as_array().unwrap();
+        assert_eq!(values.len(), 2); // ITEM-001 and ITEM-002 belong to VL-001
+    }
+
+    #[test]
+    fn vl_read_items_other_parent() {
+        let store = create_vl_store();
+        let parent = ParentKey::new(
+            "FieldValueLists",
+            EntityKey::composite(&[("ID", "VL-002"), ("IsActiveEntity", "true")]),
+        );
+        let q = ODataQuery::empty();
+        let result = store.get_collection("FieldValueListItems", &q, Some(&parent)).unwrap();
+        let values = result.get("value").unwrap().as_array().unwrap();
+        assert_eq!(values.len(), 1); // ITEM-003 belongs to VL-002
+    }
+
+    #[test]
+    fn vl_draft_edit_copies_children_with_custom_fk() {
+        let store = create_vl_store();
+        let key = EntityKey::single("ID", "VL-001");
+        store.draft_edit("FieldValueLists", &key).unwrap();
+
+        // Draft children should exist, filtered by ListID (not ID)
+        let parent_draft = ParentKey::new(
+            "FieldValueLists",
+            EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "false")]),
+        );
+        let q = ODataQuery::empty();
+        let children = store.get_collection("FieldValueListItems", &q, Some(&parent_draft)).unwrap();
+        let values = children.get("value").unwrap().as_array().unwrap();
+        assert_eq!(values.len(), 2);
+        for v in values {
+            assert_eq!(v.get("IsActiveEntity").unwrap().as_bool().unwrap(), false);
+            assert_eq!(v.get("ListID").unwrap().as_str().unwrap(), "VL-001");
+        }
+    }
+
+    #[test]
+    fn vl_create_item_sets_list_id_not_id() {
+        let store = create_vl_store();
+        let key = EntityKey::single("ID", "VL-001");
+        store.draft_edit("FieldValueLists", &key).unwrap();
+
+        // Create a new child item via sub-collection POST
+        let parent = ParentKey::new(
+            "FieldValueLists",
+            EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "false")]),
+        );
+        let data = json!({"Code": "Edm.Boolean", "Description": "Wahrheitswert", "SortOrder": 2});
+        let created = store.create_entity("FieldValueListItems", &data, Some(&parent)).unwrap();
+
+        // ListID should be set to the parent's key (VL-001)
+        assert_eq!(created.get("ListID").unwrap().as_str().unwrap(), "VL-001");
+        // ID should be auto-generated and NOT be the parent's key
+        let item_id = created.get("ID").unwrap().as_str().unwrap();
+        assert_ne!(item_id, "VL-001", "Child ID must not be overwritten with parent key");
+        assert!(uuid::Uuid::parse_str(item_id).is_ok(), "Edm.Guid key should be a valid UUID, got: {}", item_id);
+    }
+
+    #[test]
+    fn vl_create_item_visible_in_subcollection() {
+        let store = create_vl_store();
+        let key = EntityKey::single("ID", "VL-001");
+        store.draft_edit("FieldValueLists", &key).unwrap();
+
+        let parent_draft = ParentKey::new(
+            "FieldValueLists",
+            EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "false")]),
+        );
+        let data = json!({"Code": "Edm.Date", "Description": "Datum", "SortOrder": 3});
+        store.create_entity("FieldValueListItems", &data, Some(&parent_draft)).unwrap();
+
+        // Should now have 3 draft items (2 copied + 1 new)
+        let q = ODataQuery::empty();
+        let children = store.get_collection("FieldValueListItems", &q, Some(&parent_draft)).unwrap();
+        let values = children.get("value").unwrap().as_array().unwrap();
+        assert_eq!(values.len(), 3);
+    }
+
+    #[test]
+    fn vl_patch_child_item() {
+        let store = create_vl_store();
+        let key = EntityKey::single("ID", "VL-001");
+        store.draft_edit("FieldValueLists", &key).unwrap();
+
+        // Patch the first draft child
+        let draft_item_key = EntityKey::composite(&[("ID", "ITEM-001"), ("IsActiveEntity", "false")]);
+        let patch = json!({"Description": "Zeichenkette (aktualisiert)"});
+        let result = store.patch_entity("FieldValueListItems", &draft_item_key, &patch).unwrap();
+        assert_eq!(result.get("Description").unwrap().as_str().unwrap(), "Zeichenkette (aktualisiert)");
+        // ListID should remain unchanged
+        assert_eq!(result.get("ListID").unwrap().as_str().unwrap(), "VL-001");
+    }
+
+    #[test]
+    fn vl_activate_with_new_child() {
+        let store = create_vl_store();
+        let q = ODataQuery::empty();
+        let key = EntityKey::single("ID", "VL-001");
+
+        // 1. Edit → draft
+        store.draft_edit("FieldValueLists", &key).unwrap();
+
+        // 2. Create new child
+        let parent_draft = ParentKey::new(
+            "FieldValueLists",
+            EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "false")]),
+        );
+        let data = json!({"Code": "Edm.Guid", "Description": "GUID", "SortOrder": 9});
+        store.create_entity("FieldValueListItems", &data, Some(&parent_draft)).unwrap();
+
+        // 3. Activate parent
+        let activated = store.draft_activate("FieldValueLists", &key).unwrap();
+        assert_eq!(activated.get("IsActiveEntity").unwrap().as_bool().unwrap(), true);
+
+        // 4. Active children should include the new item
+        let parent_active = ParentKey::new(
+            "FieldValueLists",
+            EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "true")]),
+        );
+        let children = store.get_collection("FieldValueListItems", &q, Some(&parent_active)).unwrap();
+        let values = children.get("value").unwrap().as_array().unwrap();
+        assert_eq!(values.len(), 3); // 2 original + 1 new
+        for v in values {
+            assert_eq!(v.get("IsActiveEntity").unwrap().as_bool().unwrap(), true);
+            assert_eq!(v.get("ListID").unwrap().as_str().unwrap(), "VL-001");
+        }
+
+        // 5. No draft children remain
+        let children_draft = store.get_collection("FieldValueListItems", &q, Some(&parent_draft)).unwrap();
+        let draft_values = children_draft.get("value").unwrap().as_array().unwrap();
+        assert_eq!(draft_values.len(), 0);
+    }
+
+    #[test]
+    fn vl_activate_with_patched_child() {
+        let store = create_vl_store();
+        let q = ODataQuery::empty();
+        let key = EntityKey::single("ID", "VL-001");
+
+        // Edit, patch child, activate
+        store.draft_edit("FieldValueLists", &key).unwrap();
+        let draft_item_key = EntityKey::composite(&[("ID", "ITEM-001"), ("IsActiveEntity", "false")]);
+        store.patch_entity("FieldValueListItems", &draft_item_key, &json!({"Description": "String (updated)"})).unwrap();
+        store.draft_activate("FieldValueLists", &key).unwrap();
+
+        // Read active child
+        let active_item_key = EntityKey::composite(&[("ID", "ITEM-001"), ("IsActiveEntity", "true")]);
+        let item = store.read_entity("FieldValueListItems", &active_item_key, &q).unwrap();
+        assert_eq!(item.get("Description").unwrap().as_str().unwrap(), "String (updated)");
+    }
+
+    #[test]
+    fn vl_discard_draft_removes_children() {
+        let store = create_vl_store();
+        let q = ODataQuery::empty();
+        let key = EntityKey::single("ID", "VL-001");
+
+        // Edit → add new item → discard
+        store.draft_edit("FieldValueLists", &key).unwrap();
+        let parent_draft = ParentKey::new(
+            "FieldValueLists",
+            EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "false")]),
+        );
+        store.create_entity(
+            "FieldValueListItems",
+            &json!({"Code": "Edm.Byte", "Description": "Byte", "SortOrder": 10}),
+            Some(&parent_draft),
+        ).unwrap();
+
+        // Discard draft
+        let draft_key = EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "false")]);
+        store.delete_entity("FieldValueLists", &draft_key).unwrap();
+
+        // Draft children gone
+        let children = store.get_collection("FieldValueListItems", &q, Some(&parent_draft)).unwrap();
+        assert_eq!(children.get("value").unwrap().as_array().unwrap().len(), 0);
+
+        // Active children unchanged
+        let parent_active = ParentKey::new(
+            "FieldValueLists",
+            EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "true")]),
+        );
+        let active = store.get_collection("FieldValueListItems", &q, Some(&parent_active)).unwrap();
+        assert_eq!(active.get("value").unwrap().as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn vl_other_list_unaffected_by_draft() {
+        let store = create_vl_store();
+        let q = ODataQuery::empty();
+        let key = EntityKey::single("ID", "VL-001");
+
+        // Edit VL-001 (EdmTypes) → should NOT create drafts for VL-002's children
+        store.draft_edit("FieldValueLists", &key).unwrap();
+
+        // VL-002's active items remain unchanged
+        let parent_vl2 = ParentKey::new(
+            "FieldValueLists",
+            EntityKey::composite(&[("ID", "VL-002"), ("IsActiveEntity", "true")]),
+        );
+        let children = store.get_collection("FieldValueListItems", &q, Some(&parent_vl2)).unwrap();
+        let values = children.get("value").unwrap().as_array().unwrap();
+        assert_eq!(values.len(), 1);
+        assert_eq!(values[0].get("Code").unwrap().as_str().unwrap(), "Active");
+    }
+
+    #[test]
+    fn vl_full_lifecycle_create_list_add_items_activate() {
+        let store = create_vl_store();
+        let q = ODataQuery::empty();
+
+        // 1. Create a brand new FieldValueList
+        let list_data = json!({"ListName": "Priorities", "Description": "Prioritaeten"});
+        let created = store.create_entity("FieldValueLists", &list_data, None).unwrap();
+        let new_list_id = created.get("ID").unwrap().as_str().unwrap().to_string();
+        assert_eq!(created.get("IsActiveEntity").unwrap().as_bool().unwrap(), false);
+
+        // 2. Add items to it
+        let parent = ParentKey::new(
+            "FieldValueLists",
+            EntityKey::composite(&[("ID", &new_list_id), ("IsActiveEntity", "false")]),
+        );
+        store.create_entity("FieldValueListItems", &json!({"Code": "HIGH", "Description": "Hoch", "SortOrder": 0}), Some(&parent)).unwrap();
+        store.create_entity("FieldValueListItems", &json!({"Code": "MED",  "Description": "Mittel", "SortOrder": 1}), Some(&parent)).unwrap();
+        store.create_entity("FieldValueListItems", &json!({"Code": "LOW",  "Description": "Niedrig", "SortOrder": 2}), Some(&parent)).unwrap();
+
+        // 3. Verify draft items
+        let draft_children = store.get_collection("FieldValueListItems", &q, Some(&parent)).unwrap();
+        assert_eq!(draft_children.get("value").unwrap().as_array().unwrap().len(), 3);
+
+        // 4. Activate the list
+        let new_key = EntityKey::single("ID", &new_list_id);
+        let activated = store.draft_activate("FieldValueLists", &new_key).unwrap();
+        assert_eq!(activated.get("IsActiveEntity").unwrap().as_bool().unwrap(), true);
+        assert_eq!(activated.get("ListName").unwrap().as_str().unwrap(), "Priorities");
+
+        // 5. Active children should all be there
+        let parent_active = ParentKey::new(
+            "FieldValueLists",
+            EntityKey::composite(&[("ID", &new_list_id), ("IsActiveEntity", "true")]),
+        );
+        let active_children = store.get_collection("FieldValueListItems", &q, Some(&parent_active)).unwrap();
+        let items = active_children.get("value").unwrap().as_array().unwrap();
+        assert_eq!(items.len(), 3);
+        let codes: Vec<&str> = items.iter().map(|v| v.get("Code").unwrap().as_str().unwrap()).collect();
+        assert!(codes.contains(&"HIGH"));
+        assert!(codes.contains(&"MED"));
+        assert!(codes.contains(&"LOW"));
     }
 }

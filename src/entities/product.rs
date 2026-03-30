@@ -58,7 +58,7 @@ impl ODataEntity for ProductEntity {
                 precision: None,
                 scale: None,
                 immutable: true,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "ProductName",
@@ -68,7 +68,7 @@ impl ODataEntity for ProductEntity {
                 precision: None,
                 scale: None,
                 immutable: false,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "Category",
@@ -78,7 +78,7 @@ impl ODataEntity for ProductEntity {
                 precision: None,
                 scale: None,
                 immutable: false,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "Supplier",
@@ -88,7 +88,7 @@ impl ODataEntity for ProductEntity {
                 precision: None,
                 scale: None,
                 immutable: false,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "Status",
@@ -98,7 +98,7 @@ impl ODataEntity for ProductEntity {
                 precision: None,
                 scale: None,
                 immutable: false,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "StatusCriticality",
@@ -108,7 +108,7 @@ impl ODataEntity for ProductEntity {
                 precision: None,
                 scale: None,
                 immutable: true,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "Price",
@@ -118,7 +118,7 @@ impl ODataEntity for ProductEntity {
                 precision: Some(15),
                 scale: Some(2),
                 immutable: false,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "Currency",
@@ -128,7 +128,7 @@ impl ODataEntity for ProductEntity {
                 precision: None,
                 scale: None,
                 immutable: false,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "UnitsInStock",
@@ -138,7 +138,7 @@ impl ODataEntity for ProductEntity {
                 precision: None,
                 scale: None,
                 immutable: false,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "Rating",
@@ -148,7 +148,7 @@ impl ODataEntity for ProductEntity {
                 precision: None,
                 scale: None,
                 immutable: false,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "CreatedAt",
@@ -158,7 +158,7 @@ impl ODataEntity for ProductEntity {
                 precision: None,
                 scale: None,
                 immutable: true,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
             FieldDef {
                 name: "Description",
@@ -168,7 +168,7 @@ impl ODataEntity for ProductEntity {
                 precision: None,
                 scale: None,
                 immutable: false,
-                semantic_object: None,
+                semantic_object: None, value_source: None, value_list: None,
             },
         ];
         Some(FIELDS)

@@ -8,6 +8,8 @@ mod entity_field;
 mod entity_facet;
 mod entity_navigation;
 mod entity_table_facet;
+mod field_value_list;
+mod field_value_list_item;
 
 pub use product::ProductEntity;
 pub use order::OrderEntity;
@@ -17,3 +19,5 @@ pub use entity_field::EntityFieldEntity;
 pub use entity_facet::EntityFacetEntity;
 pub use entity_navigation::EntityNavigationEntity;
 pub use entity_table_facet::EntityTableFacetEntity;
+pub use field_value_list::FieldValueListEntity;
+pub use field_value_list_item::FieldValueListItemEntity;
