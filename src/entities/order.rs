@@ -75,16 +75,16 @@ impl ODataEntity for OrderEntity {
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
-            FieldDef { name: "OrderID",           label: "Bestell-Nr.",   edm_type: "Edm.String",          max_length: Some(10),  precision: None,     scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "CustomerName",      label: "Kunde",         edm_type: "Edm.String",          max_length: Some(80),  precision: None,     scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "Quantity",          label: "Menge",         edm_type: "Edm.Int32",           max_length: None,      precision: None,     scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "TotalAmount",       label: "Gesamtbetrag",  edm_type: "Edm.Decimal",         max_length: None,      precision: Some(15), scale: Some(2), immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "Currency",          label: "Waehrung",      edm_type: "Edm.String",          max_length: Some(3),   precision: None,     scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "Status",            label: "Status",        edm_type: "Edm.String",          max_length: Some(1),   precision: None,     scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "StatusCriticality", label: "Kritikalitaet", edm_type: "Edm.Byte",            max_length: None,      precision: None,     scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "OrderDate",         label: "Bestelldatum",  edm_type: "Edm.DateTimeOffset",  max_length: None,      precision: None,     scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "DeliveryDate",      label: "Lieferdatum",   edm_type: "Edm.DateTimeOffset",  max_length: None,      precision: None,     scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "Note",              label: "Notiz",         edm_type: "Edm.String",          max_length: Some(500), precision: None,     scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "OrderID",           label: "Bestell-Nr.",   edm_type: "Edm.String",          max_length: Some(10),  precision: None,     scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "CustomerName",      label: "Kunde",         edm_type: "Edm.String",          max_length: Some(80),  precision: None,     scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "Quantity",          label: "Menge",         edm_type: "Edm.Int32",           max_length: None,      precision: None,     scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "TotalAmount",       label: "Gesamtbetrag",  edm_type: "Edm.Decimal",         max_length: None,      precision: Some(15), scale: Some(2), immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "Currency",          label: "Waehrung",      edm_type: "Edm.String",          max_length: Some(3),   precision: None,     scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "Status",            label: "Status",        edm_type: "Edm.String",          max_length: Some(1),   precision: None,     scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "StatusCriticality", label: "Kritikalitaet", edm_type: "Edm.Byte",            max_length: None,      precision: None,     scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "OrderDate",         label: "Bestelldatum",  edm_type: "Edm.DateTimeOffset",  max_length: None,      precision: None,     scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "DeliveryDate",      label: "Lieferdatum",   edm_type: "Edm.DateTimeOffset",  max_length: None,      precision: None,     scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "Note",              label: "Notiz",         edm_type: "Edm.String",          max_length: Some(500), precision: None,     scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
         ];
         Some(FIELDS)
     }

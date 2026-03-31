@@ -28,9 +28,9 @@ impl ODataEntity for FieldValueListEntity {
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
-            FieldDef { name: "ID",          label: "ID",            edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "ListName",    label: "Listenname",    edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "Description", label: "Beschreibung",  edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "ID",          label: "ID",            edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "ListName",    label: "Listenname",    edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "Description", label: "Beschreibung",  edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
         ];
         Some(FIELDS)
     }

@@ -18,6 +18,9 @@ pub struct FieldDef {
     /// Flexible ValueList-Definition – überschreibt value_source wenn gesetzt.
     /// Erlaubt beliebige CollectionPath, Key- und Display-Felder.
     pub value_list: Option<&'static ValueListDef>,
+    /// Pfad fuer Common.Text bei FK-Referenzen (z.B. "_ValueList/ListName").
+    /// Erzeugt Common.Text + UI.TextArrangement/TextOnly auf diesem Feld.
+    pub text_path: Option<&'static str>,
 }
 
 /// Flexible ValueList-Konfiguration fuer Custom-Wertehilfen.
@@ -471,6 +474,14 @@ pub fn build_capabilities_annotations(
                 }
             }
         }
+        // Common.Text auf FK-Feldern → zeigt Display-Text via Navigation Property
+        if let Some(tp) = f.text_path {
+            x.push_str(&format!(
+                "<Annotation Term=\"Common.Text\" Path=\"{}\"/>",
+                tp
+            ));
+            x.push_str("<Annotation Term=\"UI.TextArrangement\" EnumMember=\"UI.TextArrangementType/TextOnly\"/>");
+        }
         // Flexible ValueList (takes precedence) or classic value_source
         if let Some(vl) = f.value_list {
             emit_value_list_annotation(&mut x, f.name, vl, None);
@@ -679,7 +690,7 @@ mod tests {
                 precision: None,
                 scale: None,
                 immutable: true,
-                semantic_object: None, value_source: None, value_list: None,
+                semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
             FieldDef {
                 name: "ProductName",
@@ -689,7 +700,7 @@ mod tests {
                 precision: None,
                 scale: None,
                 immutable: false,
-                semantic_object: None, value_source: None, value_list: None,
+                semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
             FieldDef {
                 name: "Price",
@@ -699,7 +710,7 @@ mod tests {
                 precision: Some(15),
                 scale: Some(2),
                 immutable: false,
-                semantic_object: None, value_source: None, value_list: None,
+                semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
         ]
     }
@@ -1023,7 +1034,7 @@ mod tests {
             precision: None,
             scale: None,
             immutable: false,
-            semantic_object: Some("Customers"), value_source: None, value_list: None,        }];
+            semantic_object: Some("Customers"), value_source: None, value_list: None, text_path: None }];
         let def = AnnotationsDef {
             selection_fields: &[],
             line_item: &[],
@@ -1057,7 +1068,7 @@ mod tests {
             precision: None,
             scale: None,
             immutable: false,
-            semantic_object: Some("Customers"), value_source: None, value_list: None,        }];
+            semantic_object: Some("Customers"), value_source: None, value_list: None, text_path: None }];
         let def = AnnotationsDef {
             selection_fields: &[],
             line_item: &[],
@@ -1402,12 +1413,12 @@ mod tests {
             FieldDef {
                 name: "Name", label: "Name", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: None, value_source: None, value_list: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
             FieldDef {
                 name: "Price", label: "Price", edm_type: "Edm.Decimal",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: None, value_source: None, value_list: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
         ];
         let def = AnnotationsDef {
@@ -1551,11 +1562,11 @@ mod tests {
             FieldDef {
                 name: "CustomerID", label: "Customer", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: Some("Customers"), value_source: None, value_list: None,            },
+                immutable: false, semantic_object: Some("Customers"), value_source: None, value_list: None, text_path: None },
             FieldDef {
                 name: "ProductID", label: "Product", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: Some("Products"), value_source: None, value_list: None,
+                immutable: false, semantic_object: Some("Products"), value_source: None, value_list: None, text_path: None,
             },
         ];
         let def = AnnotationsDef {
@@ -1582,7 +1593,7 @@ mod tests {
             FieldDef {
                 name: "Name", label: "Name", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: None, value_source: None, value_list: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
         ];
         let xml = build_capabilities_annotations("Tests", "Test", "Name", None, &fields, true);
@@ -1606,17 +1617,17 @@ mod tests {
             FieldDef {
                 name: "ID", label: "ID", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: true, semantic_object: None, value_source: None, value_list: None,
+                immutable: true, semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
             FieldDef {
                 name: "Code", label: "Code", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: true, semantic_object: None, value_source: None, value_list: None,
+                immutable: true, semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
             FieldDef {
                 name: "Name", label: "Name", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: None, value_source: None, value_list: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
         ];
         let xml = build_capabilities_annotations("Tests", "Test", "ID", None, &fields, true);
@@ -1637,7 +1648,7 @@ mod tests {
             precision: None,
             scale: None,
             immutable: false,
-            semantic_object: None, value_source: None, value_list: None,
+            semantic_object: None, value_source: None, value_list: None, text_path: None,
         }];
         let xml = build_entity_type_xml("Simple", "ID", &fields);
         assert!(xml.contains("Name=\"Description\""));
@@ -1657,12 +1668,12 @@ mod tests {
             FieldDef {
                 name: "OrderID", label: "Order", edm_type: "Edm.Int32",
                 max_length: None, precision: None, scale: None,
-                immutable: true, semantic_object: None, value_source: None, value_list: None,
+                immutable: true, semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
             FieldDef {
                 name: "Description", label: "Desc", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: None, value_source: None, value_list: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
         ];
         let xml = build_entity_type_xml("Order", "OrderID", &fields);
@@ -1686,7 +1697,7 @@ mod tests {
             precision: None,
             scale: None,
             immutable: false,
-            semantic_object: None, value_source: None, value_list: None,
+            semantic_object: None, value_source: None, value_list: None, text_path: None,
         }];
         let xml = build_entity_type_xml("Test", "ID", &fields);
         let desc_section = &xml[xml.find("Name=\"Description\"").unwrap()..];
@@ -1723,21 +1734,21 @@ mod tests {
             FieldDef {
                 name: "OrderID", label: "Order Nr.", edm_type: "Edm.String",
                 max_length: Some(10), precision: None, scale: None,
-                immutable: true, semantic_object: None, value_source: None, value_list: None,
+                immutable: true, semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
             FieldDef {
                 name: "CustomerID", label: "Customer", edm_type: "Edm.String",
                 max_length: Some(10), precision: None, scale: None,
-                immutable: false, semantic_object: Some("Customers"), value_source: None, value_list: None,            },
+                immutable: false, semantic_object: Some("Customers"), value_source: None, value_list: None, text_path: None },
             FieldDef {
                 name: "TotalAmount", label: "Total", edm_type: "Edm.Decimal",
                 max_length: None, precision: Some(15), scale: Some(2),
-                immutable: false, semantic_object: None, value_source: None, value_list: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
             FieldDef {
                 name: "Status", label: "Status", edm_type: "Edm.String",
                 max_length: Some(20), precision: None, scale: None,
-                immutable: false, semantic_object: None, value_source: None, value_list: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
         ];
         let def = AnnotationsDef {
@@ -1827,12 +1838,12 @@ mod tests {
             FieldDef {
                 name: "EdmType", label: "Datentyp", edm_type: "Edm.String",
                 max_length: Some(30), precision: None, scale: None,
-                immutable: false, semantic_object: None, value_source: Some(list_uuid), value_list: None,
+                immutable: false, semantic_object: None, value_source: Some(list_uuid), value_list: None, text_path: None,
             },
             FieldDef {
                 name: "Name", label: "Name", edm_type: "Edm.String",
                 max_length: None, precision: None, scale: None,
-                immutable: false, semantic_object: None, value_source: None, value_list: None,
+                immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
         ];
         let xml = build_capabilities_annotations("Tests", "Test", "EdmType", None, &fields, true);
@@ -1870,7 +1881,7 @@ mod tests {
                 name: "ValueSource", label: "Werteliste", edm_type: "Edm.String",
                 max_length: Some(40), precision: None, scale: None,
                 immutable: false, semantic_object: None, value_source: None,
-                value_list: Some(&VL),
+                value_list: Some(&VL), text_path: None,
             },
         ];
         let xml = build_capabilities_annotations("Tests", "Test", "ValueSource", None, &fields, true);
@@ -1910,7 +1921,7 @@ mod tests {
             FieldDef {
                 name: "SetName", label: "EntitySet", edm_type: "Edm.String",
                 max_length: Some(40), precision: None, scale: None,
-                immutable: true, semantic_object: None, value_source: None, value_list: None,
+                immutable: true, semantic_object: None, value_source: None, value_list: None, text_path: None,
             },
         ];
         let xml = build_capabilities_annotations("EntityConfigs", "EntityConfig", "SetName", Some("SetName"), &fields, true);

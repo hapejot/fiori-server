@@ -33,26 +33,55 @@ impl ODataEntity for EntityFieldEntity {
             // value_source speichert die UUID der FieldValueList, nicht den Namen
             let edm_types_id: &'static str = Box::leak(value_list_id("EdmTypes").into_boxed_str());
             vec![
-            FieldDef { name: "FieldID",              label: "Feld-ID",            edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "SetName",              label: "EntitySet",           edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "FieldName",            label: "Feldname",            edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "Label",                label: "Bezeichnung",         edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "EdmType",              label: "Datentyp",            edm_type: "Edm.String",  max_length: Some(30),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: Some(edm_types_id) , value_list: None},
-            FieldDef { name: "MaxLength",            label: "Max. Laenge",         edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "Precision",            label: "Praezision",          edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "Scale",                label: "Dezimalstellen",      edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "IsImmutable",          label: "Unveraenderlich",     edm_type: "Edm.Boolean", max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "SemanticObject",       label: "Semantic Object",     edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "ValueSource",          label: "Werteliste",          edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: Some(&ValueListDef { collection_path: "FieldValueLists", key_property: "ID", display_property: Some("ListName"), fixed_values: false })},
-            FieldDef { name: "SortOrder",            label: "Reihenfolge",         edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "ShowInLineItem",       label: "In Liste",            edm_type: "Edm.Boolean", max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "LineItemImportance",   label: "Wichtigkeit",         edm_type: "Edm.String",  max_length: Some(10),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "LineItemLabel",        label: "Listen-Label",        edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "LineItemCriticalityPath", label: "Kritikalitaets-Pfad", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "LineItemSemanticObject", label: "Listen-Sem.Object", edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "FieldID",              label: "Feld-ID",            edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "SetName",              label: "EntitySet",           edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "FieldName",            label: "Feldname",            edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "Label",                label: "Bezeichnung",         edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "EdmType",              label: "Datentyp",            edm_type: "Edm.String",  max_length: Some(30),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: Some(edm_types_id) , value_list: None, text_path: None},
+            FieldDef { name: "MaxLength",            label: "Max. Laenge",         edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "Precision",            label: "Praezision",          edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "Scale",                label: "Dezimalstellen",      edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "IsImmutable",          label: "Unveraenderlich",     edm_type: "Edm.Boolean", max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "SemanticObject",       label: "Semantic Object",     edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "ValueSource",          label: "Werteliste",          edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: Some(&ValueListDef { collection_path: "FieldValueLists", key_property: "ID", display_property: Some("ListName"), fixed_values: false }), text_path: Some("_ValueList/ListName")},
+            FieldDef { name: "SortOrder",            label: "Reihenfolge",         edm_type: "Edm.Int32",   max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "ShowInLineItem",       label: "In Liste",            edm_type: "Edm.Boolean", max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "LineItemImportance",   label: "Wichtigkeit",         edm_type: "Edm.String",  max_length: Some(10),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "LineItemLabel",        label: "Listen-Label",        edm_type: "Edm.String",  max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "LineItemCriticalityPath", label: "Kritikalitaets-Pfad", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "LineItemSemanticObject", label: "Listen-Sem.Object", edm_type: "Edm.String",  max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
             ]
         });
         Some(FIELDS.as_slice())
+    }
+
+    fn navigation_properties(&self) -> &'static [NavigationPropertyDef] {
+        static NAV: &[NavigationPropertyDef] = &[
+            // 1:1 navigation to FieldValueList for Common.Text on ValueSource
+            NavigationPropertyDef { name: "_ValueList", target_type: "FieldValueList", is_collection: false, foreign_key: Some("ValueSource") },
+        ];
+        NAV
+    }
+
+    fn expand_record(&self, record: &mut Value, nav_properties: &[&str], entities: &[&dyn ODataEntity], data_store: &std::collections::HashMap<String, Vec<Value>>) {
+        // _ValueList expansion: attach FieldValueList based on ValueSource (UUID)
+        if nav_properties.contains(&"_ValueList") {
+            if let Some(list_id) = record.get("ValueSource").and_then(|v| v.as_str()).map(|s| s.to_string()) {
+                if !list_id.is_empty() {
+                    let vl_entity = entities.iter().find(|e| e.set_name() == "FieldValueLists");
+                    if let Some(entity) = vl_entity {
+                        let data = data_store.get(entity.set_name())
+                            .cloned()
+                            .unwrap_or_else(|| entity.mock_data());
+                        let vl = data.into_iter()
+                            .find(|p| p.get("ID").and_then(|v| v.as_str()) == Some(&list_id));
+                        if let Some(obj) = record.as_object_mut() {
+                            obj.insert("_ValueList".to_string(), vl.unwrap_or(Value::Null));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn entity_set(&self) -> String {
@@ -60,6 +89,7 @@ impl ODataEntity for EntityFieldEntity {
             "<EntitySet Name=\"EntityFields\" EntityType=\"{ns}.EntityField\">\n\
              <NavigationPropertyBinding Path=\"SiblingEntity\" Target=\"EntityFields\"/>\n\
              <NavigationPropertyBinding Path=\"DraftAdministrativeData\" Target=\"DraftAdministrativeData\"/>\n\
+             <NavigationPropertyBinding Path=\"_ValueList\" Target=\"FieldValueLists\"/>\n\
              </EntitySet>",
             ns = NAMESPACE
         )

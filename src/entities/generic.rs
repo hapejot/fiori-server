@@ -208,7 +208,7 @@ fn convert_field(f: &FieldConfig) -> FieldDef {
         immutable: f.immutable,
         semantic_object: leak_opt(&f.semantic_object),
         value_source: leak_opt(&f.value_source),
-        value_list: None,
+        value_list: None, text_path: None,
     }
 }
 

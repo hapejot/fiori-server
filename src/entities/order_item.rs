@@ -47,14 +47,14 @@ impl ODataEntity for OrderItemEntity {
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
-            FieldDef { name: "ItemID",      label: "Pos.-Nr.",      edm_type: "Edm.String",  max_length: Some(10),  precision: None,      scale: None,    immutable: true,  semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "OrderID",     label: "Bestell-Nr.",   edm_type: "Edm.String",  max_length: Some(10),  precision: None,      scale: None,    immutable: true,  semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "ProductID",   label: "Produkt-ID",    edm_type: "Edm.String",  max_length: Some(10),  precision: None,      scale: None,    immutable: false,  semantic_object: Some("Products"), value_source: None , value_list: None},
-            FieldDef { name: "ItemText",    label: "Positionstext", edm_type: "Edm.String",  max_length: Some(80),  precision: None,      scale: None,    immutable: false,  semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "Quantity",    label: "Menge",         edm_type: "Edm.Int32",   max_length: None,      precision: None,      scale: None,    immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "UnitPrice",   label: "Einzelpreis",   edm_type: "Edm.Decimal", max_length: None,      precision: Some(15),  scale: Some(2), immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "Currency",    label: "Waehrung",      edm_type: "Edm.String",  max_length: Some(3),   precision: None,      scale: None,    immutable: false, semantic_object: None, value_source: None , value_list: None},
-            FieldDef { name: "NetAmount",   label: "Nettobetrag",   edm_type: "Edm.Decimal", max_length: None,      precision: Some(15),  scale: Some(2), immutable: false, semantic_object: None, value_source: None , value_list: None},
+            FieldDef { name: "ItemID",      label: "Pos.-Nr.",      edm_type: "Edm.String",  max_length: Some(10),  precision: None,      scale: None,    immutable: true,  semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "OrderID",     label: "Bestell-Nr.",   edm_type: "Edm.String",  max_length: Some(10),  precision: None,      scale: None,    immutable: true,  semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "ProductID",   label: "Produkt-ID",    edm_type: "Edm.String",  max_length: Some(10),  precision: None,      scale: None,    immutable: false,  semantic_object: Some("Products"), value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "ItemText",    label: "Positionstext", edm_type: "Edm.String",  max_length: Some(80),  precision: None,      scale: None,    immutable: false,  semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "Quantity",    label: "Menge",         edm_type: "Edm.Int32",   max_length: None,      precision: None,      scale: None,    immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "UnitPrice",   label: "Einzelpreis",   edm_type: "Edm.Decimal", max_length: None,      precision: Some(15),  scale: Some(2), immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "Currency",    label: "Waehrung",      edm_type: "Edm.String",  max_length: Some(3),   precision: None,      scale: None,    immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "NetAmount",   label: "Nettobetrag",   edm_type: "Edm.Decimal", max_length: None,      precision: Some(15),  scale: Some(2), immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
         ];
         Some(FIELDS)
     }

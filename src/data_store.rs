@@ -1479,10 +1479,10 @@ mod tests {
         fn entity_set(&self) -> String { String::new() }
         fn fields_def(&self) -> Option<&'static [FieldDef]> {
             static FIELDS: &[FieldDef] = &[
-                FieldDef { name: "ProductID", label: "Product ID", edm_type: "Edm.String", max_length: Some(10), precision: None, scale: None, immutable: true, semantic_object: None, value_source: None , value_list: None},
-                FieldDef { name: "ProductName", label: "Name", edm_type: "Edm.String", max_length: Some(80), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
-                FieldDef { name: "Price", label: "Price", edm_type: "Edm.Decimal", max_length: None, precision: Some(10), scale: Some(2), immutable: false, semantic_object: None, value_source: None , value_list: None},
-                FieldDef { name: "Status", label: "Status", edm_type: "Edm.String", max_length: Some(1), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None},
+                FieldDef { name: "ProductID", label: "Product ID", edm_type: "Edm.String", max_length: Some(10), precision: None, scale: None, immutable: true, semantic_object: None, value_source: None , value_list: None, text_path: None},
+                FieldDef { name: "ProductName", label: "Name", edm_type: "Edm.String", max_length: Some(80), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+                FieldDef { name: "Price", label: "Price", edm_type: "Edm.Decimal", max_length: None, precision: Some(10), scale: Some(2), immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+                FieldDef { name: "Status", label: "Status", edm_type: "Edm.String", max_length: Some(1), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
             ];
             Some(FIELDS)
         }
@@ -2145,9 +2145,9 @@ mod tests {
         fn entity_set(&self) -> String { String::new() }
         fn fields_def(&self) -> Option<&'static [FieldDef]> {
             static FIELDS: &[FieldDef] = &[
-                FieldDef { name: "ID",          label: "ID",           edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None, value_list: None },
-                FieldDef { name: "ListName",    label: "Listenname",   edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None },
-                FieldDef { name: "Description", label: "Beschreibung", edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None },
+                FieldDef { name: "ID",          label: "ID",           edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None, value_list: None, text_path: None },
+                FieldDef { name: "ListName",    label: "Listenname",   edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
+                FieldDef { name: "Description", label: "Beschreibung", edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
             ];
             Some(FIELDS)
         }
@@ -2177,11 +2177,11 @@ mod tests {
         fn parent_set_name(&self) -> Option<&'static str> { Some("FieldValueLists") }
         fn fields_def(&self) -> Option<&'static [FieldDef]> {
             static FIELDS: &[FieldDef] = &[
-                FieldDef { name: "ID",          label: "ID",           edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None, value_list: None },
-                FieldDef { name: "ListID",      label: "Listen-ID",    edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None, value_list: None },
-                FieldDef { name: "Code",        label: "Code",         edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None },
-                FieldDef { name: "Description", label: "Beschreibung", edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None },
-                FieldDef { name: "SortOrder",   label: "Reihenfolge",  edm_type: "Edm.Int32",  max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None },
+                FieldDef { name: "ID",          label: "ID",           edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None, value_list: None, text_path: None },
+                FieldDef { name: "ListID",      label: "Listen-ID",    edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None, value_list: None, text_path: None },
+                FieldDef { name: "Code",        label: "Code",         edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
+                FieldDef { name: "Description", label: "Beschreibung", edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
+                FieldDef { name: "SortOrder",   label: "Reihenfolge",  edm_type: "Edm.Int32",  max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
             ];
             Some(FIELDS)
         }
