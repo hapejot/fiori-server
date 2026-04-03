@@ -10,16 +10,6 @@
     "TargetType": "Contact"
   },
   {
-    "ForeignKey": "CustomerID",
-    "IsCollection": false,
-    "NavID": "Contacts_Customer",
-    "NavName": "Customer",
-    "SetName": "Contacts",
-    "SortOrder": 0,
-    "TargetSet": "Customers",
-    "TargetType": "Customer"
-  },
-  {
     "ForeignKey": "ProductID",
     "IsCollection": false,
     "NavID": "OrderItems_Product",
@@ -48,5 +38,15 @@
     "SortOrder": 0,
     "TargetSet": "OrderItems",
     "TargetType": "OrderItem"
+  },
+  {
+    "ForeignKey": "CustomerID",
+    "IsCollection": false,
+    "NavID": "Contacts_Customer",
+    "NavName": "Customer",
+    "SetName": "Contacts",
+    "SortOrder": 0,
+    "TargetSet": "Customers",
+    "TargetType": "Customer"
   }
 ]

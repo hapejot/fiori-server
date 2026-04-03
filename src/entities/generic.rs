@@ -583,19 +583,22 @@ impl ODataEntity for GenericEntity {
                 "target": [format!("{}List", set), format!("{}ObjectPage", set)]
             }),
         ];
-        // 3rd level: for each table facet referencing a child nav property
+        // 3rd level: for each table facet referencing a child nav property.
+        // Use scoped names ({parent}_{child}ObjectPage) to avoid colliding
+        // with the child entity's own standalone ObjectPage target.
         for tf in self.annotations.iter().flat_map(|a| a.table_facets.iter()) {
             let nav = tf.navigation_property;
             // find the nav config to get the target_set
             if let Some(nc) = self.nav_configs.iter().find(|n| n.name == nav) {
                 let child_set = &nc.target_set;
+                let scoped = format!("{}_{}", set, child_set);
                 routes.push(serde_json::json!({
                     "pattern": format!("{}({{key}})/{}({{key2}}):?query:", set, nav),
-                    "name": format!("{}ObjectPage", child_set),
+                    "name": format!("{}ObjectPage", scoped),
                     "target": [
                         format!("{}List", set),
                         format!("{}ObjectPage", set),
-                        format!("{}ObjectPage", child_set)
+                        format!("{}ObjectPage", scoped)
                     ]
                 }));
             }
@@ -609,15 +612,17 @@ impl ODataEntity for GenericEntity {
         }
         let set = self.set_name;
 
-        // Build navigation block for ObjectPage: table facets that link to child entities
+        // Build navigation block for ObjectPage: table facets that link to child entities.
+        // Use scoped route names to match the scoped 3rd-level routes.
         let mut nav_entries = serde_json::Map::new();
         for tf in self.annotations.iter().flat_map(|a| a.table_facets.iter()) {
             let nav = tf.navigation_property;
             if let Some(nc) = self.nav_configs.iter().find(|n| n.name == nav) {
+                let scoped = format!("{}_{}", set, nc.target_set);
                 nav_entries.insert(
                     nav.to_string(),
                     serde_json::json!({
-                        "detail": { "route": format!("{}ObjectPage", nc.target_set) }
+                        "detail": { "route": format!("{}ObjectPage", scoped) }
                     }),
                 );
             }
@@ -670,15 +675,16 @@ impl ODataEntity for GenericEntity {
             ),
         ];
 
-        // 3rd-level child ObjectPages
+        // 3rd-level child ObjectPages (scoped names to avoid collisions)
         for tf in self.annotations.iter().flat_map(|a| a.table_facets.iter()) {
             let nav = tf.navigation_property;
             if let Some(nc) = self.nav_configs.iter().find(|n| n.name == nav) {
+                let scoped = format!("{}_{}", set, nc.target_set);
                 targets.push((
-                    format!("{}ObjectPage", nc.target_set),
+                    format!("{}ObjectPage", scoped),
                     serde_json::json!({
                         "type": "Component",
-                        "id": format!("{}ObjectPage", nc.target_set),
+                        "id": format!("{}ObjectPage", scoped),
                         "name": "sap.fe.templates.ObjectPage",
                         "options": {
                             "settings": {

@@ -110,6 +110,7 @@ impl ODataEntity for EntityFieldEntity {
                 LineItemField { name: "MaxLength",      label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
                 LineItemField { name: "IsImmutable",    label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
                 LineItemField { name: "IsComputed",     label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField { name: "TextPath",       label: Some("Textpfad"), importance: Some("Low"), criticality_path: None, navigation_path: None, semantic_object: None },
             ],
             header_info: HeaderInfoDef {
                 type_name: "Felddefinition",

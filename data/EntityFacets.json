@@ -1,15 +1,5 @@
 [
   {
-    "FacetID": "Contacts_PersonalInfo",
-    "FieldGroupFields": "ContactID,FirstName,LastName,Email,Phone",
-    "FieldGroupLabel": "Person",
-    "FieldGroupQualifier": "Personal",
-    "SectionId": "PersonalInfo",
-    "SectionLabel": "Persönliche Daten",
-    "SetName": "Contacts",
-    "SortOrder": 0
-  },
-  {
     "FacetID": "Customers_ContactInfo",
     "FieldGroupFields": "CustomerID,CustomerName,Email,Phone",
     "FieldGroupLabel": "Kontakt",
@@ -18,16 +8,6 @@
     "SectionLabel": "Kontaktdaten",
     "SetName": "Customers",
     "SortOrder": 0
-  },
-  {
-    "FacetID": "Contacts_CompanyInfo",
-    "FieldGroupFields": "CustomerID,Department,Position",
-    "FieldGroupLabel": "Firmenzuordnung",
-    "FieldGroupQualifier": "Company",
-    "SectionId": "CompanyInfo",
-    "SectionLabel": "Unternehmen",
-    "SetName": "Contacts",
-    "SortOrder": 1
   },
   {
     "FacetID": "Customers_AddressInfo",
@@ -117,6 +97,26 @@
     "SectionId": "Delivery",
     "SectionLabel": "Lieferung",
     "SetName": "Orders",
+    "SortOrder": 1
+  },
+  {
+    "FacetID": "Contacts_PersonalInfo",
+    "FieldGroupFields": "ContactID,FirstName,LastName,Email,Phone",
+    "FieldGroupLabel": "Person",
+    "FieldGroupQualifier": "Personal",
+    "SectionId": "PersonalInfo",
+    "SectionLabel": "Persönliche Daten",
+    "SetName": "Contacts",
+    "SortOrder": 0
+  },
+  {
+    "FacetID": "Contacts_CompanyInfo",
+    "FieldGroupFields": "CustomerID,Department,Position",
+    "FieldGroupLabel": "Firmenzuordnung",
+    "FieldGroupQualifier": "Company",
+    "SectionId": "CompanyInfo",
+    "SectionLabel": "Unternehmen",
+    "SetName": "Contacts",
     "SortOrder": 1
   }
 ]
