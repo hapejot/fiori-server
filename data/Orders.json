@@ -1,14 +1,1 @@
-[
-  {
-    "Currency": "EUR",
-    "CustomerName": "Peter",
-    "DeliveryDate": "",
-    "ID": "a5d8cbab-c680-4b31-9a4a-ba53ed42df24",
-    "Note": "",
-    "OrderDate": "2026-04-03T11:53:50+02:00",
-    "Quantity": 0,
-    "Status": "P",
-    "StatusCriticality": 2,
-    "TotalAmount": "0"
-  }
-]
+[]

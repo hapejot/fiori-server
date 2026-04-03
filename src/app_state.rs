@@ -105,7 +105,6 @@ impl AppState {
 /// Built-in Entities haben bekannte SetNames.
 fn is_generic_entity(entity: &&'static dyn ODataEntity) -> bool {
     const BUILTIN_SETS: &[&str] = &[
-        "Products", "Orders", "OrderItems",
         "EntityConfigs", "EntityFields", "EntityFacets",
         "EntityNavigations", "EntityTableFacets",
         "FieldValueLists", "FieldValueListItems",

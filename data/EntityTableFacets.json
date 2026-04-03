@@ -14,5 +14,13 @@
     "SetName": "Orders",
     "SortOrder": 0,
     "TableFacetID": "Orders_ItemsSection"
+  },
+  {
+    "FacetId": "ItemsSection",
+    "FacetLabel": "Positionen",
+    "NavigationProperty": "Items",
+    "SetName": "Orders",
+    "SortOrder": 0,
+    "TableFacetID": "Orders_ItemsSection"
   }
 ]

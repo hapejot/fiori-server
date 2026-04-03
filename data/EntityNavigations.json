@@ -20,6 +20,16 @@
     "TargetType": "Customer"
   },
   {
+    "ForeignKey": "ProductID",
+    "IsCollection": false,
+    "NavID": "OrderItems_Product",
+    "NavName": "Product",
+    "SetName": "OrderItems",
+    "SortOrder": 0,
+    "TargetSet": "Products",
+    "TargetType": "Product"
+  },
+  {
     "ForeignKey": "OrderID",
     "IsCollection": true,
     "NavID": "Orders_Items",
@@ -30,13 +40,13 @@
     "TargetType": "OrderItem"
   },
   {
-    "ForeignKey": "ProductID",
-    "IsCollection": false,
-    "NavID": "OrderItems_Product",
-    "NavName": "Product",
-    "SetName": "OrderItems",
+    "ForeignKey": "OrderID",
+    "IsCollection": true,
+    "NavID": "Orders_Items",
+    "NavName": "Items",
+    "SetName": "Orders",
     "SortOrder": 0,
-    "TargetSet": "Products",
-    "TargetType": "Product"
+    "TargetSet": "OrderItems",
+    "TargetType": "OrderItem"
   }
 ]

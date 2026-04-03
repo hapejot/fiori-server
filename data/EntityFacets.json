@@ -70,6 +70,16 @@
     "SortOrder": 1
   },
   {
+    "FacetID": "OrderItems_ItemDetails",
+    "FieldGroupFields": "ProductID,ItemText,Quantity,UnitPrice,Currency,NetAmount",
+    "FieldGroupLabel": "Informationen",
+    "FieldGroupQualifier": "ItemInfo",
+    "SectionId": "ItemDetails",
+    "SectionLabel": "Positionsdetails",
+    "SetName": "OrderItems",
+    "SortOrder": 0
+  },
+  {
     "FacetID": "Orders_OrderDetails",
     "FieldGroupFields": "CustomerName,Quantity,TotalAmount,Currency,Status",
     "FieldGroupLabel": "Informationen",
@@ -90,13 +100,23 @@
     "SortOrder": 1
   },
   {
-    "FacetID": "OrderItems_ItemDetails",
-    "FieldGroupFields": "ProductID,ItemText,Quantity,UnitPrice,Currency,NetAmount",
+    "FacetID": "Orders_OrderDetails",
+    "FieldGroupFields": "CustomerName,Quantity,TotalAmount,Currency,Status",
     "FieldGroupLabel": "Informationen",
-    "FieldGroupQualifier": "ItemInfo",
-    "SectionId": "ItemDetails",
-    "SectionLabel": "Positionsdetails",
-    "SetName": "OrderItems",
+    "FieldGroupQualifier": "OrderInfo",
+    "SectionId": "OrderDetails",
+    "SectionLabel": "Bestelldetails",
+    "SetName": "Orders",
     "SortOrder": 0
+  },
+  {
+    "FacetID": "Orders_Delivery",
+    "FieldGroupFields": "OrderDate,DeliveryDate,Note",
+    "FieldGroupLabel": "Lieferdetails",
+    "FieldGroupQualifier": "Delivery",
+    "SectionId": "Delivery",
+    "SectionLabel": "Lieferung",
+    "SetName": "Orders",
+    "SortOrder": 1
   }
 ]
