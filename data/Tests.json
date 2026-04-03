@@ -1,0 +1,21 @@
+[
+  {
+    "ID": "304b801a-5923-4ed4-b012-323c81ed7212",
+    "Name": "Objekt 2",
+    "Titel": "Sub",
+    "Wert": "33"
+  },
+  {
+    "ID": "1a22c000-6990-4d70-a651-6b13b02454ee",
+    "Name": "Objekt 1",
+    "Titel": "Titel 1",
+    "Wert": "21"
+  },
+  {
+    "ID": "948c144b-4285-4894-b93e-72bf10dd3406",
+    "Name": "Objekt 3",
+    "Status": "old",
+    "Titel": "Sub 3",
+    "Wert": "44"
+  }
+]

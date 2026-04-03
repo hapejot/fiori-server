@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
-use log::info;
+use tracing::info;
 use serde_json::Value;
 
 use crate::builders;
@@ -138,9 +138,10 @@ fn build_apps_json(entities: &[&'static dyn ODataEntity]) -> String {
 
 /// Builder fuer schrittweise Konfiguration des AppState.
 pub struct AppStateBuilder {
-    entities: Vec<&'static dyn ODataEntity>,
+    pub(crate) entities: Vec<&'static dyn ODataEntity>,
     settings: Option<Settings>,
     data_dir: Option<PathBuf>,
+    data_store: Option<Box<dyn DataStore>>,
 }
 
 impl AppStateBuilder {
@@ -149,6 +150,7 @@ impl AppStateBuilder {
             entities: Vec::new(),
             settings: None,
             data_dir: None,
+            data_store: None,
         }
     }
 
@@ -164,6 +166,11 @@ impl AppStateBuilder {
 
     pub fn entity(mut self, entity: &'static dyn ODataEntity) -> Self {
         self.entities.push(entity);
+        self
+    }
+
+    pub fn data_store(mut self, store: Box<dyn DataStore>) -> Self {
+        self.data_store = Some(store);
         self
     }
 
@@ -198,8 +205,10 @@ impl AppStateBuilder {
             .data_dir
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().join("data"));
 
-        // Build the data store using the DataStore abstraction
-        let data_store = Box::new(InMemoryDataStore::new(data_dir.clone(), entities.clone()));
+        // Build the data store: use provided store or default to in-memory
+        let data_store = self.data_store.unwrap_or_else(|| {
+            Box::new(InMemoryDataStore::new(data_dir.clone(), entities.clone()))
+        });
 
         AppState {
             entities: RwLock::new(entities),

@@ -6,23 +6,64 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 ## Architecture
 
 ### Key Files
-- `src/main.rs` — Server startup, route registration
+- `src/main.rs` — Server startup, route registration, graceful shutdown
 - `src/app_state.rs` — Shared state with RwLock-wrapped mutable fields + `activate_config()`
-- `src/data_store.rs` — In-memory data store with draft support, commit/persistence
+- `src/data_store.rs` — `DataStore` trait + in-memory implementation with draft support
+- `src/pg_store.rs` — PostgreSQL `DataStore` implementation (feature-gated: `postgres`)
 - `src/handlers.rs` — HTTP handlers (collection, entity, batch, draft actions)
-- `src/annotations.rs` — OData annotation XML generation, `FieldDef`, `ValueListDef`
+- `src/annotations.rs` — Structured annotation types (`PV`, `Rec`, `Ann`, `Anns`), builder functions, `FieldDef`, `ValueListDef`
 - `src/entity.rs` — `ODataEntity` trait definition
 - `src/entities/` — Entity implementations (products, orders, meta tables, generic entities)
 - `src/builders.rs` — Build metadata XML, manifests, apps.json
 - `src/routing.rs` — OData URL parsing
 - `src/query.rs` — OData query execution ($filter, $orderby, $select, $expand)
+- `migrations/` — SQL schema files for PostgreSQL
 
 ### Entity Registration
 1. Create struct implementing `ODataEntity` trait
-2. Implement: `set_name`, `key_field`, `type_name`, `mock_data`, `entity_set`, `fields_def`
+2. Implement: `set_name`, `key_field`, `type_name`, `mock_data`, `entity_set`, `fields_def`, `annotations_def`
 3. Register in `AppStateBuilder` via `.entity()`
 4. Automatically included in EDMX, manifest.json, apps.json
 5. Optional: JSON file in `data/` for persistence; falls back to `mock_data()`
+6. Optional: `navigation_properties()` for compositions/references, `parent_set_name()` for child entities
+
+### Built-in Entities
+
+**Domain entities:**
+- `Products` (key: ID/Guid) — standalone, 12 fields, DataPoints (Price/Stock/Rating), 2 facets, helper: `product_id()`
+- `Orders` (key: ID/Guid) — parent of OrderItems, 10 fields, nested ObjectPage routing, helper: `order_id()`
+- `OrderItems` (key: ID/Guid, parent: Orders) — composition child, FK `OrderID` → Orders, FK `ProductID` → Products (with `text_path` for display), nav ref `Product`
+
+**Meta tables** (configure generic entities at runtime):
+- `EntityConfigs` (key: SetName) — parent of Fields/Facets/Navigations/TableFacets, `publishConfig` action
+- `EntityFields` (key: FieldID, parent: EntityConfigs) — 17 fields, nav ref `_ValueList` → FieldValueLists
+- `EntityFacets` (key: FacetID, parent: EntityConfigs)
+- `EntityNavigations` (key: NavID, parent: EntityConfigs)
+- `EntityTableFacets` (key: TableFacetID, parent: EntityConfigs)
+
+**Value lists:**
+- `FieldValueLists` (key: ID/Guid) — parent of Items, has Launchpad tile
+- `FieldValueListItems` (key: ID/Guid, parent: FieldValueLists) — FK: ListID
+
+### Annotation Architecture
+
+**Structured types** (in `annotations.rs`):
+- `PV` enum — Property value variants: `Str`, `Path`, `AnnotationPath`, `NavPropPath`, `PropPath`, `EnumMember`, `Int`, `Bool`, `Record(Rec)`, `Collection(Vec<Rec>)`, `PropertyPaths(Vec<String>)`
+- `Rec` struct — `<Record Type="...">` with `props: Vec<PV>`
+- `Ann` struct — `<Annotation Term="..." Qualifier="...">` with `AnnContent` payload
+- `AnnContent` enum — `Record`, `Collection`, `PropertyPaths`, `Str`, `Bool`, `EnumMember`, `PathWithChildren`, `Empty`
+- `Anns` struct — `<Annotations Target="...">` grouping multiple `Ann` items
+- All types implement `to_xml()` for serialization; `anns_to_xml(&[Anns])` serializes a full block
+
+**Builder pattern** — Structured builders return `Vec<Anns>`, thin XML wrappers delegate + serialize:
+- `build_annotations()` → `build_annotations_xml()` — UI.SelectionFields, UI.LineItem, UI.HeaderInfo, UI.HeaderFacets, UI.DataPoint, UI.Facets, UI.FieldGroup
+- `build_capabilities()` → `build_capabilities_annotations()` — UpdateRestrictions, InsertRestrictions, Draft annotations, property-level Common.Label, UI.Hidden, Core.Computed, Core.Immutable, Common.Text
+- `build_value_list_anns()` — Common.ValueList parameters (Out, DisplayOnly, Constant for ListID filter)
+
+**Definition types:**
+- `AnnotationsDef` composes: `HeaderInfoDef`, `SelectionFields`, `LineItemField[]`, `DataPointDef[]`, `HeaderFacetDef[]`, `FacetSectionDef[]`, `FieldGroupDef[]`, `TableFacetDef[]`
+- `LineItemField` variants: `UI.DataField` (default), `UI.DataFieldWithIntentBasedNavigation` (semantic_object), `UI.DataFieldWithNavigationPath` (navigation_path)
+- Entity-specific annotations via: `extra_annotations_xml()` (appended to standard), `custom_actions_xml()` (bound OData actions)
 
 ### Data Flow
 - `InMemoryDataStore::new()` loads from `data/<EntitySet>.json`, falls back to `mock_data()`
@@ -32,11 +73,11 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 ## Conventions
 
 ### Entity Key Fields
-- All **new** entities use `ID` as key field with type `Edm.Guid`
-- Existing entities (Orders, OrderItems, Products, etc.) keep their original key naming
-- FieldValueListItem was the first entity using this convention
+- All entities use `ID` as key field with type `Edm.Guid`
 - `create_entity()` auto-generates the key as a random UUID v4 when not provided
 - Mock data uses deterministic UUIDs via `value_list_id()` (UUID v5 from a fixed namespace + name)
+- Domain entities expose helper functions for cross-referencing: `product_id("P001")`, `order_id("O001")`
+- FK fields (e.g. `OrderItems.OrderID`, `OrderItems.ProductID`) store the UUID of the referenced entity
 
 ### Title Field (Common.Text)
 - Every entity has `title_field()` returning the primary display field name
@@ -51,7 +92,12 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 - Applies to: `get_collection`, `create_entity`, `copy_children_as_drafts`, `activate_children`, `remove_child_drafts`
 
 ### FieldDef
-- Every `FieldDef` instance must include `value_list` field (either `None` or `Some(&ValueListDef)`)
+- Every `FieldDef` instance must include `computed` and `value_list` fields
+- `computed: true` → `Core.Computed` annotation + `NonInsertableProperties` — field is server-generated, never shown in create/edit forms (key GUIDs, StatusCriticality, CreatedAt, NetAmount, composition FKs)
+- `immutable: true` → `Core.Immutable` annotation — field can be set at creation time, becomes read-only afterward (e.g. OrderDate)
+- `Edm.Guid` fields also get `UI.Hidden` automatically — hidden from all UI surfaces
+- `default_values()` on `ODataEntity` provides entity-specific initial values for new drafts (e.g. `Currency: "EUR"`, `Status: "A"`)
+- `text_path: Option<&str>` — points to the computed text field for display (e.g. `"_Status_text"`); when set, `build_capabilities` emits `Common.Text` + `UI.TextArrangement/TextOnly` on the source property
 - `ValueListDef` supports flexible value help: `collection_path`, `key_property`, `display_property`, `fixed_values`
 - When `value_list` is `Some`, annotation generation uses it; when `None`, falls back to `value_source` (classic FieldValueListItems path)
 - **`value_source` stores the UUID** of the FieldValueList, not the list name
@@ -69,6 +115,7 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 - `draftPrepare` → validates draft, returns it
 - `draftActivate` → merges draft into active, removes draft
 - Child entities are automatically copied/activated/removed with parent (via `copy_children_as_drafts`, `activate_children`, `remove_child_drafts`)
+- Draft flag properties (`IsActiveEntity`, `HasActiveEntity`, `HasDraftEntity`) are annotated with `Core.Computed` so the UI treats them as server-managed and never includes them in create/edit forms or POST/PATCH payloads
 
 ### Generic Entities
 - Configured via meta tables: `EntityConfigs`, `EntityFields`, `EntityFacets`, `EntityNavigations`, `EntityTableFacets`
@@ -76,7 +123,33 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 - `activate_config()` rebuilds generic entities at runtime after metadata changes (triggered by `publishConfig`)
 - Builtin sets (Products, Orders, etc.) are never replaced during rebuild
 
+### Value Text Resolution (Generic Entities)
+- Fields with `value_source` (FieldValueList UUID) auto-generate a hidden computed `_text` field
+- Convention: field `Status` with value_source → auto-generates `_Status_text` (computed, hidden)
+- `convert_field()` in `generic.rs` sets `text_path: Some("_{name}_text")` when `value_source` is non-empty
+- `from_config()` appends computed `FieldDef` entries for each `_text` field
+- `Common.Text` annotation on the source field points to the `_text` field → Fiori shows Description instead of Code
+- **Server-side resolution** populates `_text` fields at read time:
+  - `query_collection_from()` in `query.rs` — builds `(ListID, Code) → Description` lookup from FieldValueListItems, injects into collection results
+  - `resolve_value_texts()` in `data_store.rs` — same logic for single entity reads
+- Fiori `Common.ValueListWithFixedValues` only controls dropdown vs dialog in edit mode; display-mode text requires `Common.Text` + server-side resolution
+
 ## Build & Test
-- `cargo test` — 181 tests, all must pass before committing
-- `cargo build --release` — production binary
-- Server runs on port from `config/settings.json` (default 3000)
+- `cargo test` — all tests must pass before committing
+- `cargo build --release` — production binary (in-memory storage only)
+- `cargo build --release --features postgres` — production binary with PostgreSQL support
+- Server runs on port from `PORT` env var (default 8000)
+
+## Storage Backends
+- **In-memory** (default): data loaded from `data/*.json`, persisted on `commit()`
+- **PostgreSQL** (feature `postgres`): set `DATABASE_URL` env var to activate
+  - Schema auto-created on startup from `migrations/001_create_entity_records.sql`
+  - Seeds data from `data/*.json` or `mock_data()` when entity set table is empty
+  - All entity data stored as JSONB in `entity_records(entity_set, key_value, is_active, data)`
+  - `docker-compose.yml` provided for local Postgres
+
+## Production Features
+- `GET /health` — health check endpoint returning `{"status":"ok"}`
+- Graceful shutdown on SIGINT/SIGTERM
+- Port configurable via `PORT` env var
+- Structured logging via `tracing` (set `RUST_LOG=info` or `RUST_LOG=debug`)

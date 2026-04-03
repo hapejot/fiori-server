@@ -6,5 +6,13 @@
     "SetName": "Customers",
     "SortOrder": 0,
     "TableFacetID": "Customers_ContactsFacet"
+  },
+  {
+    "FacetId": "ItemsSection",
+    "FacetLabel": "Positionen",
+    "NavigationProperty": "Items",
+    "SetName": "Orders",
+    "SortOrder": 0,
+    "TableFacetID": "Orders_ItemsSection"
   }
 ]

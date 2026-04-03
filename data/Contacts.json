@@ -1,15 +1,5 @@
 [
   {
-    "ContactID": "K001",
-    "CustomerID": "C001",
-    "Department": "Einkauf",
-    "Email": "m.mueller@techcorp.de",
-    "FirstName": "Max",
-    "LastName": "Müller",
-    "Phone": "+49 89 12345-101",
-    "Position": "Einkaufsleiter"
-  },
-  {
     "ContactID": "K002",
     "CustomerID": "C001",
     "Department": "IT",
@@ -18,6 +8,16 @@
     "LastName": "Schmidt",
     "Phone": "+49 89 12345-202",
     "Position": "IT-Leiterin"
+  },
+  {
+    "ContactID": "K001",
+    "CustomerID": "C001",
+    "Department": "Einkauf",
+    "Email": "m.mueller@techcorp.de",
+    "FirstName": "Max",
+    "LastName": "Müller",
+    "Phone": "+49 89 12345-101",
+    "Position": "Einkaufsleiter"
   },
   {
     "ContactID": "K003",
@@ -30,16 +30,6 @@
     "Position": "Key Account Manager"
   },
   {
-    "ContactID": "K004",
-    "CustomerID": "C003",
-    "Department": "Procurement",
-    "Email": "s.johnson@connectworld.co.uk",
-    "FirstName": "Sarah",
-    "LastName": "Johnson",
-    "Phone": "+44 20 7946-1234",
-    "Position": "Senior Buyer"
-  },
-  {
     "ContactID": "K005",
     "CustomerID": "C004",
     "Department": "Technik",
@@ -48,6 +38,16 @@
     "LastName": "Fischer",
     "Phone": "+49 30 55667-801",
     "Position": "Technischer Leiter"
+  },
+  {
+    "ContactID": "K004",
+    "CustomerID": "C003",
+    "Department": "Procurement",
+    "Email": "s.johnson@connectworld.co.uk",
+    "FirstName": "Sarah",
+    "LastName": "Johnson",
+    "Phone": "+44 20 7946-1234",
+    "Position": "Senior Buyer"
   },
   {
     "ContactID": "K006",

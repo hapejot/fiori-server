@@ -1,62 +1,12 @@
 [
   {
     "Currency": "EUR",
-    "ItemID": "I003",
-    "ItemText": "Wireless Mouse",
-    "NetAmount": "299.50",
-    "OrderID": "O002",
-    "ProductID": "P002",
-    "Quantity": 10,
-    "UnitPrice": "29.95"
-  },
-  {
-    "Currency": "EUR",
-    "ItemID": "I004",
-    "ItemText": "4K Monitor 27\"",
-    "NetAmount": "1098.00",
-    "OrderID": "O003",
-    "ProductID": "P004",
-    "Quantity": 2,
-    "UnitPrice": "549.00"
-  },
-  {
-    "Currency": "EUR",
-    "ItemID": "I005",
-    "ItemText": "USB-C Hub 7-Port",
-    "NetAmount": "249.50",
-    "OrderID": "O004",
-    "ProductID": "P003",
-    "Quantity": 5,
-    "UnitPrice": "49.90"
-  },
-  {
-    "Currency": "EUR",
-    "ItemID": "I006",
-    "ItemText": "Desk Lamp LED",
-    "NetAmount": "39.99",
-    "OrderID": "O005",
-    "ProductID": "P005",
+    "ID": "1da07568-ba99-46d1-972b-fbcf51ceda2f",
+    "ItemText": "Beratung",
+    "NetAmount": "0",
+    "OrderID": "a5d8cbab-c680-4b31-9a4a-ba53ed42df24",
+    "ProductID": "",
     "Quantity": 1,
-    "UnitPrice": "39.99"
-  },
-  {
-    "Currency": "EUR",
-    "ItemID": "I001",
-    "ItemText": "Was auch immer",
-    "NetAmount": "2599.98",
-    "OrderID": "O001",
-    "ProductID": "P001",
-    "Quantity": 1,
-    "UnitPrice": "1299.99"
-  },
-  {
-    "Currency": "EUR",
-    "ItemID": "I002",
-    "ItemText": "Wireless Mouse",
-    "NetAmount": "59.90",
-    "OrderID": "O001",
-    "ProductID": "P002",
-    "Quantity": 3,
-    "UnitPrice": "29.95"
+    "UnitPrice": "0"
   }
 ]

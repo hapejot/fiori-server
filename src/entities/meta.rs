@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use log::info;
+use tracing::info;
 use serde_json::Value;
 
 #[cfg(test)]
@@ -11,8 +11,9 @@ use serde_json::json;
 use std::collections::HashMap;
 
 use super::generic::{
-    AnnotationsConfig, EntityConfig, FacetSectionConfig, FieldConfig, FieldGroupConfig,
-    HeaderInfoConfig, LineItemConfig, NavPropertyConfig, TableFacetConfig, TileConfig,
+    AnnotationsConfig, DataPointConfig, EntityConfig, FacetSectionConfig, FieldConfig,
+    FieldGroupConfig, HeaderFacetConfig, HeaderInfoConfig, LineItemConfig, NavPropertyConfig,
+    TableFacetConfig, TileConfig,
 };
 
 /// Erzeugt Meta-Entity-Daten aus den geladenen EntityConfig-Structs.
@@ -57,6 +58,13 @@ fn generate_meta_data(
             "HeaderTitlePath":      hi.map(|h| h.title_path.as_str()).unwrap_or(""),
             "HeaderDescriptionPath":hi.map(|h| h.description_path.as_str()).unwrap_or(""),
             "SelectionFields":      ann.map(|a| a.selection_fields.join(",")).unwrap_or_default(),
+            "DefaultValues":        config.default_values.as_ref()
+                                        .map(|v| serde_json::to_string(v).unwrap_or_default())
+                                        .unwrap_or_default(),
+            "HeaderFacets":         ann.map(|a| serde_json::to_string(&a.header_facets).unwrap_or_default())
+                                        .unwrap_or_default(),
+            "DataPoints":           ann.map(|a| serde_json::to_string(&a.data_points).unwrap_or_default())
+                                        .unwrap_or_default(),
         }));
 
         // ── EntityFields-Datensaetze ────────────────────────────────
@@ -83,8 +91,10 @@ fn generate_meta_data(
                 "Precision":              field.precision,
                 "Scale":                  field.scale,
                 "IsImmutable":            field.immutable,
+                "IsComputed":             field.computed,
                 "SemanticObject":         field.semantic_object.as_deref().unwrap_or(""),
                 "ValueSource":            field.value_source.as_deref().unwrap_or(""),
+                "TextPath":               field.text_path.as_deref().unwrap_or(""),
                 "SortOrder":              idx as u32,
                 "ShowInLineItem":         li.is_some(),
                 "LineItemImportance":     li.and_then(|l| l.importance.as_deref()).unwrap_or(""),
@@ -305,8 +315,13 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
                         .get("IsImmutable")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false),
+                    computed: f
+                        .get("IsComputed")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
                     semantic_object: opt_str(f, "SemanticObject"),
                     value_source: opt_str(f, "ValueSource"),
+                    text_path: opt_str(f, "TextPath"),
                 })
                 .collect();
 
@@ -427,17 +442,40 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
                 })
                 .collect();
 
+            // HeaderFacets (JSON string in the config record)
+            let header_facets: Vec<HeaderFacetConfig> = cr
+                .get("HeaderFacets")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_default();
+
+            // DataPoints (JSON string in the config record)
+            let data_points: Vec<DataPointConfig> = cr
+                .get("DataPoints")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_default();
+
             // Annotations
             let annotations = AnnotationsConfig {
                 selection_fields,
                 line_item: line_items,
                 header_info,
-                header_facets: vec![],
-                data_points: vec![],
+                header_facets,
+                data_points,
                 facet_sections,
                 field_groups,
                 table_facets,
             };
+
+            // DefaultValues (JSON string in the config record)
+            let default_values = cr
+                .get("DefaultValues")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .and_then(|s| serde_json::from_str(s).ok());
 
             EntityConfig {
                 set_name,
@@ -447,6 +485,7 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
                 fields,
                 navigation_properties,
                 annotations: Some(annotations),
+                default_values,
                 tile,
                 value_lists,
             }
@@ -508,6 +547,8 @@ mod tests {
                     immutable: true,
                     semantic_object: None,
                     value_source: None,
+                    computed: false,
+                    text_path: None,
                 },
                 FieldConfig {
                     name: "ProductName".to_string(),
@@ -519,6 +560,8 @@ mod tests {
                     immutable: false,
                     semantic_object: None,
                     value_source: None,
+                    computed: false,
+                    text_path: None,
                 },
                 FieldConfig {
                     name: "Price".to_string(),
@@ -530,6 +573,8 @@ mod tests {
                     immutable: false,
                     semantic_object: None,
                     value_source: None,
+                    computed: false,
+                    text_path: None,
                 },
             ],
             navigation_properties: vec![NavPropertyConfig {
@@ -583,6 +628,7 @@ mod tests {
                 }],
                 table_facets: vec![],
             }),
+            default_values: None,
             tile: Some(TileConfig {
                 title: "Produkte".to_string(),
                 description: Some("Produktkatalog".to_string()),
@@ -605,8 +651,10 @@ mod tests {
             precision: None,
             scale: None,
             immutable: true,
+            computed: false,
             semantic_object: None,
             value_source: None,
+            text_path: None,
         }];
         config.navigation_properties = vec![NavPropertyConfig {
             name: "Items".to_string(),
@@ -709,6 +757,9 @@ mod tests {
             Err(StoreError::NotFound("mock".to_string()))
         }
         fn draft_prepare(&self, _: &str, _: &EntityKey) -> Result<Value, StoreError> {
+            Err(StoreError::NotFound("mock".to_string()))
+        }
+        fn read_sibling_entity(&self, _: &str, _: &EntityKey) -> Result<Value, StoreError> {
             Err(StoreError::NotFound("mock".to_string()))
         }
         fn get_property(&self, _: &str, _: &EntityKey, _: &str) -> Result<Value, StoreError> {
@@ -837,11 +888,14 @@ mod tests {
                 precision: None,
                 scale: None,
                 immutable: false,
+                computed: false,
                 semantic_object: None,
                 value_source: None,
+                text_path: None,
             }],
             navigation_properties: vec![],
             annotations: None,
+            default_values: None,
             tile: None,
             value_lists: vec![],
         };
@@ -890,11 +944,14 @@ mod tests {
                 precision: None,
                 scale: None,
                 immutable: false,
+                computed: false,
                 semantic_object: None,
                 value_source: None,
+                text_path: None,
             }],
             navigation_properties: vec![],
             annotations: None,
+            default_values: None,
             tile: None,
             value_lists: vec![],
         };
@@ -917,11 +974,14 @@ mod tests {
                 precision: None,
                 scale: None,
                 immutable: false,
+                computed: false,
                 semantic_object: Some("Customers".to_string()),
                 value_source: None,
+                text_path: None,
             }],
             navigation_properties: vec![],
             annotations: None,
+            default_values: None,
             tile: None,
             value_lists: vec![],
         };

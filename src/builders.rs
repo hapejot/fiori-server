@@ -201,6 +201,40 @@ pub fn build_flp_html(settings: &Settings) -> String {
     let libs = settings.libs.join(", ");
     let search_flag = if settings.enable_search { "true" } else { "false" };
 
+    let ushell_properties = if let Some(ref logo) = settings.company_logo {
+        format!(
+            r#",
+            ushellProperties: {{
+                "/core/companyLogo/url": "{}"
+            }}"#,
+            logo
+        )
+    } else {
+        String::new()
+    };
+
+    let user_profile = format!(
+        r#",
+            services: {{
+                Container: {{
+                    adapter: {{
+                        config: {{
+                            id: "{user_id}",
+                            firstName: "{first}",
+                            lastName: "{last}",
+                            fullName: "{full}",
+                            email: "{email}"
+                        }}
+                    }}
+                }}
+            }}"#,
+        user_id = settings.user_id,
+        first = settings.user_first_name,
+        last = settings.user_last_name,
+        full = settings.user_full_name,
+        email = settings.user_email,
+    );
+
     format!(
         r##"<!doctype html>
 <html>
@@ -227,7 +261,7 @@ pub fn build_flp_html(settings: &Settings) -> String {
             _flpComponent: {{
                 id: "{comp_id}",
                 resourceRoot: "{res_root}"
-            }}
+            }}{ushell_props}{user_profile}
         }};
     </script>
 
@@ -263,6 +297,8 @@ pub fn build_flp_html(settings: &Settings) -> String {
         search = search_flag,
         comp_id = settings.component_id,
         res_root = settings.resource_root,
+        ushell_props = ushell_properties,
+        user_profile = user_profile,
         ui5 = settings.ui5_version,
         libs = libs,
         theme = settings.theme,

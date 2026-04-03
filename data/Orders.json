@@ -1,62 +1,14 @@
 [
   {
     "Currency": "EUR",
-    "CustomerName": "Müller GmbH",
-    "DeliveryDate": "2024-01-17T14:00:00Z",
-    "Note": "Express-Lieferung gewünscht.",
-    "OrderDate": "2024-01-10T08:30:00Z",
-    "OrderID": "O001",
-    "Quantity": 3,
-    "Status": "C",
-    "StatusCriticality": 3,
-    "TotalAmount": "3899.97"
-  },
-  {
-    "Currency": "EUR",
-    "CustomerName": "Schmidt AG",
-    "DeliveryDate": "2024-01-20T09:00:00Z",
+    "CustomerName": "Peter",
+    "DeliveryDate": "",
+    "ID": "a5d8cbab-c680-4b31-9a4a-ba53ed42df24",
     "Note": "",
-    "OrderDate": "2024-01-15T10:00:00Z",
-    "OrderID": "O002",
-    "Quantity": 10,
-    "Status": "C",
-    "StatusCriticality": 3,
-    "TotalAmount": "299.50"
-  },
-  {
-    "Currency": "EUR",
-    "CustomerName": "Weber & Söhne KG",
-    "DeliveryDate": null,
-    "Note": "Lieferung an Filiale Nord.",
-    "OrderDate": "2024-02-01T14:20:00Z",
-    "OrderID": "O003",
-    "Quantity": 2,
+    "OrderDate": "2026-04-03T11:53:50+02:00",
+    "Quantity": 0,
     "Status": "P",
     "StatusCriticality": 2,
-    "TotalAmount": "1098.00"
-  },
-  {
-    "Currency": "EUR",
-    "CustomerName": "Müller GmbH",
-    "DeliveryDate": null,
-    "Note": "",
-    "OrderDate": "2024-02-05T09:15:00Z",
-    "OrderID": "O004",
-    "Quantity": 5,
-    "Status": "P",
-    "StatusCriticality": 2,
-    "TotalAmount": "249.50"
-  },
-  {
-    "Currency": "EUR",
-    "CustomerName": "Becker IT Services",
-    "DeliveryDate": null,
-    "Note": "Storniert – Produkt nicht lieferbar.",
-    "OrderDate": "2024-02-10T16:45:00Z",
-    "OrderID": "O005",
-    "Quantity": 1,
-    "Status": "X",
-    "StatusCriticality": 1,
-    "TotalAmount": "39.99"
+    "TotalAmount": "0"
   }
 ]

@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fiori
+      POSTGRES_PASSWORD: fiori
+      POSTGRES_DB: fiori
+    ports:
+      - "5433:5432"  # HOST:CONTAINER
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

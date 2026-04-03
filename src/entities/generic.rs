@@ -39,6 +39,9 @@ pub struct EntityConfig {
     pub navigation_properties: Vec<NavPropertyConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub annotations: Option<AnnotationsConfig>,
+    /// Standardwerte fuer neue Entitaeten (z.B. {"Currency": "EUR", "Status": "A"}).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_values: Option<Value>,
     /// Kachel-Konfiguration fuer das FLP.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tile: Option<TileConfig>,
@@ -70,11 +73,16 @@ pub struct FieldConfig {
     pub scale: Option<u32>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub immutable: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub computed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub semantic_object: Option<String>,
     /// Name einer Werteliste (z.B. "EdmTypes") fuer Fixed-Value-Dropdown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value_source: Option<String>,
+    /// Expliziter Textpfad fuer Common.Text (z.B. "Product/ProductName").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_path: Option<String>,
 }
 
 fn default_edm_string() -> String {
@@ -198,6 +206,14 @@ pub struct FieldValueListEntry {
 // ── Konvertierung Config → static Annotation-Structs ────────────────────
 
 fn convert_field(f: &FieldConfig) -> FieldDef {
+    // Explicit text_path takes priority; fall back to auto-generated _text for value_source fields.
+    let text_path = if let Some(ref tp) = f.text_path {
+        Some(leak_str(tp))
+    } else if f.value_source.as_ref().map_or(false, |s| !s.is_empty()) {
+        Some(leak_str(&format!("_{}_text", f.name)))
+    } else {
+        None
+    };
     FieldDef {
         name: leak_str(&f.name),
         label: leak_str(&f.label),
@@ -206,9 +222,11 @@ fn convert_field(f: &FieldConfig) -> FieldDef {
         precision: f.precision,
         scale: f.scale,
         immutable: f.immutable,
+        computed: f.computed,
         semantic_object: leak_opt(&f.semantic_object),
         value_source: leak_opt(&f.value_source),
-        value_list: None, text_path: None,
+        value_list: None,
+        text_path,
     }
 }
 
@@ -310,6 +328,7 @@ pub struct GenericEntity {
     annotations: Option<&'static AnnotationsDef>,
     entity_set_xml: String,
     tile: Option<TileConfig>,
+    default_vals: Option<Value>,
 }
 
 impl fmt::Debug for GenericEntity {
@@ -346,12 +365,64 @@ impl GenericEntity {
         );
         xml.push_str("\n</EntitySet>");
 
+        // Convention: key_field == "ID" → Edm.Guid, auto-generated, hidden in UI.
+        // Ensure the ID field exists at position 0 with the correct type.
+        let mut fields: Vec<FieldDef> = config.fields.iter().map(convert_field).collect();
+        if config.key_field == "ID" {
+            if let Some(pos) = fields.iter().position(|f| f.name == "ID") {
+                fields[pos].edm_type = "Edm.Guid";
+                fields[pos].immutable = true;
+                fields[pos].computed = true;
+                fields[pos].max_length = None;
+            } else {
+                fields.insert(
+                    0,
+                    FieldDef {
+                        name: "ID",
+                        label: "ID",
+                        edm_type: "Edm.Guid",
+                        max_length: None,
+                        precision: None,
+                        scale: None,
+                        immutable: true,
+                        computed: true,
+                        semantic_object: None,
+                        value_source: None,
+                        value_list: None,
+                        text_path: None,
+                    },
+                );
+            }
+        }
+
+        // For fields with value_source, add a hidden computed _text field
+        // so Common.Text can resolve the description from FieldValueListItems.
+        let text_fields: Vec<FieldDef> = fields
+            .iter()
+            .filter(|f| f.text_path.is_some() && f.value_source.is_some())
+            .map(|f| FieldDef {
+                name: f.text_path.unwrap(),
+                label: f.text_path.unwrap(),
+                edm_type: "Edm.String",
+                max_length: Some(120),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: true,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            })
+            .collect();
+        fields.extend(text_fields);
+
         GenericEntity {
             set_name,
             key_field: leak_str(&config.key_field),
             type_name,
             parent_set_name: leak_opt(&config.parent_set_name),
-            fields: leak_vec(config.fields.iter().map(convert_field).collect()),
+            fields: leak_vec(fields),
             nav_properties: leak_vec(
                 config
                     .navigation_properties
@@ -363,6 +434,7 @@ impl GenericEntity {
             annotations: config.annotations.as_ref().map(convert_annotations),
             entity_set_xml: xml,
             tile: config.tile,
+            default_vals: config.default_values,
         }
     }
 }
@@ -473,6 +545,155 @@ impl ODataEntity for GenericEntity {
             }
         }
     }
+
+    fn default_values(&self) -> Option<Value> {
+        self.default_vals.clone()
+    }
+
+    // Child entities (compositions) have no own tiles, routes or targets.
+    fn manifest_inbound(&self) -> (String, Value) {
+        if self.parent_set_name.is_some() {
+            return (format!("_{}-stub", self.set_name), Value::Null);
+        }
+        // default trait implementation
+        let key = format!("{}-display", self.set_name);
+        let entry = serde_json::json!({
+            "semanticObject": self.set_name,
+            "action": "display",
+            "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        });
+        (key, entry)
+    }
+
+    fn manifest_routes(&self) -> Vec<Value> {
+        if self.parent_set_name.is_some() {
+            return vec![];
+        }
+        // Build routes: standard 2-level + optional 3rd level for each table facet
+        let set = self.set_name;
+        let mut routes = vec![
+            serde_json::json!({
+                "pattern": format!("{}:?query:", set),
+                "name": format!("{}List", set),
+                "target": format!("{}List", set)
+            }),
+            serde_json::json!({
+                "pattern": format!("{}({{key}}):?query:", set),
+                "name": format!("{}ObjectPage", set),
+                "target": [format!("{}List", set), format!("{}ObjectPage", set)]
+            }),
+        ];
+        // 3rd level: for each table facet referencing a child nav property
+        for tf in self.annotations.iter().flat_map(|a| a.table_facets.iter()) {
+            let nav = tf.navigation_property;
+            // find the nav config to get the target_set
+            if let Some(nc) = self.nav_configs.iter().find(|n| n.name == nav) {
+                let child_set = &nc.target_set;
+                routes.push(serde_json::json!({
+                    "pattern": format!("{}({{key}})/{}({{key2}}):?query:", set, nav),
+                    "name": format!("{}ObjectPage", child_set),
+                    "target": [
+                        format!("{}List", set),
+                        format!("{}ObjectPage", set),
+                        format!("{}ObjectPage", child_set)
+                    ]
+                }));
+            }
+        }
+        routes
+    }
+
+    fn manifest_targets(&self) -> Vec<(String, Value)> {
+        if self.parent_set_name.is_some() {
+            return vec![];
+        }
+        let set = self.set_name;
+
+        // Build navigation block for ObjectPage: table facets that link to child entities
+        let mut nav_entries = serde_json::Map::new();
+        for tf in self.annotations.iter().flat_map(|a| a.table_facets.iter()) {
+            let nav = tf.navigation_property;
+            if let Some(nc) = self.nav_configs.iter().find(|n| n.name == nav) {
+                nav_entries.insert(
+                    nav.to_string(),
+                    serde_json::json!({
+                        "detail": { "route": format!("{}ObjectPage", nc.target_set) }
+                    }),
+                );
+            }
+        }
+
+        let mut obj_page_settings = serde_json::json!({
+            "contextPath": format!("/{}", set)
+        });
+        if !nav_entries.is_empty() {
+            obj_page_settings["navigation"] = Value::Object(nav_entries);
+        }
+
+        let mut targets = vec![
+            (
+                format!("{}List", set),
+                serde_json::json!({
+                    "type": "Component",
+                    "id": format!("{}List", set),
+                    "name": "sap.fe.templates.ListReport",
+                    "options": {
+                        "settings": {
+                            "contextPath": format!("/{}", set),
+                            "variantManagement": "Page",
+                            "initialLoad": "Enabled",
+                            "navigation": {
+                                (set): {
+                                    "detail": {
+                                        "route": format!("{}ObjectPage", set)
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "controlAggregation": "beginColumnPages",
+                    "contextPattern": ""
+                }),
+            ),
+            (
+                format!("{}ObjectPage", set),
+                serde_json::json!({
+                    "type": "Component",
+                    "id": format!("{}ObjectPage", set),
+                    "name": "sap.fe.templates.ObjectPage",
+                    "options": {
+                        "settings": obj_page_settings
+                    },
+                    "controlAggregation": "midColumnPages",
+                    "contextPattern": format!("/{}({{key}})", set)
+                }),
+            ),
+        ];
+
+        // 3rd-level child ObjectPages
+        for tf in self.annotations.iter().flat_map(|a| a.table_facets.iter()) {
+            let nav = tf.navigation_property;
+            if let Some(nc) = self.nav_configs.iter().find(|n| n.name == nav) {
+                targets.push((
+                    format!("{}ObjectPage", nc.target_set),
+                    serde_json::json!({
+                        "type": "Component",
+                        "id": format!("{}ObjectPage", nc.target_set),
+                        "name": "sap.fe.templates.ObjectPage",
+                        "options": {
+                            "settings": {
+                                "contextPath": format!("/{}/{}", set, nav)
+                            }
+                        },
+                        "controlAggregation": "endColumnPages",
+                        "contextPattern": format!("/{}({{key}})/{}({{key2}})", set, nav)
+                    }),
+                ));
+            }
+        }
+
+        targets
+    }
 }
 
 /// Wandelt rohe EntityConfigs in registrierbare ODataEntity-Instanzen um.
@@ -512,6 +733,8 @@ mod tests {
                     immutable: true,
                     semantic_object: None,
                     value_source: None,
+                    computed: false,
+                    text_path: None,
                 },
                 FieldConfig {
                     name: "Name".to_string(),
@@ -523,10 +746,13 @@ mod tests {
                     immutable: false,
                     semantic_object: None,
                     value_source: None,
+                    computed: false,
+                    text_path: None,
                 },
             ],
             navigation_properties: vec![],
             annotations: None,
+            default_values: None,
             tile: None,
             value_lists: vec![],
         }
@@ -550,6 +776,8 @@ mod tests {
                     immutable: true,
                     semantic_object: None,
                     value_source: None,
+                    computed: false,
+                    text_path: None,
                 },
                 FieldConfig {
                     name: "Status".to_string(),
@@ -561,6 +789,8 @@ mod tests {
                     immutable: false,
                     semantic_object: None,
                     value_source: None,
+                    computed: false,
+                    text_path: None,
                 },
                 FieldConfig {
                     name: "Amount".to_string(),
@@ -572,6 +802,8 @@ mod tests {
                     immutable: false,
                     semantic_object: None,
                     value_source: None,
+                    computed: false,
+                    text_path: None,
                 },
             ],
             navigation_properties: vec![NavPropertyConfig {
@@ -629,6 +861,7 @@ mod tests {
                     navigation_property: "Items".to_string(),
                 }],
             }),
+            default_values: None,
             tile: Some(TileConfig {
                 title: "Auftraege".to_string(),
                 description: Some("Auftragsübersicht".to_string()),
@@ -655,6 +888,8 @@ mod tests {
                     immutable: true,
                     semantic_object: None,
                     value_source: None,
+                    computed: false,
+                    text_path: None,
                 },
                 FieldConfig {
                     name: "OrderID".to_string(),
@@ -666,6 +901,8 @@ mod tests {
                     immutable: true,
                     semantic_object: Some("Orders".to_string()),
                     value_source: None,
+                    computed: false,
+                    text_path: None,
                 },
             ],
             navigation_properties: vec![],
@@ -691,6 +928,7 @@ mod tests {
                 field_groups: vec![],
                 table_facets: vec![],
             }),
+            default_values: None,
             tile: None,
             value_lists: vec![],
         }
@@ -778,14 +1016,32 @@ mod tests {
     }
 
     #[test]
-    fn config_deserialize_from_existing_json() {
-        // Parse a real config file from the workspace
-        let content = std::fs::read_to_string("config/entities/Customers.json")
-            .expect("Customers.json should exist");
-        let config: EntityConfig = serde_json::from_str(&content).unwrap();
+    fn config_deserialize_from_json() {
+        // Parse config JSON with all fields populated
+        let json = r#"{
+            "set_name": "Customers",
+            "key_field": "CustomerID",
+            "type_name": "Customer",
+            "tile": { "title": "Kunden", "description": "Kundenübersicht", "icon": "sap-icon://customer" },
+            "fields": [
+                { "name": "CustomerID", "label": "ID", "edm_type": "Edm.String", "max_length": 10, "immutable": true },
+                { "name": "CustomerName", "label": "Name", "edm_type": "Edm.String", "max_length": 80 }
+            ],
+            "annotations": {
+                "selection_fields": ["CustomerName"],
+                "line_item": [{ "name": "CustomerID", "importance": "High" }, { "name": "CustomerName" }],
+                "header_info": { "type_name": "Kunde", "type_name_plural": "Kunden", "title_path": "CustomerName", "description_path": "CustomerID" },
+                "header_facets": [],
+                "data_points": [],
+                "facet_sections": [{ "label": "Details", "id": "Details", "field_group_qualifier": "Main", "field_group_label": "Stamm" }],
+                "field_groups": [{ "qualifier": "Main", "fields": ["CustomerID", "CustomerName"] }],
+                "table_facets": []
+            }
+        }"#;
+        let config: EntityConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.set_name, "Customers");
         assert_eq!(config.key_field, "CustomerID");
-        assert!(!config.fields.is_empty());
+        assert_eq!(config.fields.len(), 2);
         assert!(config.annotations.is_some());
         let ann = config.annotations.as_ref().unwrap();
         assert!(!ann.line_item.is_empty());
@@ -793,11 +1049,31 @@ mod tests {
     }
 
     #[test]
-    fn config_deserialize_serialize_preserves_real_file() {
-        // Roundtrip: parse real file → serialize → parse again → compare key fields
-        let content = std::fs::read_to_string("config/entities/Contacts.json")
-            .expect("Contacts.json should exist");
-        let config: EntityConfig = serde_json::from_str(&content).unwrap();
+    fn config_deserialize_serialize_roundtrip() {
+        // Roundtrip: parse → serialize → parse again → compare key fields
+        let json = r#"{
+            "set_name": "Contacts",
+            "key_field": "ContactID",
+            "type_name": "Contact",
+            "fields": [
+                { "name": "ContactID", "label": "ID", "edm_type": "Edm.String", "max_length": 10, "immutable": true },
+                { "name": "CustomerID", "label": "Kunde", "edm_type": "Edm.String", "semantic_object": "Customers" }
+            ],
+            "navigation_properties": [
+                { "name": "Customer", "target_type": "Customer", "target_set": "Customers", "is_collection": false, "foreign_key": "CustomerID" }
+            ],
+            "annotations": {
+                "selection_fields": ["CustomerID"],
+                "line_item": [{ "name": "ContactID" }, { "name": "CustomerID" }],
+                "header_info": { "type_name": "Kontakt", "type_name_plural": "Kontakte", "title_path": "ContactID", "description_path": "" },
+                "header_facets": [],
+                "data_points": [],
+                "facet_sections": [{ "label": "Daten", "id": "Data", "field_group_qualifier": "Main", "field_group_label": "Main" }],
+                "field_groups": [{ "qualifier": "Main", "fields": ["ContactID", "CustomerID"] }],
+                "table_facets": []
+            }
+        }"#;
+        let config: EntityConfig = serde_json::from_str(json).unwrap();
         let serialized = serde_json::to_string_pretty(&config).unwrap();
         let reparsed: EntityConfig = serde_json::from_str(&serialized).unwrap();
         assert_eq!(config.set_name, reparsed.set_name);
@@ -956,6 +1232,8 @@ mod tests {
                     immutable: true,
                     semantic_object: None,
                     value_source: None,
+                    computed: false,
+                    text_path: None,
                 },
                 FieldConfig {
                     name: "CustomerID".to_string(),
@@ -967,6 +1245,8 @@ mod tests {
                     immutable: false,
                     semantic_object: None,
                     value_source: None,
+                    computed: false,
+                    text_path: None,
                 },
             ],
             navigation_properties: vec![NavPropertyConfig {
@@ -977,6 +1257,7 @@ mod tests {
                 foreign_key: Some("CustomerID".to_string()),
             }],
             annotations: None,
+            default_values: None,
             tile: None,
             value_lists: vec![],
         };
@@ -995,9 +1276,12 @@ mod tests {
                 immutable: true,
                 semantic_object: None,
                 value_source: None,
+                computed: false,
+                text_path: None,
             }],
             navigation_properties: vec![],
             annotations: None,
+            default_values: None,
             tile: None,
             value_lists: vec![],
         };

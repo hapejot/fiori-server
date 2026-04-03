@@ -15,12 +15,19 @@ pub struct Settings {
     pub enable_search: bool,
     pub component_id: String,
     pub resource_root: String,
+    pub company_logo: Option<String>,
+    pub user_id: String,
+    pub user_first_name: String,
+    pub user_last_name: String,
+    pub user_full_name: String,
+    pub user_email: String,
 }
 
 #[derive(Deserialize)]
 struct RawSettings {
     ui5: Option<Ui5Block>,
     shell: Option<ShellBlock>,
+    user: Option<UserBlock>,
     component: Option<ComponentBlock>,
 }
 
@@ -41,6 +48,20 @@ struct ShellBlock {
     root_intent: Option<String>,
     #[serde(rename = "enableSearch")]
     enable_search: Option<bool>,
+    #[serde(rename = "companyLogo")]
+    company_logo: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct UserBlock {
+    id: Option<String>,
+    #[serde(rename = "firstName")]
+    first_name: Option<String>,
+    #[serde(rename = "lastName")]
+    last_name: Option<String>,
+    #[serde(rename = "fullName")]
+    full_name: Option<String>,
+    email: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -97,6 +118,12 @@ impl Settings {
             enable_search: false,
             component_id: "products.demo".into(),
             resource_root: "../".into(),
+            company_logo: None,
+            user_id: "DEFAULT_USER".into(),
+            user_first_name: "Default".into(),
+            user_last_name: "User".into(),
+            user_full_name: "Default User".into(),
+            user_email: "user@localhost".into(),
         }
     }
 
@@ -113,6 +140,14 @@ impl Settings {
             renderer: None,
             root_intent: None,
             enable_search: None,
+            company_logo: None,
+        });
+        let user = r.user.unwrap_or(UserBlock {
+            id: None,
+            first_name: None,
+            last_name: None,
+            full_name: None,
+            email: None,
         });
         let comp = r.component.unwrap_or(ComponentBlock {
             id: None,
@@ -130,6 +165,12 @@ impl Settings {
             enable_search: shell.enable_search.unwrap_or(d.enable_search),
             component_id: comp.id.unwrap_or(d.component_id),
             resource_root: comp.resource_root.unwrap_or(d.resource_root),
+            company_logo: shell.company_logo.or(d.company_logo),
+            user_id: user.id.unwrap_or(d.user_id),
+            user_first_name: user.first_name.unwrap_or(d.user_first_name),
+            user_last_name: user.last_name.unwrap_or(d.user_last_name),
+            user_full_name: user.full_name.unwrap_or(d.user_full_name),
+            user_email: user.email.unwrap_or(d.user_email),
         }
     }
 }

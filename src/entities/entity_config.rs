@@ -26,28 +26,246 @@ impl ODataEntity for EntityConfigEntity {
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
-            FieldDef { name: "SetName",              label: "EntitySet",          edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "KeyField",             label: "Schluesselfeld",     edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "TypeName",             label: "Entity-Typ",         edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "ParentSetName",        label: "Eltern-EntitySet",   edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "TileTitle",            label: "Kachel-Titel",       edm_type: "Edm.String", max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "TileDescription",      label: "Kachel-Beschreibung",edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "TileIcon",             label: "Kachel-Icon",        edm_type: "Edm.String", max_length: Some(80),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "HeaderTypeName",       label: "Typ-Name",           edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "HeaderTypeNamePlural",  label: "Typ-Name Plural",   edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "HeaderTitlePath",      label: "Titel-Pfad",         edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "HeaderDescriptionPath", label: "Beschreibungs-Pfad",edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "SelectionFields",      label: "Suchfelder",         edm_type: "Edm.String", max_length: Some(200), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef {
+                name: "SetName",
+                label: "EntitySet",
+                edm_type: "Edm.String",
+                max_length: Some(40),
+                precision: None,
+                scale: None,
+                immutable: true,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "KeyField",
+                label: "Schluesselfeld",
+                edm_type: "Edm.String",
+                max_length: Some(40),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "TypeName",
+                label: "Entity-Typ",
+                edm_type: "Edm.String",
+                max_length: Some(40),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "ParentSetName",
+                label: "Eltern-EntitySet",
+                edm_type: "Edm.String",
+                max_length: Some(40),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "TileTitle",
+                label: "Kachel-Titel",
+                edm_type: "Edm.String",
+                max_length: Some(80),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "TileDescription",
+                label: "Kachel-Beschreibung",
+                edm_type: "Edm.String",
+                max_length: Some(120),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "TileIcon",
+                label: "Kachel-Icon",
+                edm_type: "Edm.String",
+                max_length: Some(80),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "HeaderTypeName",
+                label: "Typ-Name",
+                edm_type: "Edm.String",
+                max_length: Some(40),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "HeaderTypeNamePlural",
+                label: "Typ-Name Plural",
+                edm_type: "Edm.String",
+                max_length: Some(40),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "HeaderTitlePath",
+                label: "Titel-Pfad",
+                edm_type: "Edm.String",
+                max_length: Some(40),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "HeaderDescriptionPath",
+                label: "Beschreibungs-Pfad",
+                edm_type: "Edm.String",
+                max_length: Some(40),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "SelectionFields",
+                label: "Suchfelder",
+                edm_type: "Edm.String",
+                max_length: Some(200),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "DefaultValues",
+                label: "Standardwerte (JSON)",
+                edm_type: "Edm.String",
+                max_length: Some(500),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "HeaderFacets",
+                label: "Header-Facetten (JSON)",
+                edm_type: "Edm.String",
+                max_length: Some(2000),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
+            FieldDef {
+                name: "DataPoints",
+                label: "DataPoints (JSON)",
+                edm_type: "Edm.String",
+                max_length: Some(2000),
+                precision: None,
+                scale: None,
+                immutable: false,
+                computed: false,
+                semantic_object: None,
+                value_source: None,
+                value_list: None,
+                text_path: None,
+            },
         ];
         Some(FIELDS)
     }
 
     fn navigation_properties(&self) -> &'static [NavigationPropertyDef] {
         static NAV: &[NavigationPropertyDef] = &[
-            NavigationPropertyDef { name: "Fields",       target_type: "EntityField",       is_collection: true, foreign_key: None },
-            NavigationPropertyDef { name: "Facets",       target_type: "EntityFacet",       is_collection: true, foreign_key: None },
-            NavigationPropertyDef { name: "Navigations",  target_type: "EntityNavigation",  is_collection: true, foreign_key: None },
-            NavigationPropertyDef { name: "TableFacets",  target_type: "EntityTableFacet",  is_collection: true, foreign_key: None },
+            NavigationPropertyDef {
+                name: "Fields",
+                target_type: "EntityField",
+                is_collection: true,
+                foreign_key: None,
+            },
+            NavigationPropertyDef {
+                name: "Facets",
+                target_type: "EntityFacet",
+                is_collection: true,
+                foreign_key: None,
+            },
+            NavigationPropertyDef {
+                name: "Navigations",
+                target_type: "EntityNavigation",
+                is_collection: true,
+                foreign_key: None,
+            },
+            NavigationPropertyDef {
+                name: "TableFacets",
+                target_type: "EntityTableFacet",
+                is_collection: true,
+                foreign_key: None,
+            },
         ];
         NAV
     }
@@ -59,7 +277,10 @@ impl ODataEntity for EntityConfigEntity {
         _entities: &[&dyn ODataEntity],
         data_store: &HashMap<String, Vec<Value>>,
     ) {
-        let set_name = record.get("SetName").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let set_name = record
+            .get("SetName")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
         if let Some(sn) = set_name {
             if nav_properties.contains(&"Fields") {
                 let children: Vec<Value> = data_store
@@ -142,12 +363,54 @@ impl ODataEntity for EntityConfigEntity {
         static DEF: AnnotationsDef = AnnotationsDef {
             selection_fields: &["SetName", "TypeName"],
             line_item: &[
-                LineItemField { name: "SetName",              label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "TypeName",             label: None, importance: None,         criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "KeyField",             label: None, importance: None,         criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "TileTitle",            label: None, importance: None,         criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "TileIcon",             label: None, importance: None,         criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "HeaderTypeNamePlural", label: None, importance: None,         criticality_path: None, navigation_path: None, semantic_object: None },
+                LineItemField {
+                    name: "SetName",
+                    label: None,
+                    importance: Some("High"),
+                    criticality_path: None,
+                    navigation_path: None,
+                    semantic_object: None,
+                },
+                LineItemField {
+                    name: "TypeName",
+                    label: None,
+                    importance: None,
+                    criticality_path: None,
+                    navigation_path: None,
+                    semantic_object: None,
+                },
+                LineItemField {
+                    name: "KeyField",
+                    label: None,
+                    importance: None,
+                    criticality_path: None,
+                    navigation_path: None,
+                    semantic_object: None,
+                },
+                LineItemField {
+                    name: "TileTitle",
+                    label: None,
+                    importance: None,
+                    criticality_path: None,
+                    navigation_path: None,
+                    semantic_object: None,
+                },
+                LineItemField {
+                    name: "TileIcon",
+                    label: None,
+                    importance: None,
+                    criticality_path: None,
+                    navigation_path: None,
+                    semantic_object: None,
+                },
+                LineItemField {
+                    name: "HeaderTypeNamePlural",
+                    label: None,
+                    importance: None,
+                    criticality_path: None,
+                    navigation_path: None,
+                    semantic_object: None,
+                },
             ],
             header_info: HeaderInfoDef {
                 type_name: "Entity-Konfiguration",
@@ -158,20 +421,71 @@ impl ODataEntity for EntityConfigEntity {
             header_facets: &[],
             data_points: &[],
             facet_sections: &[
-                FacetSectionDef { label: "Grunddaten",       id: "BasicInfo",  field_group_qualifier: "Basic",  field_group_label: "Grundkonfiguration" },
-                FacetSectionDef { label: "Kachel",           id: "TileInfo",   field_group_qualifier: "Tile",   field_group_label: "FLP-Kachel" },
-                FacetSectionDef { label: "Kopfzeile",        id: "HeaderInfo", field_group_qualifier: "Header", field_group_label: "Object-Page-Header" },
+                FacetSectionDef {
+                    label: "Grunddaten",
+                    id: "BasicInfo",
+                    field_group_qualifier: "Basic",
+                    field_group_label: "Grundkonfiguration",
+                },
+                FacetSectionDef {
+                    label: "Kachel",
+                    id: "TileInfo",
+                    field_group_qualifier: "Tile",
+                    field_group_label: "FLP-Kachel",
+                },
+                FacetSectionDef {
+                    label: "Kopfzeile",
+                    id: "HeaderInfo",
+                    field_group_qualifier: "Header",
+                    field_group_label: "Object-Page-Header",
+                },
             ],
             field_groups: &[
-                FieldGroupDef { qualifier: "Basic",  fields: &["SetName", "KeyField", "TypeName", "ParentSetName", "SelectionFields"] },
-                FieldGroupDef { qualifier: "Tile",   fields: &["TileTitle", "TileDescription", "TileIcon"] },
-                FieldGroupDef { qualifier: "Header", fields: &["HeaderTypeName", "HeaderTypeNamePlural", "HeaderTitlePath", "HeaderDescriptionPath"] },
+                FieldGroupDef {
+                    qualifier: "Basic",
+                    fields: &[
+                        "SetName",
+                        "KeyField",
+                        "TypeName",
+                        "ParentSetName",
+                        "SelectionFields",
+                    ],
+                },
+                FieldGroupDef {
+                    qualifier: "Tile",
+                    fields: &["TileTitle", "TileDescription", "TileIcon"],
+                },
+                FieldGroupDef {
+                    qualifier: "Header",
+                    fields: &[
+                        "HeaderTypeName",
+                        "HeaderTypeNamePlural",
+                        "HeaderTitlePath",
+                        "HeaderDescriptionPath",
+                    ],
+                },
             ],
             table_facets: &[
-                TableFacetDef { label: "Felder",             id: "FieldsSection",       navigation_property: "Fields" },
-                TableFacetDef { label: "Facetten",           id: "FacetsSection",       navigation_property: "Facets" },
-                TableFacetDef { label: "Navigation Props.",  id: "NavigationsSection",  navigation_property: "Navigations" },
-                TableFacetDef { label: "Tabellen-Facetten",  id: "TableFacetsSection",  navigation_property: "TableFacets" },
+                TableFacetDef {
+                    label: "Felder",
+                    id: "FieldsSection",
+                    navigation_property: "Fields",
+                },
+                TableFacetDef {
+                    label: "Facetten",
+                    id: "FacetsSection",
+                    navigation_property: "Facets",
+                },
+                TableFacetDef {
+                    label: "Navigation Props.",
+                    id: "NavigationsSection",
+                    navigation_property: "Navigations",
+                },
+                TableFacetDef {
+                    label: "Tabellen-Facetten",
+                    id: "TableFacetsSection",
+                    navigation_property: "TableFacets",
+                },
             ],
         };
         Some(&DEF)
@@ -190,67 +504,85 @@ impl ODataEntity for EntityConfigEntity {
 
     fn manifest_targets(&self) -> Vec<(String, Value)> {
         vec![
-            ("EntityConfigsList".to_string(), json!({
-                "type": "Component",
-                "id": "EntityConfigsList",
-                "name": "sap.fe.templates.ListReport",
-                "options": { "settings": {
-                    "contextPath": "/EntityConfigs",
-                    "variantManagement": "Page",
-                    "initialLoad": "Enabled",
-                    "navigation": { "EntityConfigs": { "detail": { "route": "EntityConfigsObjectPage" } } }
-                }},
-                "controlAggregation": "beginColumnPages",
-                "contextPattern": ""
-            })),
-            ("EntityConfigsObjectPage".to_string(), json!({
-                "type": "Component",
-                "id": "EntityConfigsObjectPage",
-                "name": "sap.fe.templates.ObjectPage",
-                "options": { "settings": { 
-                    "contextPath": "/EntityConfigs",
-                    "navigation": {
-                        "Fields": { "detail": { "route": "EntityFieldsObjectPage" } },
-                        "Facets": { "detail": { "route": "EntityFacetsObjectPage" } },
-                        "Navigations": { "detail": { "route": "EntityNavigationsObjectPage" } },
-                        "TableFacets": { "detail": { "route": "EntityTableFacetsObjectPage" } }
-                    }
-                } },
-                "controlAggregation": "midColumnPages",
-                "contextPattern": "/EntityConfigs({key})"
-            })),
-            ("EntityFieldsObjectPage".to_string(), json!({
-                "type": "Component",
-                "id": "EntityFieldsObjectPage",
-                "name": "sap.fe.templates.ObjectPage",
-                "options": { "settings": { "contextPath": "/EntityConfigs/Fields" } },
-                "controlAggregation": "endColumnPages",
-                "contextPattern": "/EntityConfigs({key})/Fields({key2})"
-            })),
-            ("EntityFacetsObjectPage".to_string(), json!({
-                "type": "Component",
-                "id": "EntityFacetsObjectPage",
-                "name": "sap.fe.templates.ObjectPage",
-                "options": { "settings": { "contextPath": "/EntityConfigs/Facets" } },
-                "controlAggregation": "endColumnPages",
-                "contextPattern": "/EntityConfigs({key})/Facets({key2})"
-            })),
-            ("EntityNavigationsObjectPage".to_string(), json!({
-                "type": "Component",
-                "id": "EntityNavigationsObjectPage",
-                "name": "sap.fe.templates.ObjectPage",
-                "options": { "settings": { "contextPath": "/EntityConfigs/Navigations" } },
-                "controlAggregation": "endColumnPages",
-                "contextPattern": "/EntityConfigs({key})/Navigations({key2})"
-            })),
-            ("EntityTableFacetsObjectPage".to_string(), json!({
-                "type": "Component",
-                "id": "EntityTableFacetsObjectPage",
-                "name": "sap.fe.templates.ObjectPage",
-                "options": { "settings": { "contextPath": "/EntityConfigs/TableFacets" } },
-                "controlAggregation": "endColumnPages",
-                "contextPattern": "/EntityConfigs({key})/TableFacets({key2})"
-            })),
+            (
+                "EntityConfigsList".to_string(),
+                json!({
+                    "type": "Component",
+                    "id": "EntityConfigsList",
+                    "name": "sap.fe.templates.ListReport",
+                    "options": { "settings": {
+                        "contextPath": "/EntityConfigs",
+                        "variantManagement": "Page",
+                        "initialLoad": "Enabled",
+                        "navigation": { "EntityConfigs": { "detail": { "route": "EntityConfigsObjectPage" } } }
+                    }},
+                    "controlAggregation": "beginColumnPages",
+                    "contextPattern": ""
+                }),
+            ),
+            (
+                "EntityConfigsObjectPage".to_string(),
+                json!({
+                    "type": "Component",
+                    "id": "EntityConfigsObjectPage",
+                    "name": "sap.fe.templates.ObjectPage",
+                    "options": { "settings": {
+                        "contextPath": "/EntityConfigs",
+                        "navigation": {
+                            "Fields": { "detail": { "route": "EntityFieldsObjectPage" } },
+                            "Facets": { "detail": { "route": "EntityFacetsObjectPage" } },
+                            "Navigations": { "detail": { "route": "EntityNavigationsObjectPage" } },
+                            "TableFacets": { "detail": { "route": "EntityTableFacetsObjectPage" } }
+                        }
+                    } },
+                    "controlAggregation": "midColumnPages",
+                    "contextPattern": "/EntityConfigs({key})"
+                }),
+            ),
+            (
+                "EntityFieldsObjectPage".to_string(),
+                json!({
+                    "type": "Component",
+                    "id": "EntityFieldsObjectPage",
+                    "name": "sap.fe.templates.ObjectPage",
+                    "options": { "settings": { "contextPath": "/EntityConfigs/Fields" } },
+                    "controlAggregation": "endColumnPages",
+                    "contextPattern": "/EntityConfigs({key})/Fields({key2})"
+                }),
+            ),
+            (
+                "EntityFacetsObjectPage".to_string(),
+                json!({
+                    "type": "Component",
+                    "id": "EntityFacetsObjectPage",
+                    "name": "sap.fe.templates.ObjectPage",
+                    "options": { "settings": { "contextPath": "/EntityConfigs/Facets" } },
+                    "controlAggregation": "endColumnPages",
+                    "contextPattern": "/EntityConfigs({key})/Facets({key2})"
+                }),
+            ),
+            (
+                "EntityNavigationsObjectPage".to_string(),
+                json!({
+                    "type": "Component",
+                    "id": "EntityNavigationsObjectPage",
+                    "name": "sap.fe.templates.ObjectPage",
+                    "options": { "settings": { "contextPath": "/EntityConfigs/Navigations" } },
+                    "controlAggregation": "endColumnPages",
+                    "contextPattern": "/EntityConfigs({key})/Navigations({key2})"
+                }),
+            ),
+            (
+                "EntityTableFacetsObjectPage".to_string(),
+                json!({
+                    "type": "Component",
+                    "id": "EntityTableFacetsObjectPage",
+                    "name": "sap.fe.templates.ObjectPage",
+                    "options": { "settings": { "contextPath": "/EntityConfigs/TableFacets" } },
+                    "controlAggregation": "endColumnPages",
+                    "contextPattern": "/EntityConfigs({key})/TableFacets({key2})"
+                }),
+            ),
         ]
     }
 

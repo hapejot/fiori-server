@@ -3,6 +3,10 @@ name = "fake-fiori-server"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+postgres = ["sqlx", "dotenvy"]
+
 [dependencies]
 axum = "0.8"
 tower-http = { version = "0.6", features = ["trace", "cors"] }
@@ -14,5 +18,6 @@ urlencoding = "2"
 mime_guess = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-log = "0.4"
 uuid = { version = "1", features = ["v4", "v5"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "json"], optional = true }
+dotenvy = { version = "0.15", optional = true }

@@ -1,7 +1,12 @@
 [
   {
+    "Description": "OData EDM Datentypen",
     "ID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
-    "ListName": "EdmTypes",
-    "Description": "OData EDM Datentypen"
+    "ListName": "EdmTypes"
+  },
+  {
+    "Description": "Partner Status",
+    "ID": "68529b35-6721-4d72-a844-14e8a207c32c",
+    "ListName": "PartnerStatus"
   }
 ]

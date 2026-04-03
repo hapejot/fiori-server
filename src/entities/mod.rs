@@ -1,8 +1,5 @@
 pub mod generic;
 pub mod meta;
-mod product;
-mod order;
-mod order_item;
 mod entity_config;
 mod entity_field;
 mod entity_facet;
@@ -11,9 +8,6 @@ mod entity_table_facet;
 mod field_value_list;
 mod field_value_list_item;
 
-pub use product::ProductEntity;
-pub use order::OrderEntity;
-pub use order_item::OrderItemEntity;
 pub use entity_config::EntityConfigEntity;
 pub use entity_field::EntityFieldEntity;
 pub use entity_facet::EntityFacetEntity;

@@ -47,6 +47,11 @@ pub trait ODataEntity: Sync + Debug {
     fn parent_set_name(&self) -> Option<&'static str> {
         None
     }
+    /// Standardwerte fuer neue Entitaeten (z.B. Currency="EUR", Status="A").
+    /// Werden beim Erstellen einer neuen Draft-Entitaet vor den Typ-Defaults angewendet.
+    fn default_values(&self) -> Option<Value> {
+        None
+    }
     /// Primaeres Textfeld, das anstelle des Schluessels angezeigt wird.
     /// Default: HeaderInfo.title_path (falls vorhanden).
     /// Erzeugt Common.Text + UI.TextArrangement auf dem Schluesselfeld.

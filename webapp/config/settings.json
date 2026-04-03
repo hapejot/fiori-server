@@ -9,7 +9,15 @@
   "shell": {
     "renderer": "fiori2",
     "rootIntent": "Shell-home",
-    "enableSearch": false
+    "enableSearch": false,
+    "companyLogo": "/logo.svg"
+  },
+  "user": {
+    "id": "DEMO_USER",
+    "firstName": "John",
+    "lastName": "Doe",
+    "fullName": "John Doe",
+    "email": "john.doe@example.com"
   },
   "component": {
     "id": "products.demo",

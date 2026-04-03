@@ -5,6 +5,46 @@ use std::sync::LazyLock;
 use crate::entity::ODataEntity;
 use crate::BASE_PATH;
 
+/// Inject SiblingEntity into a record.
+/// For a draft with an active sibling → returns the active record.
+/// For an active entity with a draft → returns the draft record.
+/// Otherwise → null.
+fn inject_sibling_entity(record: &mut Value, key_field: &str, all_records: &[Value]) {
+    if let Some(obj) = record.as_object_mut() {
+        let is_active = obj
+            .get("IsActiveEntity")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let has_sibling = if is_active {
+            obj.get("HasDraftEntity")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        } else {
+            obj.get("HasActiveEntity")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        };
+        let sibling = if has_sibling {
+            if let Some(key_value) = obj.get(key_field).and_then(|v| v.as_str()) {
+                all_records
+                    .iter()
+                    .find(|r| {
+                        r.get(key_field).and_then(|v| v.as_str()) == Some(key_value)
+                            && r.get("IsActiveEntity").and_then(|v| v.as_bool())
+                                == Some(!is_active)
+                    })
+                    .cloned()
+                    .unwrap_or(Value::Null)
+            } else {
+                Value::Null
+            }
+        } else {
+            Value::Null
+        };
+        obj.insert("SiblingEntity".to_string(), sibling);
+    }
+}
+
 pub fn parse_query_string(query: &str) -> HashMap<String, String> {
     let mut map = HashMap::new();
     if query.is_empty() {
@@ -260,6 +300,53 @@ pub fn query_collection_from(entity: &dyn ODataEntity, data: &[Value], qs: &Hash
                         }
                     }
                 }
+                // SiblingEntity: inject the active/draft counterpart
+                if nav_refs.iter().any(|n| *n == "SiblingEntity") {
+                    let all_records = data_store.get(&entity.entity_set()).map(|v| v.as_slice()).unwrap_or(&[]);
+                    inject_sibling_entity(r, entity.key_field(), all_records);
+                }
+            }
+        }
+    }
+
+    // Resolve value_source text fields (_{name}_text) from FieldValueListItems
+    if let Some(fields) = entity.fields_def() {
+        let vs_fields: Vec<(&str, &str, &str)> = fields
+            .iter()
+            .filter_map(|f| {
+                let vs = f.value_source?;
+                let tp = f.text_path?;
+                Some((f.name, vs, tp))
+            })
+            .collect();
+        if !vs_fields.is_empty() {
+            if let Some(items) = data_store.get("FieldValueListItems") {
+                // Build lookup: (ListID, Code) → Description
+                let lookup: HashMap<(&str, &str), &str> = items
+                    .iter()
+                    .filter_map(|item| {
+                        let list_id = item.get("ListID")?.as_str()?;
+                        let code = item.get("Code")?.as_str()?;
+                        let desc = item.get("Description")?.as_str()?;
+                        Some(((list_id, code), desc))
+                    })
+                    .collect();
+                for r in &mut results {
+                    if let Some(obj) = r.as_object_mut() {
+                        for &(field_name, list_id, text_field) in &vs_fields {
+                            if let Some(code) = obj.get(field_name).and_then(|v| v.as_str()) {
+                                let desc = lookup
+                                    .get(&(list_id, code))
+                                    .copied()
+                                    .unwrap_or(code);
+                                obj.insert(
+                                    text_field.to_string(),
+                                    Value::String(desc.to_string()),
+                                );
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -328,9 +415,9 @@ mod tests {
         fn entity_set(&self) -> String { String::new() }
         fn fields_def(&self) -> Option<&'static [FieldDef]> {
             static FIELDS: &[FieldDef] = &[
-                FieldDef { name: "ID", label: "ID", edm_type: "Edm.String", max_length: Some(10), precision: None, scale: None, immutable: true, semantic_object: None, value_source: None, value_list: None, text_path: None },
-                FieldDef { name: "Name", label: "Name", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
-                FieldDef { name: "Extra", label: "Extra", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
+                FieldDef { name: "ID", label: "ID", edm_type: "Edm.String", max_length: Some(10), precision: None, scale: None, immutable: true, computed: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
+                FieldDef { name: "Name", label: "Name", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, computed: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
+                FieldDef { name: "Extra", label: "Extra", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, computed: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
             ];
             Some(FIELDS)
         }

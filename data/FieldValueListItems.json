@@ -1,58 +1,79 @@
 [
   {
-    "ID": "77da0a0c-8524-5318-a388-8081a4fc53be",
-    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
     "Code": "Edm.String",
     "Description": "Zeichenkette",
+    "ID": "77da0a0c-8524-5318-a388-8081a4fc53be",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
     "SortOrder": 0
   },
   {
-    "ID": "7cf2ff87-1c3d-502a-bd2f-740bbbedbf56",
-    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
-    "Code": "Edm.Int32",
-    "Description": "Ganzzahl",
-    "SortOrder": 1
-  },
-  {
-    "ID": "d7d1cb37-9b7c-5d59-9f60-6cc36421658c",
-    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
     "Code": "Edm.Int64",
     "Description": "Lange Ganzzahl",
+    "ID": "d7d1cb37-9b7c-5d59-9f60-6cc36421658c",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
     "SortOrder": 2
   },
   {
-    "ID": "78caa83b-3ec4-5499-b1e2-f9da15979512",
-    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
-    "Code": "Edm.Decimal",
-    "Description": "Dezimalzahl",
-    "SortOrder": 3
-  },
-  {
-    "ID": "a6030e6b-b847-547a-8744-0969c73801c0",
-    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
     "Code": "Edm.Boolean",
     "Description": "Wahrheitswert",
+    "ID": "a6030e6b-b847-547a-8744-0969c73801c0",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
     "SortOrder": 4
   },
   {
-    "ID": "22c2fa10-edc0-5764-8a81-7fe12443be1a",
-    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
-    "Code": "Edm.DateTimeOffset",
-    "Description": "Datum und Uhrzeit",
-    "SortOrder": 5
-  },
-  {
-    "ID": "ee84b175-b6a6-5ff2-8927-bc50082c59d3",
-    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
     "Code": "Edm.Date",
     "Description": "Datum",
+    "ID": "ee84b175-b6a6-5ff2-8927-bc50082c59d3",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
     "SortOrder": 6
   },
   {
-    "ID": "4b4397ac-f66e-5a47-b4e8-7db2394fe8ae",
+    "Code": "Edm.Int32",
+    "Description": "Ganzzahl",
+    "ID": "7cf2ff87-1c3d-502a-bd2f-740bbbedbf56",
     "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
+    "SortOrder": 1
+  },
+  {
+    "Code": "Edm.Decimal",
+    "Description": "Dezimalzahl",
+    "ID": "78caa83b-3ec4-5499-b1e2-f9da15979512",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
+    "SortOrder": 3
+  },
+  {
+    "Code": "Edm.DateTimeOffset",
+    "Description": "Datum und Uhrzeit",
+    "ID": "22c2fa10-edc0-5764-8a81-7fe12443be1a",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
+    "SortOrder": 5
+  },
+  {
     "Code": "Edm.Guid",
     "Description": "GUID",
+    "ID": "4b4397ac-f66e-5a47-b4e8-7db2394fe8ae",
+    "ListID": "ea102ff5-5777-5155-b0c3-8dd507435f93",
     "SortOrder": 7
+  },
+  {
+    "Code": "new",
+    "Description": "Neu",
+    "ID": "0dbd771e-2dac-4e31-b1a5-dce0b0abd268",
+    "ListID": "68529b35-6721-4d72-a844-14e8a207c32c",
+    "SortOrder": 0
+  },
+  {
+    "Code": "acc",
+    "Description": "Angenommen",
+    "ID": "dd01c2a0-2b09-4180-bc5c-3af16c91102e",
+    "ListID": "68529b35-6721-4d72-a844-14e8a207c32c",
+    "SortOrder": 1
+  },
+  {
+    "Code": "old",
+    "Description": "Veraltet",
+    "ID": "ab4e80b5-6e38-4afa-baee-71e1519b78c6",
+    "ListID": "68529b35-6721-4d72-a844-14e8a207c32c",
+    "SortOrder": 0
   }
 ]

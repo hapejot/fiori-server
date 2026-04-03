@@ -40,6 +40,57 @@
         });
     }
 
+    // ── apply ushellProperties after Container.init ───────────────
+
+    /**
+     * In local CDM mode, ushellProperties from window["sap-ushell-config"]
+     * are not picked up automatically.  Apply the company logo on the
+     * ShellHeader control once the renderer has loaded.
+     */
+    function applyUshellProperties(oProps) {
+        if (!oProps) { return; }
+        var sLogo = oProps["/core/companyLogo/url"];
+        if (!sLogo) { return; }
+
+        function setLogo() {
+            var oHeader = sap.ui.getCore().byId("shell-header");
+            if (oHeader && typeof oHeader.setLogo === "function") {
+                oHeader.setLogo(sLogo);
+                console.log("[flp-init] Company logo set:", sLogo);
+            }
+        }
+
+        // The shell header may not exist yet; listen for rendererLoaded.
+        var oBus = sap.ui.getCore().getEventBus();
+        oBus.subscribeOnce("sap.ushell", "rendererLoaded", setLogo);
+    }
+
+    /**
+     * Apply user profile data to the UShell Container.getUser() object.
+     * The local adapter reads from services.Container.adapter.config but
+     * may not map all fields.  This ensures the user info menu shows the
+     * correct name and email.
+     */
+    function applyUserProfile(oUshellConfig) {
+        var oCfg = getNestedValue(oUshellConfig, "services.Container.adapter.config");
+        if (!oCfg) { return; }
+
+        try {
+            var oUser = sap.ushell.Container.getUser();
+            if (!oUser) { return; }
+
+            if (oCfg.id)        { oUser.setId(oCfg.id); }
+            if (oCfg.firstName) { oUser.setFirstName(oCfg.firstName); }
+            if (oCfg.lastName)  { oUser.setLastName(oCfg.lastName); }
+            if (oCfg.fullName)  { oUser.setFullName(oCfg.fullName); }
+            if (oCfg.email)     { oUser.setEmail(oCfg.email); }
+
+            console.log("[flp-init] User profile set:", oCfg.fullName || oCfg.id);
+        } catch (e) {
+            console.warn("[flp-init] Could not set user profile:", e);
+        }
+    }
+
     // ── tile / application transform ────────────────────────────────
 
     function createTile(oApp, iSuffix, sKey) {
@@ -52,6 +103,7 @@
             properties: {
                 chipId: "flp_chip_" + iSuffix,
                 title: sTitle,
+                icon: oApp.icon || "",
                 info: oApp.description || "",
                 targetURL: "#" + sKey
             }
@@ -220,6 +272,7 @@
                 applicationType: "URL",
                 url: sUrl,
                 title: oApp.title || sKey,
+                icon: oApp.icon || "",
                 description: oApp.description || ""
             };
         });
@@ -351,11 +404,24 @@
                         console.log("ClientSideTargetResolution apps:", _cstr);
                         console.groupEnd();
 
+                        // Save ushellProperties before Container.init —
+                        // local CDM mode doesn't process them from config.
+                        var savedUshellProps = oUshellConfig.ushellProperties
+                            ? JSON.parse(JSON.stringify(oUshellConfig.ushellProperties))
+                            : null;
+                        delete oUshellConfig.ushellProperties;
+
                         // Load Container AFTER all config is set up (side effects!)
                         ushellUtils
                             .requireAsync(["sap/ushell/Container"])
                             .then(function (aModules) {
                                 aModules[0].init("local").then(function () {
+                                    // Apply saved ushellProperties (e.g. company logo)
+                                    applyUshellProperties(savedUshellProps);
+
+                                    // Apply user profile from Container adapter config
+                                    applyUserProfile(oUshellConfig);
+
                                     // ── DEBUG: verify intent support ──
                                     sap.ushell.Container.getServiceAsync("CrossApplicationNavigation")
                                         .then(function (oNav) {

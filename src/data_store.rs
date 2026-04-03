@@ -3,8 +3,9 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 
-use log::info;
 use serde_json::{json, Value};
+use tower_http::trace;
+use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::entity::ODataEntity;
@@ -40,12 +41,7 @@ fn find_record_mut<'a>(
 }
 
 /// Remove all records matching key field + IsActiveEntity.
-fn remove_records(
-    records: &mut Vec<Value>,
-    key_field: &str,
-    key_value: &str,
-    is_active: bool,
-) {
+fn remove_records(records: &mut Vec<Value>, key_field: &str, key_value: &str, is_active: bool) {
     records.retain(|r| {
         !(r.get(key_field).and_then(|v| v.as_str()) == Some(key_value)
             && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(is_active))
@@ -53,7 +49,7 @@ fn remove_records(
 }
 
 /// Set the three draft boolean flags on a record.
-fn set_draft_flags(record: &mut Value, is_active: bool, has_active: bool, has_draft: bool) {
+pub(crate) fn set_draft_flags(record: &mut Value, is_active: bool, has_active: bool, has_draft: bool) {
     if let Some(obj) = record.as_object_mut() {
         obj.insert("IsActiveEntity".to_string(), json!(is_active));
         obj.insert("HasActiveEntity".to_string(), json!(has_active));
@@ -62,7 +58,7 @@ fn set_draft_flags(record: &mut Value, is_active: bool, has_active: bool, has_dr
 }
 
 /// Inject @odata.context into a record.
-fn inject_odata_context(record: &mut Value, set_name: &str) {
+pub(crate) fn inject_odata_context(record: &mut Value, set_name: &str) {
     if let Some(obj) = record.as_object_mut() {
         obj.insert(
             "@odata.context".to_string(),
@@ -379,12 +375,7 @@ pub trait DataStore: Send + Sync {
         parent: Option<&ParentKey>,
     ) -> Result<Value, StoreError>;
 
-    fn count(
-        &self,
-        set_name: &str,
-        query: &ODataQuery,
-        parent: Option<&ParentKey>,
-    ) -> usize;
+    fn count(&self, set_name: &str, query: &ODataQuery, parent: Option<&ParentKey>) -> usize;
 
     // ── Single Entity CRUD ──
     fn read_entity(
@@ -408,26 +399,17 @@ pub trait DataStore: Send + Sync {
         patch: &Value,
     ) -> Result<Value, StoreError>;
 
-    fn delete_entity(
-        &self,
-        set_name: &str,
-        key: &EntityKey,
-    ) -> Result<(), StoreError>;
+    fn delete_entity(&self, set_name: &str, key: &EntityKey) -> Result<(), StoreError>;
 
     // ── Draft Actions ──
-    fn draft_edit(
-        &self,
-        set_name: &str,
-        key: &EntityKey,
-    ) -> Result<Value, StoreError>;
+    fn draft_edit(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError>;
 
-    fn draft_activate(
-        &self,
-        set_name: &str,
-        key: &EntityKey,
-    ) -> Result<Value, StoreError>;
+    fn draft_activate(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError>;
 
-    fn draft_prepare(
+    fn draft_prepare(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError>;
+
+    // ── Sibling Entity (draft ↔ active) ──
+    fn read_sibling_entity(
         &self,
         set_name: &str,
         key: &EntityKey,
@@ -487,6 +469,7 @@ impl InMemoryDataStore {
         }
     }
 
+    #[tracing::instrument(skip(self))]
     fn find_entity(&self, set_name: &str) -> Option<&'static dyn ODataEntity> {
         self.entities
             .read()
@@ -496,6 +479,7 @@ impl InMemoryDataStore {
             .copied()
     }
 
+    #[tracing::instrument(skip(self))]
     fn resolve_key<'a>(
         &self,
         set_name: &str,
@@ -504,24 +488,33 @@ impl InMemoryDataStore {
         let entity = self
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
-        let key_value = key
-            .resolve_key_value(entity.key_field())
-            .ok_or_else(|| {
-                StoreError::BadRequest(format!(
-                    "Key field '{}' not found in key",
-                    entity.key_field()
-                ))
-            })?;
+        let key_value = key.resolve_key_value(entity.key_field()).ok_or_else(|| {
+            StoreError::BadRequest(format!(
+                "Key field '{}' not found in key",
+                entity.key_field()
+            ))
+        })?;
         let is_active = key.is_active();
         Ok((key_value, is_active))
     }
 
+    #[tracing::instrument(skip(self))]
     fn entities_snapshot(&self) -> Vec<&'static dyn ODataEntity> {
         self.entities.read().unwrap().clone()
+    }
+
+    fn record_count(&self, set_name: &str) -> usize {
+        self.store
+            .read()
+            .unwrap()
+            .get(set_name)
+            .map(|v| v.len())
+            .unwrap_or(0)
     }
 }
 
 impl DataStore for InMemoryDataStore {
+    #[tracing::instrument(skip(self))]
     fn get_collection(
         &self,
         set_name: &str,
@@ -567,8 +560,7 @@ impl DataStore for InMemoryDataStore {
                         records
                             .iter()
                             .filter(|r| {
-                                r.get(child_fk).and_then(|v| v.as_str())
-                                    == Some(parent_key_value)
+                                r.get(child_fk).and_then(|v| v.as_str()) == Some(parent_key_value)
                                     && r.get("IsActiveEntity").and_then(|v| v.as_bool())
                                         == Some(parent_is_active)
                             })
@@ -606,12 +598,8 @@ impl DataStore for InMemoryDataStore {
         }
     }
 
-    fn count(
-        &self,
-        set_name: &str,
-        _query: &ODataQuery,
-        parent: Option<&ParentKey>,
-    ) -> usize {
+    #[tracing::instrument(skip(self))]
+    fn count(&self, set_name: &str, _query: &ODataQuery, parent: Option<&ParentKey>) -> usize {
         let store = self.store.read().unwrap();
 
         match parent {
@@ -646,6 +634,7 @@ impl DataStore for InMemoryDataStore {
         }
     }
 
+    #[tracing::instrument(skip(self))]
     fn read_entity(
         &self,
         set_name: &str,
@@ -660,11 +649,11 @@ impl DataStore for InMemoryDataStore {
         let store = self.store.read().unwrap();
         let qs = query.to_query_map();
 
-        let records = store.get(set_name).ok_or_else(|| {
-            StoreError::NotFound(format!("Entity set '{}' not found", set_name))
-        })?;
-        let record = find_record(records, entity.key_field(), key_value, is_active)
-            .ok_or_else(|| {
+        let records = store
+            .get(set_name)
+            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
+        let record =
+            find_record(records, entity.key_field(), key_value, is_active).ok_or_else(|| {
                 StoreError::NotFound(format!(
                     "Entity with {}='{}' not found",
                     entity.key_field(),
@@ -687,11 +676,17 @@ impl DataStore for InMemoryDataStore {
                 if nav_refs.iter().any(|n| *n == "DraftAdministrativeData") {
                     inject_draft_admin_data(&mut result, entity.key_field());
                 }
+                if nav_refs.iter().any(|n| *n == "SiblingEntity") {
+                    inject_sibling_entity(&mut result, entity.key_field(), records);
+                }
             }
         }
+        // Resolve value_source text fields
+        resolve_value_texts(entity, &mut result, &store);
         Ok(result)
     }
 
+    #[tracing::instrument(skip(self))]
     fn create_entity(
         &self,
         set_name: &str,
@@ -729,6 +724,15 @@ impl DataStore for InMemoryDataStore {
             obj.insert("HasActiveEntity".to_string(), json!(false));
             obj.insert("HasDraftEntity".to_string(), json!(false));
 
+            // Entity-specific default values (e.g. Currency="EUR", Status="A")
+            if let Some(defaults) = entity.default_values() {
+                if let Some(def_obj) = defaults.as_object() {
+                    for (k, v) in def_obj {
+                        obj.entry(k.clone()).or_insert(v.clone());
+                    }
+                }
+            }
+
             // Default values for missing fields
             if let Some(fields) = entity.fields_def() {
                 for f in fields {
@@ -753,6 +757,7 @@ impl DataStore for InMemoryDataStore {
         Ok(result)
     }
 
+    #[tracing::instrument(skip(self))]
     fn patch_entity(
         &self,
         set_name: &str,
@@ -765,31 +770,30 @@ impl DataStore for InMemoryDataStore {
         let (key_value, is_active) = self.resolve_key(set_name, key)?;
         let mut store = self.store.write().unwrap();
 
-        let records = store.get_mut(set_name).ok_or_else(|| {
-            StoreError::NotFound(format!("Entity set '{}' not found", set_name))
-        })?;
-        let record =
-            find_record_mut(records, entity.key_field(), key_value, is_active)
-                .ok_or_else(|| {
-                    StoreError::NotFound(format!(
-                        "Entity with {}='{}' not found",
-                        entity.key_field(),
-                        key_value
-                    ))
-                })?;
+        let records = store
+            .get_mut(set_name)
+            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
+        let record = find_record_mut(records, entity.key_field(), key_value, is_active)
+            .ok_or_else(|| {
+                StoreError::NotFound(format!(
+                    "Entity with {}='{}' not found",
+                    entity.key_field(),
+                    key_value
+                ))
+            })?;
 
-        let immutable_fields: Vec<&str> = entity
+        let readonly_fields: Vec<&str> = entity
             .fields_def()
             .unwrap_or(&[])
             .iter()
-            .filter(|f| f.immutable)
+            .filter(|f| f.immutable || f.computed)
             .map(|f| f.name)
             .collect();
 
         if let Some(patch_obj) = patch.as_object() {
             if let Some(rec_obj) = record.as_object_mut() {
                 for (k, v) in patch_obj {
-                    if is_draft_field(k) || immutable_fields.contains(&k.as_str()) {
+                    if is_draft_field(k) || readonly_fields.contains(&k.as_str()) {
                         continue;
                     }
                     rec_obj.insert(k.clone(), v.clone());
@@ -802,11 +806,8 @@ impl DataStore for InMemoryDataStore {
         Ok(result)
     }
 
-    fn delete_entity(
-        &self,
-        set_name: &str,
-        key: &EntityKey,
-    ) -> Result<(), StoreError> {
+    #[tracing::instrument(skip(self))]
+    fn delete_entity(&self, set_name: &str, key: &EntityKey) -> Result<(), StoreError> {
         let entity = self
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
@@ -827,8 +828,7 @@ impl DataStore for InMemoryDataStore {
             remove_records(records, entity.key_field(), key_value, is_active);
 
             if !is_active {
-                if let Some(active) =
-                    find_record_mut(records, entity.key_field(), key_value, true)
+                if let Some(active) = find_record_mut(records, entity.key_field(), key_value, true)
                 {
                     if let Some(obj) = active.as_object_mut() {
                         obj.insert("HasDraftEntity".to_string(), json!(false));
@@ -842,37 +842,31 @@ impl DataStore for InMemoryDataStore {
         Ok(())
     }
 
-    fn draft_edit(
-        &self,
-        set_name: &str,
-        key: &EntityKey,
-    ) -> Result<Value, StoreError> {
+    #[tracing::instrument(skip(self))]
+    fn draft_edit(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError> {
+        info!("start");
         let entity = self
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
         let (key_value, _) = self.resolve_key(set_name, key)?;
+        info!("key: {}", key_value);
         let entities_snap = self.entities_snapshot();
         let mut store = self.store.write().unwrap();
 
-        let records = store.get_mut(set_name).ok_or_else(|| {
-            StoreError::NotFound(format!("Entity set '{}' not found", set_name))
-        })?;
+        let records = store
+            .get_mut(set_name)
+            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
 
-        let active =
-            find_record(records, entity.key_field(), key_value, true)
-                .ok_or_else(|| {
-                    StoreError::NotFound("Active entity not found".to_string())
-                })?
-                .clone();
-
-        info!("  [draftEdit] {}('{}') – creating draft from active", set_name, key_value);
-
+        let active = find_record(records, entity.key_field(), key_value, true)
+            .ok_or_else(|| StoreError::NotFound("Active entity not found".to_string()))?
+            .clone();
+        info!("active record: {}", active);
         // Mark active as having a draft
-        if let Some(active_rec) =
-            find_record_mut(records, entity.key_field(), key_value, true)
-        {
+        if let Some(active_rec) = find_record_mut(records, entity.key_field(), key_value, true) {
             if let Some(obj) = active_rec.as_object_mut() {
                 obj.insert("HasDraftEntity".to_string(), json!(true));
+            } else {
+                panic!("active record not found for draft edit");
             }
         }
 
@@ -882,18 +876,15 @@ impl DataStore for InMemoryDataStore {
         inject_odata_context(&mut draft_rec, set_name);
         let result = draft_rec.clone();
         records.push(draft_rec);
-
+        info!("records: {}", records.len());
         // Copy children as drafts
         copy_children_as_drafts(&mut store, entity, key_value, &entities_snap);
 
         Ok(result)
     }
 
-    fn draft_activate(
-        &self,
-        set_name: &str,
-        key: &EntityKey,
-    ) -> Result<Value, StoreError> {
+    #[tracing::instrument(skip(self))]
+    fn draft_activate(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError> {
         let entity = self
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
@@ -901,26 +892,26 @@ impl DataStore for InMemoryDataStore {
         let entities_snap = self.entities_snapshot();
         let mut store = self.store.write().unwrap();
 
-        let records = store.get_mut(set_name).ok_or_else(|| {
-            StoreError::NotFound(format!("Entity set '{}' not found", set_name))
-        })?;
+        let records = store
+            .get_mut(set_name)
+            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
 
-        info!("  [draftActivate] {}('{}') – activating draft", set_name, key_value);
+        info!(
+            "  [draftActivate] {}('{}') – activating draft",
+            set_name, key_value
+        );
 
-        let draft_rec =
-            find_record(records, entity.key_field(), key_value, false)
-                .ok_or_else(|| StoreError::NotFound("Draft not found".to_string()))?
-                .clone();
-
+        let draft_rec = find_record(records, entity.key_field(), key_value, false)
+            .ok_or_else(|| StoreError::NotFound("Draft not found".to_string()))?
+            .clone();
+        info!("draft record: {}", draft_rec);
         let has_active = draft_rec
             .get("HasActiveEntity")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-
+        info!("has active: {}", has_active);
         if has_active {
-            if let Some(active) =
-                find_record_mut(records, entity.key_field(), key_value, true)
-            {
+            if let Some(active) = find_record_mut(records, entity.key_field(), key_value, true) {
                 if let (Some(active_obj), Some(draft_obj)) =
                     (active.as_object_mut(), draft_rec.as_object())
                 {
@@ -957,7 +948,33 @@ impl DataStore for InMemoryDataStore {
         }
     }
 
-    fn draft_prepare(
+    #[tracing::instrument(skip(self))]
+    fn draft_prepare(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError> {
+        let entity = self
+            .find_entity(set_name)
+            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
+        let (key_value, is_active) = self.resolve_key(set_name, key)?;
+        let store = self.store.read().unwrap();
+
+        let records = store
+            .get(set_name)
+            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
+
+        info!(
+            "  [draftPrepare] {}('{}') is_active={}",
+            set_name, key_value, is_active
+        );
+
+        let record = find_record(records, entity.key_field(), key_value, is_active)
+            .ok_or_else(|| StoreError::NotFound("Entity not found for draftPrepare".to_string()))?;
+
+        let mut result = record.clone();
+        inject_odata_context(&mut result, set_name);
+        Ok(result)
+    }
+
+    #[tracing::instrument(skip(self))]
+    fn read_sibling_entity(
         &self,
         set_name: &str,
         key: &EntityKey,
@@ -968,22 +985,26 @@ impl DataStore for InMemoryDataStore {
         let (key_value, is_active) = self.resolve_key(set_name, key)?;
         let store = self.store.read().unwrap();
 
-        let records = store.get(set_name).ok_or_else(|| {
-            StoreError::NotFound(format!("Entity set '{}' not found", set_name))
-        })?;
+        let records = store
+            .get(set_name)
+            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
 
-        info!("  [draftPrepare] {}('{}') is_active={}", set_name, key_value, is_active);
-
-        let record = find_record(records, entity.key_field(), key_value, is_active)
+        // The sibling is the same key with flipped IsActiveEntity
+        let sibling = find_record(records, entity.key_field(), key_value, !is_active)
             .ok_or_else(|| {
-                StoreError::NotFound("Entity not found for draftPrepare".to_string())
+                StoreError::NotFound(format!(
+                    "Sibling entity with {}='{}' not found",
+                    entity.key_field(),
+                    key_value
+                ))
             })?;
 
-        let mut result = record.clone();
+        let mut result = sibling.clone();
         inject_odata_context(&mut result, set_name);
         Ok(result)
     }
 
+    #[tracing::instrument(skip(self))]
     fn get_property(
         &self,
         set_name: &str,
@@ -996,12 +1017,12 @@ impl DataStore for InMemoryDataStore {
         let (key_value, is_active) = self.resolve_key(set_name, key)?;
         let store = self.store.read().unwrap();
 
-        let records = store.get(set_name).ok_or_else(|| {
-            StoreError::NotFound(format!("Entity set '{}' not found", set_name))
-        })?;
+        let records = store
+            .get(set_name)
+            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
 
-        let record = find_record(records, entity.key_field(), key_value, is_active)
-            .ok_or_else(|| {
+        let record =
+            find_record(records, entity.key_field(), key_value, is_active).ok_or_else(|| {
                 StoreError::NotFound(format!(
                     "Entity with {}='{}' not found",
                     entity.key_field(),
@@ -1009,17 +1030,21 @@ impl DataStore for InMemoryDataStore {
                 ))
             })?;
 
-        record.get(property).cloned().ok_or_else(|| {
-            StoreError::NotFound(format!("Property '{}' not found", property))
-        })
+        record
+            .get(property)
+            .cloned()
+            .ok_or_else(|| StoreError::NotFound(format!("Property '{}' not found", property)))
     }
 
+    #[tracing::instrument(skip(self))]
     fn get_records(&self, set_name: &str) -> Vec<Value> {
         let store = self.store.read().unwrap();
         store.get(set_name).cloned().unwrap_or_default()
     }
 
+    #[tracing::instrument(skip(self))]
     fn commit(&self) {
+        info!("  [commit] Persisting data to {}", self.data_dir.display());
         let entities_snap = self.entities_snapshot();
         let store = self.store.read().unwrap();
         for entity in &entities_snap {
@@ -1048,17 +1073,14 @@ impl DataStore for InMemoryDataStore {
                 let json_path = self.data_dir.join(format!("{}.json", set_name));
                 if let Ok(content) = serde_json::to_string_pretty(&clean) {
                     if let Err(e) = std::fs::write(&json_path, content) {
-                        eprintln!(
-                            "  WARNING: Could not write {}: {}",
-                            json_path.display(),
-                            e
-                        );
+                        eprintln!("  WARNING: Could not write {}: {}", json_path.display(), e);
                     }
                 }
             }
         }
     }
 
+    #[tracing::instrument(skip(self))]
     fn update_entities(&self, new_entities: Vec<&'static dyn ODataEntity>) {
         // Register any new entity sets that don't have data yet
         let mut store = self.store.write().unwrap();
@@ -1087,11 +1109,11 @@ impl DataStore for InMemoryDataStore {
 
 // ── Internal helpers (moved from draft.rs for InMemoryDataStore) ────
 
-fn is_draft_field(k: &str) -> bool {
+pub(crate) fn is_draft_field(k: &str) -> bool {
     k == "IsActiveEntity" || k == "HasActiveEntity" || k == "HasDraftEntity"
 }
 
-fn inject_draft_admin_data(record: &mut Value, key_field: &str) {
+pub(crate) fn inject_draft_admin_data(record: &mut Value, key_field: &str) {
     if let Some(obj) = record.as_object_mut() {
         let is_draft = obj.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(false);
         if is_draft {
@@ -1109,9 +1131,83 @@ fn inject_draft_admin_data(record: &mut Value, key_field: &str) {
     }
 }
 
+/// Inject SiblingEntity into a record.
+/// For a draft with an active sibling → returns the active record.
+/// For an active entity with a draft → returns the draft record.
+/// Otherwise → null.
+pub(crate) fn inject_sibling_entity(record: &mut Value, key_field: &str, records: &[Value]) {
+    if let Some(obj) = record.as_object_mut() {
+        let is_active = obj
+            .get("IsActiveEntity")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let has_sibling = if is_active {
+            obj.get("HasDraftEntity")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        } else {
+            obj.get("HasActiveEntity")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        };
+        let sibling = if has_sibling {
+            if let Some(key_value) = obj.get(key_field).and_then(|v| v.as_str()) {
+                find_record(records, key_field, key_value, !is_active)
+                    .cloned()
+                    .unwrap_or(Value::Null)
+            } else {
+                Value::Null
+            }
+        } else {
+            Value::Null
+        };
+        obj.insert("SiblingEntity".to_string(), sibling);
+    }
+}
+
+/// Resolve value_source text fields on a single record.
+/// For each field with value_source + text_path, looks up the Code in
+/// FieldValueListItems and sets the _text field to the Description.
+fn resolve_value_texts(
+    entity: &dyn ODataEntity,
+    record: &mut Value,
+    store: &HashMap<String, Vec<Value>>,
+) {
+    let fields = match entity.fields_def() {
+        Some(f) => f,
+        None => return,
+    };
+    let vs_fields: Vec<(&str, &str, &str)> = fields
+        .iter()
+        .filter_map(|f| Some((f.name, f.value_source?, f.text_path?)))
+        .collect();
+    if vs_fields.is_empty() {
+        return;
+    }
+    let items = match store.get("FieldValueListItems") {
+        Some(i) => i,
+        None => return,
+    };
+    if let Some(obj) = record.as_object_mut() {
+        for (field_name, list_id, text_field) in vs_fields {
+            if let Some(code) = obj.get(field_name).and_then(|v| v.as_str()) {
+                let desc = items
+                    .iter()
+                    .find(|item| {
+                        item.get("ListID").and_then(|v| v.as_str()) == Some(list_id)
+                            && item.get("Code").and_then(|v| v.as_str()) == Some(code)
+                    })
+                    .and_then(|item| item.get("Description").and_then(|v| v.as_str()))
+                    .unwrap_or(code);
+                obj.insert(text_field.to_string(), Value::String(desc.to_string()));
+            }
+        }
+    }
+}
+
 /// Resolve the FK field name on the child that points back to the parent.
 /// Uses NavigationProperty.foreign_key if declared, otherwise falls back to parent key_field.
-fn resolve_child_fk<'a>(
+pub(crate) fn resolve_child_fk<'a>(
     parent_entity: &'a dyn ODataEntity,
     child_entity: &'a dyn ODataEntity,
 ) -> &'a str {
@@ -1139,8 +1235,7 @@ fn copy_children_as_drafts(
             .map(|recs| {
                 recs.iter()
                     .filter(|r| {
-                        r.get(child_fk).and_then(|v| v.as_str())
-                            == Some(parent_key_value)
+                        r.get(child_fk).and_then(|v| v.as_str()) == Some(parent_key_value)
                             && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(true)
                     })
                     .map(|r| {
@@ -1172,17 +1267,15 @@ fn activate_children(
             let draft_items: Vec<Value> = child_records
                 .iter()
                 .filter(|r| {
-                    r.get(child_fk).and_then(|v| v.as_str())
-                        == Some(parent_key_value)
+                    r.get(child_fk).and_then(|v| v.as_str()) == Some(parent_key_value)
                         && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(false)
                 })
                 .cloned()
                 .collect();
 
             // Remove all records for this parent (active + draft)
-            child_records.retain(|r| {
-                r.get(child_fk).and_then(|v| v.as_str()) != Some(parent_key_value)
-            });
+            child_records
+                .retain(|r| r.get(child_fk).and_then(|v| v.as_str()) != Some(parent_key_value));
 
             for mut item in draft_items {
                 set_draft_flags(&mut item, true, false, false);
@@ -1205,8 +1298,7 @@ fn remove_child_drafts(
         let child_fk = resolve_child_fk(parent_entity, *child);
         if let Some(child_recs) = store.get_mut(child.set_name()) {
             child_recs.retain(|r| {
-                !(r.get(child_fk).and_then(|v| v.as_str())
-                    == Some(parent_key_value)
+                !(r.get(child_fk).and_then(|v| v.as_str()) == Some(parent_key_value)
                     && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(false))
             });
         }
@@ -1359,13 +1451,11 @@ mod tests {
 
     #[test]
     fn odata_query_parse_expand_with_select() {
-        let q = ODataQuery::parse("$expand=DraftAdministrativeData($select=DraftUUID,InProcessByUser)");
+        let q =
+            ODataQuery::parse("$expand=DraftAdministrativeData($select=DraftUUID,InProcessByUser)");
         assert_eq!(q.expand.len(), 1);
         assert_eq!(q.expand[0].nav_property, "DraftAdministrativeData");
-        assert_eq!(
-            q.expand[0].select,
-            vec!["DraftUUID", "InProcessByUser"]
-        );
+        assert_eq!(q.expand[0].select, vec!["DraftUUID", "InProcessByUser"]);
     }
 
     #[test]
@@ -1466,9 +1556,15 @@ mod tests {
     struct TestProductEntity;
 
     impl ODataEntity for TestProductEntity {
-        fn set_name(&self) -> &'static str { "Products" }
-        fn key_field(&self) -> &'static str { "ProductID" }
-        fn type_name(&self) -> &'static str { "Product" }
+        fn set_name(&self) -> &'static str {
+            "Products"
+        }
+        fn key_field(&self) -> &'static str {
+            "ProductID"
+        }
+        fn type_name(&self) -> &'static str {
+            "Product"
+        }
         fn mock_data(&self) -> Vec<Value> {
             vec![
                 json!({"ProductID": "P001", "ProductName": "Laptop", "Price": "1299.99", "Status": "A"}),
@@ -1476,13 +1572,67 @@ mod tests {
                 json!({"ProductID": "P003", "ProductName": "Monitor", "Price": "499.99", "Status": "D"}),
             ]
         }
-        fn entity_set(&self) -> String { String::new() }
+        fn entity_set(&self) -> String {
+            String::new()
+        }
         fn fields_def(&self) -> Option<&'static [FieldDef]> {
             static FIELDS: &[FieldDef] = &[
-                FieldDef { name: "ProductID", label: "Product ID", edm_type: "Edm.String", max_length: Some(10), precision: None, scale: None, immutable: true, semantic_object: None, value_source: None , value_list: None, text_path: None},
-                FieldDef { name: "ProductName", label: "Name", edm_type: "Edm.String", max_length: Some(80), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-                FieldDef { name: "Price", label: "Price", edm_type: "Edm.Decimal", max_length: None, precision: Some(10), scale: Some(2), immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-                FieldDef { name: "Status", label: "Status", edm_type: "Edm.String", max_length: Some(1), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+                FieldDef {
+                    name: "ProductID",
+                    label: "Product ID",
+                    edm_type: "Edm.String",
+                    max_length: Some(10),
+                    precision: None,
+                    scale: None,
+                    immutable: true,
+                    computed: false,
+                    semantic_object: None,
+                    value_source: None,
+                    value_list: None,
+                    text_path: None,
+                },
+                FieldDef {
+                    name: "ProductName",
+                    label: "Name",
+                    edm_type: "Edm.String",
+                    max_length: Some(80),
+                    precision: None,
+                    scale: None,
+                    immutable: false,
+                    computed: false,
+                    semantic_object: None,
+                    value_source: None,
+                    value_list: None,
+                    text_path: None,
+                },
+                FieldDef {
+                    name: "Price",
+                    label: "Price",
+                    edm_type: "Edm.Decimal",
+                    max_length: None,
+                    precision: Some(10),
+                    scale: Some(2),
+                    immutable: false,
+                    computed: false,
+                    semantic_object: None,
+                    value_source: None,
+                    value_list: None,
+                    text_path: None,
+                },
+                FieldDef {
+                    name: "Status",
+                    label: "Status",
+                    edm_type: "Edm.String",
+                    max_length: Some(1),
+                    precision: None,
+                    scale: None,
+                    immutable: false,
+                    computed: false,
+                    semantic_object: None,
+                    value_source: None,
+                    value_list: None,
+                    text_path: None,
+                },
             ];
             Some(FIELDS)
         }
@@ -1492,25 +1642,39 @@ mod tests {
     struct TestOrderEntity;
 
     impl ODataEntity for TestOrderEntity {
-        fn set_name(&self) -> &'static str { "Orders" }
-        fn key_field(&self) -> &'static str { "OrderID" }
-        fn type_name(&self) -> &'static str { "Order" }
+        fn set_name(&self) -> &'static str {
+            "Orders"
+        }
+        fn key_field(&self) -> &'static str {
+            "OrderID"
+        }
+        fn type_name(&self) -> &'static str {
+            "Order"
+        }
         fn mock_data(&self) -> Vec<Value> {
             vec![
                 json!({"OrderID": "O001", "CustomerName": "Alice", "TotalAmount": "100.00"}),
                 json!({"OrderID": "O002", "CustomerName": "Bob", "TotalAmount": "200.00"}),
             ]
         }
-        fn entity_set(&self) -> String { String::new() }
+        fn entity_set(&self) -> String {
+            String::new()
+        }
     }
 
     #[derive(Debug)]
     struct TestOrderItemEntity;
 
     impl ODataEntity for TestOrderItemEntity {
-        fn set_name(&self) -> &'static str { "OrderItems" }
-        fn key_field(&self) -> &'static str { "ItemID" }
-        fn type_name(&self) -> &'static str { "OrderItem" }
+        fn set_name(&self) -> &'static str {
+            "OrderItems"
+        }
+        fn key_field(&self) -> &'static str {
+            "ItemID"
+        }
+        fn type_name(&self) -> &'static str {
+            "OrderItem"
+        }
         fn mock_data(&self) -> Vec<Value> {
             vec![
                 json!({"ItemID": "I001", "OrderID": "O001", "ProductID": "P001", "Quantity": 2}),
@@ -1518,18 +1682,19 @@ mod tests {
                 json!({"ItemID": "I003", "OrderID": "O002", "ProductID": "P001", "Quantity": 1}),
             ]
         }
-        fn entity_set(&self) -> String { String::new() }
-        fn parent_set_name(&self) -> Option<&'static str> { Some("Orders") }
+        fn entity_set(&self) -> String {
+            String::new()
+        }
+        fn parent_set_name(&self) -> Option<&'static str> {
+            Some("Orders")
+        }
     }
 
     fn create_test_store() -> InMemoryDataStore {
         // Use a temp dir that doesn't exist so it falls back to mock_data
         let data_dir = std::env::temp_dir().join("fiori-test-nonexistent");
-        let entities: Vec<&'static dyn ODataEntity> = vec![
-            &TestProductEntity,
-            &TestOrderEntity,
-            &TestOrderItemEntity,
-        ];
+        let entities: Vec<&'static dyn ODataEntity> =
+            vec![&TestProductEntity, &TestOrderEntity, &TestOrderItemEntity];
         InMemoryDataStore::new(data_dir, entities)
     }
 
@@ -1675,10 +1840,7 @@ mod tests {
         let result = store
             .create_entity("OrderItems", &data, Some(&parent))
             .unwrap();
-        assert_eq!(
-            result.get("OrderID").unwrap().as_str().unwrap(),
-            "O002"
-        );
+        assert_eq!(result.get("OrderID").unwrap().as_str().unwrap(), "O002");
         assert!(result.get("ItemID").is_some());
     }
 
@@ -1689,13 +1851,16 @@ mod tests {
         let key = EntityKey::single("ProductID", "P001");
         let edit_result = store.draft_edit("Products", &key).unwrap();
         assert_eq!(
-            edit_result.get("IsActiveEntity").unwrap().as_bool().unwrap(),
+            edit_result
+                .get("IsActiveEntity")
+                .unwrap()
+                .as_bool()
+                .unwrap(),
             false
         );
 
         // Patch the draft
-        let draft_key =
-            EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
+        let draft_key = EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
         let patch = json!({"ProductName": "Laptop Pro Max"});
         let result = store.patch_entity("Products", &draft_key, &patch).unwrap();
         assert_eq!(
@@ -1710,15 +1875,11 @@ mod tests {
         let key = EntityKey::single("ProductID", "P001");
         store.draft_edit("Products", &key).unwrap();
 
-        let draft_key =
-            EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
+        let draft_key = EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
         let patch = json!({"ProductID": "HACKED", "ProductName": "Changed"});
         let result = store.patch_entity("Products", &draft_key, &patch).unwrap();
         // ProductID is immutable, should not change
-        assert_eq!(
-            result.get("ProductID").unwrap().as_str().unwrap(),
-            "P001"
-        );
+        assert_eq!(result.get("ProductID").unwrap().as_str().unwrap(), "P001");
         assert_eq!(
             result.get("ProductName").unwrap().as_str().unwrap(),
             "Changed"
@@ -1741,13 +1902,11 @@ mod tests {
         let key = EntityKey::single("ProductID", "P001");
         store.draft_edit("Products", &key).unwrap();
 
-        let draft_key =
-            EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
+        let draft_key = EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
         store.delete_entity("Products", &draft_key).unwrap();
 
         // Draft should be gone, active should have HasDraftEntity=false
-        let active_key =
-            EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "true")]);
+        let active_key = EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "true")]);
         let q = ODataQuery::empty();
         let active = store.read_entity("Products", &active_key, &q).unwrap();
         assert_eq!(
@@ -1776,16 +1935,21 @@ mod tests {
         let key = EntityKey::single("ProductID", "P001");
         let draft = store.draft_edit("Products", &key).unwrap();
 
-        assert_eq!(draft.get("IsActiveEntity").unwrap().as_bool().unwrap(), false);
-        assert_eq!(draft.get("HasActiveEntity").unwrap().as_bool().unwrap(), true);
+        assert_eq!(
+            draft.get("IsActiveEntity").unwrap().as_bool().unwrap(),
+            false
+        );
+        assert_eq!(
+            draft.get("HasActiveEntity").unwrap().as_bool().unwrap(),
+            true
+        );
         assert_eq!(
             draft.get("ProductName").unwrap().as_str().unwrap(),
             "Laptop"
         );
 
         // Active entity should now have HasDraftEntity=true
-        let active_key =
-            EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "true")]);
+        let active_key = EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "true")]);
         let q = ODataQuery::empty();
         let active = store.read_entity("Products", &active_key, &q).unwrap();
         assert_eq!(
@@ -1807,12 +1971,16 @@ mod tests {
         let store = create_test_store();
         let key = EntityKey::single("ProductID", "P001");
 
+        let n = store.record_count("Products");
+        assert_eq!(n, 3); // ensure initial count
+
         // Edit → creates draft
         store.draft_edit("Products", &key).unwrap();
 
+        assert_eq!(n + 1, store.record_count("Products")); // draft added
+
         // Patch draft
-        let draft_key =
-            EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
+        let draft_key = EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
         let patch = json!({"ProductName": "Laptop Pro 16"});
         store.patch_entity("Products", &draft_key, &patch).unwrap();
 
@@ -1830,6 +1998,8 @@ mod tests {
             activated.get("HasDraftEntity").unwrap().as_bool().unwrap(),
             false
         );
+
+        assert_eq!(n, store.record_count("Products"));
 
         // Draft should be gone
         let q = ODataQuery::empty();
@@ -1863,8 +2033,7 @@ mod tests {
         let key = EntityKey::single("ProductID", "P001");
         store.draft_edit("Products", &key).unwrap();
 
-        let draft_key =
-            EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
+        let draft_key = EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
         let result = store.draft_prepare("Products", &draft_key).unwrap();
         assert_eq!(
             result.get("ProductName").unwrap().as_str().unwrap(),
@@ -1937,8 +2106,7 @@ mod tests {
         store.draft_edit("Orders", &key).unwrap();
 
         // Delete draft (discard)
-        let draft_key =
-            EntityKey::composite(&[("OrderID", "O001"), ("IsActiveEntity", "false")]);
+        let draft_key = EntityKey::composite(&[("OrderID", "O001"), ("IsActiveEntity", "false")]);
         store.delete_entity("Orders", &draft_key).unwrap();
 
         // Draft children should be gone
@@ -2009,8 +2177,7 @@ mod tests {
         // Patch a product
         let key = EntityKey::single("ProductID", "P001");
         store.draft_edit("Products", &key).unwrap();
-        let draft_key =
-            EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
+        let draft_key = EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
         store
             .patch_entity("Products", &draft_key, &json!({"ProductName": "Laptop V2"}))
             .unwrap();
@@ -2037,7 +2204,10 @@ mod tests {
             .iter()
             .find(|r| r.get("ProductID").unwrap().as_str() == Some("P001"))
             .unwrap();
-        assert_eq!(laptop.get("ProductName").unwrap().as_str().unwrap(), "Laptop V2");
+        assert_eq!(
+            laptop.get("ProductName").unwrap().as_str().unwrap(),
+            "Laptop V2"
+        );
 
         // Cleanup
         std::fs::remove_dir_all(&tmp_dir).ok();
@@ -2053,17 +2223,26 @@ mod tests {
         // 1. Read active entity
         let key = EntityKey::single("ProductID", "P001");
         let active = store.read_entity("Products", &key, &q).unwrap();
-        assert_eq!(active.get("ProductName").unwrap().as_str().unwrap(), "Laptop");
+        assert_eq!(
+            active.get("ProductName").unwrap().as_str().unwrap(),
+            "Laptop"
+        );
 
         // 2. Draft edit
         let draft = store.draft_edit("Products", &key).unwrap();
-        assert_eq!(draft.get("IsActiveEntity").unwrap().as_bool().unwrap(), false);
+        assert_eq!(
+            draft.get("IsActiveEntity").unwrap().as_bool().unwrap(),
+            false
+        );
 
         // 3. Patch draft
-        let draft_key =
-            EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
+        let draft_key = EntityKey::composite(&[("ProductID", "P001"), ("IsActiveEntity", "false")]);
         store
-            .patch_entity("Products", &draft_key, &json!({"ProductName": "Laptop 2026"}))
+            .patch_entity(
+                "Products",
+                &draft_key,
+                &json!({"ProductName": "Laptop 2026"}),
+            )
             .unwrap();
 
         // 4. Draft prepare
@@ -2106,8 +2285,7 @@ mod tests {
         store.draft_edit("Products", &key).unwrap();
 
         // 2. Patch draft
-        let draft_key =
-            EntityKey::composite(&[("ProductID", "P002"), ("IsActiveEntity", "false")]);
+        let draft_key = EntityKey::composite(&[("ProductID", "P002"), ("IsActiveEntity", "false")]);
         store
             .patch_entity("Products", &draft_key, &json!({"ProductName": "Changed"}))
             .unwrap();
@@ -2133,28 +2311,78 @@ mod tests {
     struct TestValueListEntity;
 
     impl ODataEntity for TestValueListEntity {
-        fn set_name(&self) -> &'static str { "FieldValueLists" }
-        fn key_field(&self) -> &'static str { "ID" }
-        fn type_name(&self) -> &'static str { "FieldValueList" }
+        fn set_name(&self) -> &'static str {
+            "FieldValueLists"
+        }
+        fn key_field(&self) -> &'static str {
+            "ID"
+        }
+        fn type_name(&self) -> &'static str {
+            "FieldValueList"
+        }
         fn mock_data(&self) -> Vec<Value> {
             vec![
                 json!({"ID": "VL-001", "ListName": "EdmTypes", "Description": "OData EDM Datentypen"}),
                 json!({"ID": "VL-002", "ListName": "StatusCodes", "Description": "Status"}),
             ]
         }
-        fn entity_set(&self) -> String { String::new() }
+        fn entity_set(&self) -> String {
+            String::new()
+        }
         fn fields_def(&self) -> Option<&'static [FieldDef]> {
             static FIELDS: &[FieldDef] = &[
-                FieldDef { name: "ID",          label: "ID",           edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None, value_list: None, text_path: None },
-                FieldDef { name: "ListName",    label: "Listenname",   edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
-                FieldDef { name: "Description", label: "Beschreibung", edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
+                FieldDef {
+                    name: "ID",
+                    label: "ID",
+                    edm_type: "Edm.Guid",
+                    max_length: None,
+                    precision: None,
+                    scale: None,
+                    immutable: true,
+                    computed: false,
+                    semantic_object: None,
+                    value_source: None,
+                    value_list: None,
+                    text_path: None,
+                },
+                FieldDef {
+                    name: "ListName",
+                    label: "Listenname",
+                    edm_type: "Edm.String",
+                    max_length: Some(40),
+                    precision: None,
+                    scale: None,
+                    immutable: false,
+                    computed: false,
+                    semantic_object: None,
+                    value_source: None,
+                    value_list: None,
+                    text_path: None,
+                },
+                FieldDef {
+                    name: "Description",
+                    label: "Beschreibung",
+                    edm_type: "Edm.String",
+                    max_length: Some(120),
+                    precision: None,
+                    scale: None,
+                    immutable: false,
+                    computed: false,
+                    semantic_object: None,
+                    value_source: None,
+                    value_list: None,
+                    text_path: None,
+                },
             ];
             Some(FIELDS)
         }
         fn navigation_properties(&self) -> &'static [NavigationPropertyDef] {
-            static NAV: &[NavigationPropertyDef] = &[
-                NavigationPropertyDef { name: "Items", target_type: "FieldValueListItem", is_collection: true, foreign_key: Some("ListID") },
-            ];
+            static NAV: &[NavigationPropertyDef] = &[NavigationPropertyDef {
+                name: "Items",
+                target_type: "FieldValueListItem",
+                is_collection: true,
+                foreign_key: Some("ListID"),
+            }];
             NAV
         }
     }
@@ -2163,9 +2391,15 @@ mod tests {
     struct TestValueListItemEntity;
 
     impl ODataEntity for TestValueListItemEntity {
-        fn set_name(&self) -> &'static str { "FieldValueListItems" }
-        fn key_field(&self) -> &'static str { "ID" }
-        fn type_name(&self) -> &'static str { "FieldValueListItem" }
+        fn set_name(&self) -> &'static str {
+            "FieldValueListItems"
+        }
+        fn key_field(&self) -> &'static str {
+            "ID"
+        }
+        fn type_name(&self) -> &'static str {
+            "FieldValueListItem"
+        }
         fn mock_data(&self) -> Vec<Value> {
             vec![
                 json!({"ID": "ITEM-001", "ListID": "VL-001", "Code": "Edm.String",  "Description": "Zeichenkette", "SortOrder": 0}),
@@ -2173,15 +2407,84 @@ mod tests {
                 json!({"ID": "ITEM-003", "ListID": "VL-002", "Code": "Active",      "Description": "Aktiv",        "SortOrder": 0}),
             ]
         }
-        fn entity_set(&self) -> String { String::new() }
-        fn parent_set_name(&self) -> Option<&'static str> { Some("FieldValueLists") }
+        fn entity_set(&self) -> String {
+            String::new()
+        }
+        fn parent_set_name(&self) -> Option<&'static str> {
+            Some("FieldValueLists")
+        }
         fn fields_def(&self) -> Option<&'static [FieldDef]> {
             static FIELDS: &[FieldDef] = &[
-                FieldDef { name: "ID",          label: "ID",           edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None, value_list: None, text_path: None },
-                FieldDef { name: "ListID",      label: "Listen-ID",    edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true,  semantic_object: None, value_source: None, value_list: None, text_path: None },
-                FieldDef { name: "Code",        label: "Code",         edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
-                FieldDef { name: "Description", label: "Beschreibung", edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
-                FieldDef { name: "SortOrder",   label: "Reihenfolge",  edm_type: "Edm.Int32",  max_length: None,      precision: None, scale: None, immutable: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
+                FieldDef {
+                    name: "ID",
+                    label: "ID",
+                    edm_type: "Edm.Guid",
+                    max_length: None,
+                    precision: None,
+                    scale: None,
+                    immutable: true,
+                    computed: false,
+                    semantic_object: None,
+                    value_source: None,
+                    value_list: None,
+                    text_path: None,
+                },
+                FieldDef {
+                    name: "ListID",
+                    label: "Listen-ID",
+                    edm_type: "Edm.Guid",
+                    max_length: None,
+                    precision: None,
+                    scale: None,
+                    immutable: true,
+                    computed: false,
+                    semantic_object: None,
+                    value_source: None,
+                    value_list: None,
+                    text_path: None,
+                },
+                FieldDef {
+                    name: "Code",
+                    label: "Code",
+                    edm_type: "Edm.String",
+                    max_length: Some(40),
+                    precision: None,
+                    scale: None,
+                    immutable: false,
+                    computed: false,
+                    semantic_object: None,
+                    value_source: None,
+                    value_list: None,
+                    text_path: None,
+                },
+                FieldDef {
+                    name: "Description",
+                    label: "Beschreibung",
+                    edm_type: "Edm.String",
+                    max_length: Some(120),
+                    precision: None,
+                    scale: None,
+                    immutable: false,
+                    computed: false,
+                    semantic_object: None,
+                    value_source: None,
+                    value_list: None,
+                    text_path: None,
+                },
+                FieldDef {
+                    name: "SortOrder",
+                    label: "Reihenfolge",
+                    edm_type: "Edm.Int32",
+                    max_length: None,
+                    precision: None,
+                    scale: None,
+                    immutable: false,
+                    computed: false,
+                    semantic_object: None,
+                    value_source: None,
+                    value_list: None,
+                    text_path: None,
+                },
             ];
             Some(FIELDS)
         }
@@ -2189,10 +2492,8 @@ mod tests {
 
     fn create_vl_store() -> InMemoryDataStore {
         let data_dir = std::env::temp_dir().join("fiori-test-vl-nonexistent");
-        let entities: Vec<&'static dyn ODataEntity> = vec![
-            &TestValueListEntity,
-            &TestValueListItemEntity,
-        ];
+        let entities: Vec<&'static dyn ODataEntity> =
+            vec![&TestValueListEntity, &TestValueListItemEntity];
         InMemoryDataStore::new(data_dir, entities)
     }
 
@@ -2204,7 +2505,9 @@ mod tests {
             EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "true")]),
         );
         let q = ODataQuery::empty();
-        let result = store.get_collection("FieldValueListItems", &q, Some(&parent)).unwrap();
+        let result = store
+            .get_collection("FieldValueListItems", &q, Some(&parent))
+            .unwrap();
         let values = result.get("value").unwrap().as_array().unwrap();
         assert_eq!(values.len(), 2); // ITEM-001 and ITEM-002 belong to VL-001
     }
@@ -2217,7 +2520,9 @@ mod tests {
             EntityKey::composite(&[("ID", "VL-002"), ("IsActiveEntity", "true")]),
         );
         let q = ODataQuery::empty();
-        let result = store.get_collection("FieldValueListItems", &q, Some(&parent)).unwrap();
+        let result = store
+            .get_collection("FieldValueListItems", &q, Some(&parent))
+            .unwrap();
         let values = result.get("value").unwrap().as_array().unwrap();
         assert_eq!(values.len(), 1); // ITEM-003 belongs to VL-002
     }
@@ -2234,7 +2539,9 @@ mod tests {
             EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "false")]),
         );
         let q = ODataQuery::empty();
-        let children = store.get_collection("FieldValueListItems", &q, Some(&parent_draft)).unwrap();
+        let children = store
+            .get_collection("FieldValueListItems", &q, Some(&parent_draft))
+            .unwrap();
         let values = children.get("value").unwrap().as_array().unwrap();
         assert_eq!(values.len(), 2);
         for v in values {
@@ -2255,14 +2562,23 @@ mod tests {
             EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "false")]),
         );
         let data = json!({"Code": "Edm.Boolean", "Description": "Wahrheitswert", "SortOrder": 2});
-        let created = store.create_entity("FieldValueListItems", &data, Some(&parent)).unwrap();
+        let created = store
+            .create_entity("FieldValueListItems", &data, Some(&parent))
+            .unwrap();
 
         // ListID should be set to the parent's key (VL-001)
         assert_eq!(created.get("ListID").unwrap().as_str().unwrap(), "VL-001");
         // ID should be auto-generated and NOT be the parent's key
         let item_id = created.get("ID").unwrap().as_str().unwrap();
-        assert_ne!(item_id, "VL-001", "Child ID must not be overwritten with parent key");
-        assert!(uuid::Uuid::parse_str(item_id).is_ok(), "Edm.Guid key should be a valid UUID, got: {}", item_id);
+        assert_ne!(
+            item_id, "VL-001",
+            "Child ID must not be overwritten with parent key"
+        );
+        assert!(
+            uuid::Uuid::parse_str(item_id).is_ok(),
+            "Edm.Guid key should be a valid UUID, got: {}",
+            item_id
+        );
     }
 
     #[test]
@@ -2276,11 +2592,15 @@ mod tests {
             EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "false")]),
         );
         let data = json!({"Code": "Edm.Date", "Description": "Datum", "SortOrder": 3});
-        store.create_entity("FieldValueListItems", &data, Some(&parent_draft)).unwrap();
+        store
+            .create_entity("FieldValueListItems", &data, Some(&parent_draft))
+            .unwrap();
 
         // Should now have 3 draft items (2 copied + 1 new)
         let q = ODataQuery::empty();
-        let children = store.get_collection("FieldValueListItems", &q, Some(&parent_draft)).unwrap();
+        let children = store
+            .get_collection("FieldValueListItems", &q, Some(&parent_draft))
+            .unwrap();
         let values = children.get("value").unwrap().as_array().unwrap();
         assert_eq!(values.len(), 3);
     }
@@ -2292,10 +2612,16 @@ mod tests {
         store.draft_edit("FieldValueLists", &key).unwrap();
 
         // Patch the first draft child
-        let draft_item_key = EntityKey::composite(&[("ID", "ITEM-001"), ("IsActiveEntity", "false")]);
+        let draft_item_key =
+            EntityKey::composite(&[("ID", "ITEM-001"), ("IsActiveEntity", "false")]);
         let patch = json!({"Description": "Zeichenkette (aktualisiert)"});
-        let result = store.patch_entity("FieldValueListItems", &draft_item_key, &patch).unwrap();
-        assert_eq!(result.get("Description").unwrap().as_str().unwrap(), "Zeichenkette (aktualisiert)");
+        let result = store
+            .patch_entity("FieldValueListItems", &draft_item_key, &patch)
+            .unwrap();
+        assert_eq!(
+            result.get("Description").unwrap().as_str().unwrap(),
+            "Zeichenkette (aktualisiert)"
+        );
         // ListID should remain unchanged
         assert_eq!(result.get("ListID").unwrap().as_str().unwrap(), "VL-001");
     }
@@ -2315,18 +2641,25 @@ mod tests {
             EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "false")]),
         );
         let data = json!({"Code": "Edm.Guid", "Description": "GUID", "SortOrder": 9});
-        store.create_entity("FieldValueListItems", &data, Some(&parent_draft)).unwrap();
+        store
+            .create_entity("FieldValueListItems", &data, Some(&parent_draft))
+            .unwrap();
 
         // 3. Activate parent
         let activated = store.draft_activate("FieldValueLists", &key).unwrap();
-        assert_eq!(activated.get("IsActiveEntity").unwrap().as_bool().unwrap(), true);
+        assert_eq!(
+            activated.get("IsActiveEntity").unwrap().as_bool().unwrap(),
+            true
+        );
 
         // 4. Active children should include the new item
         let parent_active = ParentKey::new(
             "FieldValueLists",
             EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "true")]),
         );
-        let children = store.get_collection("FieldValueListItems", &q, Some(&parent_active)).unwrap();
+        let children = store
+            .get_collection("FieldValueListItems", &q, Some(&parent_active))
+            .unwrap();
         let values = children.get("value").unwrap().as_array().unwrap();
         assert_eq!(values.len(), 3); // 2 original + 1 new
         for v in values {
@@ -2335,7 +2668,9 @@ mod tests {
         }
 
         // 5. No draft children remain
-        let children_draft = store.get_collection("FieldValueListItems", &q, Some(&parent_draft)).unwrap();
+        let children_draft = store
+            .get_collection("FieldValueListItems", &q, Some(&parent_draft))
+            .unwrap();
         let draft_values = children_draft.get("value").unwrap().as_array().unwrap();
         assert_eq!(draft_values.len(), 0);
     }
@@ -2348,14 +2683,27 @@ mod tests {
 
         // Edit, patch child, activate
         store.draft_edit("FieldValueLists", &key).unwrap();
-        let draft_item_key = EntityKey::composite(&[("ID", "ITEM-001"), ("IsActiveEntity", "false")]);
-        store.patch_entity("FieldValueListItems", &draft_item_key, &json!({"Description": "String (updated)"})).unwrap();
+        let draft_item_key =
+            EntityKey::composite(&[("ID", "ITEM-001"), ("IsActiveEntity", "false")]);
+        store
+            .patch_entity(
+                "FieldValueListItems",
+                &draft_item_key,
+                &json!({"Description": "String (updated)"}),
+            )
+            .unwrap();
         store.draft_activate("FieldValueLists", &key).unwrap();
 
         // Read active child
-        let active_item_key = EntityKey::composite(&[("ID", "ITEM-001"), ("IsActiveEntity", "true")]);
-        let item = store.read_entity("FieldValueListItems", &active_item_key, &q).unwrap();
-        assert_eq!(item.get("Description").unwrap().as_str().unwrap(), "String (updated)");
+        let active_item_key =
+            EntityKey::composite(&[("ID", "ITEM-001"), ("IsActiveEntity", "true")]);
+        let item = store
+            .read_entity("FieldValueListItems", &active_item_key, &q)
+            .unwrap();
+        assert_eq!(
+            item.get("Description").unwrap().as_str().unwrap(),
+            "String (updated)"
+        );
     }
 
     #[test]
@@ -2370,18 +2718,22 @@ mod tests {
             "FieldValueLists",
             EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "false")]),
         );
-        store.create_entity(
-            "FieldValueListItems",
-            &json!({"Code": "Edm.Byte", "Description": "Byte", "SortOrder": 10}),
-            Some(&parent_draft),
-        ).unwrap();
+        store
+            .create_entity(
+                "FieldValueListItems",
+                &json!({"Code": "Edm.Byte", "Description": "Byte", "SortOrder": 10}),
+                Some(&parent_draft),
+            )
+            .unwrap();
 
         // Discard draft
         let draft_key = EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "false")]);
         store.delete_entity("FieldValueLists", &draft_key).unwrap();
 
         // Draft children gone
-        let children = store.get_collection("FieldValueListItems", &q, Some(&parent_draft)).unwrap();
+        let children = store
+            .get_collection("FieldValueListItems", &q, Some(&parent_draft))
+            .unwrap();
         assert_eq!(children.get("value").unwrap().as_array().unwrap().len(), 0);
 
         // Active children unchanged
@@ -2389,7 +2741,9 @@ mod tests {
             "FieldValueLists",
             EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "true")]),
         );
-        let active = store.get_collection("FieldValueListItems", &q, Some(&parent_active)).unwrap();
+        let active = store
+            .get_collection("FieldValueListItems", &q, Some(&parent_active))
+            .unwrap();
         assert_eq!(active.get("value").unwrap().as_array().unwrap().len(), 2);
     }
 
@@ -2407,7 +2761,9 @@ mod tests {
             "FieldValueLists",
             EntityKey::composite(&[("ID", "VL-002"), ("IsActiveEntity", "true")]),
         );
-        let children = store.get_collection("FieldValueListItems", &q, Some(&parent_vl2)).unwrap();
+        let children = store
+            .get_collection("FieldValueListItems", &q, Some(&parent_vl2))
+            .unwrap();
         let values = children.get("value").unwrap().as_array().unwrap();
         assert_eq!(values.len(), 1);
         assert_eq!(values[0].get("Code").unwrap().as_str().unwrap(), "Active");
@@ -2420,38 +2776,82 @@ mod tests {
 
         // 1. Create a brand new FieldValueList
         let list_data = json!({"ListName": "Priorities", "Description": "Prioritaeten"});
-        let created = store.create_entity("FieldValueLists", &list_data, None).unwrap();
+        let created = store
+            .create_entity("FieldValueLists", &list_data, None)
+            .unwrap();
         let new_list_id = created.get("ID").unwrap().as_str().unwrap().to_string();
-        assert_eq!(created.get("IsActiveEntity").unwrap().as_bool().unwrap(), false);
+        assert_eq!(
+            created.get("IsActiveEntity").unwrap().as_bool().unwrap(),
+            false
+        );
 
         // 2. Add items to it
         let parent = ParentKey::new(
             "FieldValueLists",
             EntityKey::composite(&[("ID", &new_list_id), ("IsActiveEntity", "false")]),
         );
-        store.create_entity("FieldValueListItems", &json!({"Code": "HIGH", "Description": "Hoch", "SortOrder": 0}), Some(&parent)).unwrap();
-        store.create_entity("FieldValueListItems", &json!({"Code": "MED",  "Description": "Mittel", "SortOrder": 1}), Some(&parent)).unwrap();
-        store.create_entity("FieldValueListItems", &json!({"Code": "LOW",  "Description": "Niedrig", "SortOrder": 2}), Some(&parent)).unwrap();
+        store
+            .create_entity(
+                "FieldValueListItems",
+                &json!({"Code": "HIGH", "Description": "Hoch", "SortOrder": 0}),
+                Some(&parent),
+            )
+            .unwrap();
+        store
+            .create_entity(
+                "FieldValueListItems",
+                &json!({"Code": "MED",  "Description": "Mittel", "SortOrder": 1}),
+                Some(&parent),
+            )
+            .unwrap();
+        store
+            .create_entity(
+                "FieldValueListItems",
+                &json!({"Code": "LOW",  "Description": "Niedrig", "SortOrder": 2}),
+                Some(&parent),
+            )
+            .unwrap();
 
         // 3. Verify draft items
-        let draft_children = store.get_collection("FieldValueListItems", &q, Some(&parent)).unwrap();
-        assert_eq!(draft_children.get("value").unwrap().as_array().unwrap().len(), 3);
+        let draft_children = store
+            .get_collection("FieldValueListItems", &q, Some(&parent))
+            .unwrap();
+        assert_eq!(
+            draft_children
+                .get("value")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            3
+        );
 
         // 4. Activate the list
         let new_key = EntityKey::single("ID", &new_list_id);
         let activated = store.draft_activate("FieldValueLists", &new_key).unwrap();
-        assert_eq!(activated.get("IsActiveEntity").unwrap().as_bool().unwrap(), true);
-        assert_eq!(activated.get("ListName").unwrap().as_str().unwrap(), "Priorities");
+        assert_eq!(
+            activated.get("IsActiveEntity").unwrap().as_bool().unwrap(),
+            true
+        );
+        assert_eq!(
+            activated.get("ListName").unwrap().as_str().unwrap(),
+            "Priorities"
+        );
 
         // 5. Active children should all be there
         let parent_active = ParentKey::new(
             "FieldValueLists",
             EntityKey::composite(&[("ID", &new_list_id), ("IsActiveEntity", "true")]),
         );
-        let active_children = store.get_collection("FieldValueListItems", &q, Some(&parent_active)).unwrap();
+        let active_children = store
+            .get_collection("FieldValueListItems", &q, Some(&parent_active))
+            .unwrap();
         let items = active_children.get("value").unwrap().as_array().unwrap();
         assert_eq!(items.len(), 3);
-        let codes: Vec<&str> = items.iter().map(|v| v.get("Code").unwrap().as_str().unwrap()).collect();
+        let codes: Vec<&str> = items
+            .iter()
+            .map(|v| v.get("Code").unwrap().as_str().unwrap())
+            .collect();
         assert!(codes.contains(&"HIGH"));
         assert!(codes.contains(&"MED"));
         assert!(codes.contains(&"LOW"));

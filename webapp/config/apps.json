@@ -1,18 +1,4 @@
 {
   "applications": {
-    "Products-display": {
-      "title": "Produkte",
-      "description": "Produktübersicht",
-      "semanticObject": "Products",
-      "action": "display",
-      "icon": "sap-icon://product"
-    },
-    "Orders-display": {
-      "title": "Bestellungen",
-      "description": "Bestellübersicht",
-      "semanticObject": "Orders",
-      "action": "display",
-      "icon": "sap-icon://sales-order"
-    }
   }
 }
