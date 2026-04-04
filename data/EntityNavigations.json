@@ -20,14 +20,14 @@
     "TargetType": "Product"
   },
   {
-    "ForeignKey": "OrderID",
-    "IsCollection": true,
-    "NavID": "Orders_Items",
-    "NavName": "Items",
-    "SetName": "Orders",
+    "ForeignKey": "CustomerID",
+    "IsCollection": false,
+    "NavID": "Contacts_Customer",
+    "NavName": "Customer",
+    "SetName": "Contacts",
     "SortOrder": 0,
-    "TargetSet": "OrderItems",
-    "TargetType": "OrderItem"
+    "TargetSet": "Customers",
+    "TargetType": "Customer"
   },
   {
     "ForeignKey": "OrderID",
@@ -42,10 +42,10 @@
   {
     "ForeignKey": "CustomerID",
     "IsCollection": false,
-    "NavID": "Contacts_Customer",
+    "NavID": "Orders_Customer",
     "NavName": "Customer",
-    "SetName": "Contacts",
-    "SortOrder": 0,
+    "SetName": "Orders",
+    "SortOrder": 10,
     "TargetSet": "Customers",
     "TargetType": "Customer"
   }

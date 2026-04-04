@@ -341,7 +341,7 @@ impl fmt::Debug for GenericEntity {
 }
 
 impl GenericEntity {
-    pub fn from_config(config: EntityConfig) -> Self {
+    pub fn from_config(config: EntityConfig, title_paths: &HashMap<String, String>, key_fields: &HashMap<String, String>) -> Self {
         let set_name = leak_str(&config.set_name);
         let type_name = leak_str(&config.type_name);
 
@@ -365,9 +365,32 @@ impl GenericEntity {
         );
         xml.push_str("\n</EntitySet>");
 
+        // Auto-derive text_path for FK fields with 1:1 navigation properties.
+        // For each 1:1 nav, if the FK field has no explicit text_path and no value_source,
+        // set text_path = "{nav_name}/{target_title_path}".
+        let mut field_configs = config.fields;
+        for nav in &config.navigation_properties {
+            if nav.is_collection {
+                continue;
+            }
+            let fk = match &nav.foreign_key {
+                Some(fk) => fk.clone(),
+                None => continue,
+            };
+            let target_title = match title_paths.get(&nav.target_set) {
+                Some(tp) => tp.clone(),
+                None => continue,
+            };
+            if let Some(field) = field_configs.iter_mut().find(|f| f.name == fk) {
+                if field.text_path.is_none() && field.value_source.is_none() {
+                    field.text_path = Some(format!("{}/{}", nav.name, target_title));
+                }
+            }
+        }
+
         // Convention: key_field == "ID" → Edm.Guid, auto-generated, hidden in UI.
         // Ensure the ID field exists at position 0 with the correct type.
-        let mut fields: Vec<FieldDef> = config.fields.iter().map(convert_field).collect();
+        let mut fields: Vec<FieldDef> = field_configs.iter().map(convert_field).collect();
         if config.key_field == "ID" {
             if let Some(pos) = fields.iter().position(|f| f.name == "ID") {
                 fields[pos].edm_type = "Edm.Guid";
@@ -392,6 +415,36 @@ impl GenericEntity {
                         text_path: None,
                     },
                 );
+            }
+        }
+
+        // Auto-derive ValueList for FK fields with 1:1 navigation properties.
+        // This enables a selection dialog when editing the FK field.
+        for nav in &config.navigation_properties {
+            if nav.is_collection {
+                continue;
+            }
+            let fk = match &nav.foreign_key {
+                Some(fk) => fk.as_str(),
+                None => continue,
+            };
+            let target_title = match title_paths.get(&nav.target_set) {
+                Some(tp) => tp.as_str(),
+                None => continue,
+            };
+            let target_key = match key_fields.get(&nav.target_set) {
+                Some(k) => k.as_str(),
+                None => continue,
+            };
+            if let Some(field) = fields.iter_mut().find(|f| f.name == fk) {
+                if field.value_list.is_none() && field.value_source.is_none() {
+                    field.value_list = Some(Box::leak(Box::new(ValueListDef {
+                        collection_path: leak_str(&nav.target_set),
+                        key_property: leak_str(target_key),
+                        display_property: Some(leak_str(target_title)),
+                        fixed_values: false,
+                    })));
+                }
             }
         }
 
@@ -704,10 +757,24 @@ impl ODataEntity for GenericEntity {
 
 /// Wandelt rohe EntityConfigs in registrierbare ODataEntity-Instanzen um.
 pub fn create_generic_entities(configs: Vec<EntityConfig>) -> Vec<&'static dyn ODataEntity> {
+    // Build lookups for auto-deriving text_path and value_list on FK fields.
+    let title_paths: HashMap<String, String> = configs
+        .iter()
+        .filter_map(|c| {
+            c.annotations.as_ref().map(|a| {
+                (c.set_name.clone(), a.header_info.title_path.clone())
+            })
+        })
+        .collect();
+    let key_fields: HashMap<String, String> = configs
+        .iter()
+        .map(|c| (c.set_name.clone(), c.key_field.clone()))
+        .collect();
+
     configs
         .into_iter()
         .map(|config| {
-            let entity = GenericEntity::from_config(config);
+            let entity = GenericEntity::from_config(config, &title_paths, &key_fields);
             let leaked: &'static GenericEntity = Box::leak(Box::new(entity));
             leaked as &'static dyn ODataEntity
         })
@@ -718,6 +785,10 @@ pub fn create_generic_entities(configs: Vec<EntityConfig>) -> Vec<&'static dyn O
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn no_titles() -> HashMap<String, String> {
+        HashMap::new()
+    }
 
     // ── Helper: minimal EntityConfig ────────────────────────────
 
@@ -1100,7 +1171,7 @@ mod tests {
 
     #[test]
     fn generic_entity_basic_properties() {
-        let entity = GenericEntity::from_config(minimal_config());
+        let entity = GenericEntity::from_config(minimal_config(), &no_titles(), &no_titles());
         assert_eq!(entity.set_name(), "TestItems");
         assert_eq!(entity.key_field(), "ItemID");
         assert_eq!(entity.type_name(), "TestItem");
@@ -1110,7 +1181,7 @@ mod tests {
 
     #[test]
     fn generic_entity_fields_def() {
-        let entity = GenericEntity::from_config(minimal_config());
+        let entity = GenericEntity::from_config(minimal_config(), &no_titles(), &no_titles());
         let fields = entity.fields_def().unwrap();
         assert_eq!(fields.len(), 2);
         assert_eq!(fields[0].name, "ItemID");
@@ -1123,7 +1194,7 @@ mod tests {
 
     #[test]
     fn generic_entity_annotations() {
-        let entity = GenericEntity::from_config(full_config());
+        let entity = GenericEntity::from_config(full_config(), &no_titles(), &no_titles());
         let ann = entity.annotations_def().unwrap();
         assert_eq!(ann.selection_fields, &["Status"]);
         assert_eq!(ann.line_item.len(), 2);
@@ -1139,7 +1210,7 @@ mod tests {
 
     #[test]
     fn generic_entity_navigation_properties() {
-        let entity = GenericEntity::from_config(full_config());
+        let entity = GenericEntity::from_config(full_config(), &no_titles(), &no_titles());
         let navs = entity.navigation_properties();
         assert_eq!(navs.len(), 1);
         assert_eq!(navs[0].name, "Items");
@@ -1149,13 +1220,13 @@ mod tests {
 
     #[test]
     fn generic_entity_parent_set_name() {
-        let entity = GenericEntity::from_config(child_config());
+        let entity = GenericEntity::from_config(child_config(), &no_titles(), &no_titles());
         assert_eq!(entity.parent_set_name(), Some("Orders"));
     }
 
     #[test]
     fn generic_entity_entity_set_xml() {
-        let entity = GenericEntity::from_config(full_config());
+        let entity = GenericEntity::from_config(full_config(), &no_titles(), &no_titles());
         let xml = entity.entity_set();
         assert!(xml.contains("EntitySet Name=\"Orders\""));
         assert!(xml.contains("EntityType=\"ProductsService.Order\""));
@@ -1166,7 +1237,7 @@ mod tests {
 
     #[test]
     fn generic_entity_entity_set_xml_no_nav() {
-        let entity = GenericEntity::from_config(minimal_config());
+        let entity = GenericEntity::from_config(minimal_config(), &no_titles(), &no_titles());
         let xml = entity.entity_set();
         assert!(xml.contains("EntitySet Name=\"TestItems\""));
         // Only SiblingEntity + DraftAdministrativeData bindings
@@ -1176,7 +1247,7 @@ mod tests {
 
     #[test]
     fn generic_entity_apps_json_with_tile() {
-        let entity = GenericEntity::from_config(full_config());
+        let entity = GenericEntity::from_config(full_config(), &no_titles(), &no_titles());
         let (key, entry) = entity.apps_json_entry().unwrap();
         assert_eq!(key, "Orders-display");
         assert_eq!(entry["title"], "Auftraege");
@@ -1188,14 +1259,14 @@ mod tests {
 
     #[test]
     fn generic_entity_apps_json_without_tile() {
-        let entity = GenericEntity::from_config(minimal_config());
+        let entity = GenericEntity::from_config(minimal_config(), &no_titles(), &no_titles());
         assert!(entity.apps_json_entry().is_none());
     }
 
     #[test]
     fn generic_entity_expand_1n() {
-        let order_entity = GenericEntity::from_config(full_config());
-        let child_entity = GenericEntity::from_config(child_config());
+        let order_entity = GenericEntity::from_config(full_config(), &no_titles(), &no_titles());
+        let child_entity = GenericEntity::from_config(child_config(), &no_titles(), &no_titles());
         let entities: Vec<&dyn ODataEntity> = vec![
             &order_entity as &dyn ODataEntity,
             &child_entity as &dyn ODataEntity,
@@ -1292,8 +1363,8 @@ mod tests {
             value_lists: vec![],
         };
 
-        let contact_entity = GenericEntity::from_config(contact_config);
-        let customer_entity = GenericEntity::from_config(customer_config);
+        let contact_entity = GenericEntity::from_config(contact_config, &no_titles(), &no_titles());
+        let customer_entity = GenericEntity::from_config(customer_config, &no_titles(), &no_titles());
         let entities: Vec<&dyn ODataEntity> = vec![
             &contact_entity as &dyn ODataEntity,
             &customer_entity as &dyn ODataEntity,
@@ -1317,7 +1388,7 @@ mod tests {
 
     #[test]
     fn generic_entity_expand_unknown_nav_ignored() {
-        let entity = GenericEntity::from_config(full_config());
+        let entity = GenericEntity::from_config(full_config(), &no_titles(), &no_titles());
         let entities: Vec<&dyn ODataEntity> = vec![&entity as &dyn ODataEntity];
         let store: HashMap<String, Vec<Value>> = HashMap::new();
 
@@ -1329,7 +1400,7 @@ mod tests {
 
     #[test]
     fn generic_entity_debug_impl() {
-        let entity = GenericEntity::from_config(minimal_config());
+        let entity = GenericEntity::from_config(minimal_config(), &no_titles(), &no_titles());
         let dbg = format!("{:?}", entity);
         assert!(dbg.contains("TestItems"));
         assert!(dbg.contains("TestItem"));

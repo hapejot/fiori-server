@@ -123,6 +123,14 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 - `activate_config()` rebuilds generic entities at runtime after metadata changes (triggered by `publishConfig`)
 - Builtin sets (Products, Orders, etc.) are never replaced during rebuild
 
+### FK Auto-Derivation (Generic Entities)
+- For 1:1 navigation properties, `from_config()` auto-derives `text_path` and `value_list` on the FK field
+- Convention: FK field `CustomerID` with nav `Customer → Customers` (title_path `CustomerName`) → auto-sets `text_path = "Customer/CustomerName"` and `value_list` pointing to `Customers`
+- `create_generic_entities()` builds `title_paths` and `key_fields` lookup maps from all configs
+- Auto-derivation only applies when `text_path` is `None` and `value_source` is `None` — explicit overrides take priority
+- Effect: Fiori shows the customer name instead of the ID in display mode, and provides a selection dialog in edit mode
+- `TextPath` field in EntityFields UI remains available as an explicit override for edge cases
+
 ### Value Text Resolution (Generic Entities)
 - Fields with `value_source` (FieldValueList UUID) auto-generate a hidden computed `_text` field
 - Convention: field `Status` with value_source → auto-generates `_Status_text` (computed, hidden)

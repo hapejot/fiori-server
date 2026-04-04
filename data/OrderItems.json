@@ -8,5 +8,15 @@
     "ProductID": "",
     "Quantity": 1,
     "UnitPrice": "0"
+  },
+  {
+    "Currency": "EUR",
+    "ID": "9423ceec-85c5-4a47-be51-7721dc06181d",
+    "ItemText": "what?",
+    "NetAmount": "0",
+    "OrderID": "49d3a978-a74c-4c09-a75e-1390130a60f6",
+    "ProductID": "",
+    "Quantity": 1,
+    "UnitPrice": "0"
   }
 ]

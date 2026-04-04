@@ -60,46 +60,6 @@
     "SortOrder": 0
   },
   {
-    "FacetID": "Orders_OrderDetails",
-    "FieldGroupFields": "CustomerName,Quantity,TotalAmount,Currency,Status",
-    "FieldGroupLabel": "Informationen",
-    "FieldGroupQualifier": "OrderInfo",
-    "SectionId": "OrderDetails",
-    "SectionLabel": "Bestelldetails",
-    "SetName": "Orders",
-    "SortOrder": 0
-  },
-  {
-    "FacetID": "Orders_Delivery",
-    "FieldGroupFields": "OrderDate,DeliveryDate,Note",
-    "FieldGroupLabel": "Lieferdetails",
-    "FieldGroupQualifier": "Delivery",
-    "SectionId": "Delivery",
-    "SectionLabel": "Lieferung",
-    "SetName": "Orders",
-    "SortOrder": 1
-  },
-  {
-    "FacetID": "Orders_OrderDetails",
-    "FieldGroupFields": "CustomerName,Quantity,TotalAmount,Currency,Status",
-    "FieldGroupLabel": "Informationen",
-    "FieldGroupQualifier": "OrderInfo",
-    "SectionId": "OrderDetails",
-    "SectionLabel": "Bestelldetails",
-    "SetName": "Orders",
-    "SortOrder": 0
-  },
-  {
-    "FacetID": "Orders_Delivery",
-    "FieldGroupFields": "OrderDate,DeliveryDate,Note",
-    "FieldGroupLabel": "Lieferdetails",
-    "FieldGroupQualifier": "Delivery",
-    "SectionId": "Delivery",
-    "SectionLabel": "Lieferung",
-    "SetName": "Orders",
-    "SortOrder": 1
-  },
-  {
     "FacetID": "Contacts_PersonalInfo",
     "FieldGroupFields": "ContactID,FirstName,LastName,Email,Phone",
     "FieldGroupLabel": "Person",
@@ -117,6 +77,26 @@
     "SectionId": "CompanyInfo",
     "SectionLabel": "Unternehmen",
     "SetName": "Contacts",
+    "SortOrder": 1
+  },
+  {
+    "FacetID": "Orders_OrderDetails",
+    "FieldGroupFields": "CustomerID,Quantity,TotalAmount,Currency,Status",
+    "FieldGroupLabel": "Informationen",
+    "FieldGroupQualifier": "OrderInfo",
+    "SectionId": "OrderDetails",
+    "SectionLabel": "Bestelldetails",
+    "SetName": "Orders",
+    "SortOrder": 0
+  },
+  {
+    "FacetID": "Orders_Delivery",
+    "FieldGroupFields": "OrderDate,DeliveryDate,Note",
+    "FieldGroupLabel": "Lieferdetails",
+    "FieldGroupQualifier": "Delivery",
+    "SectionId": "Delivery",
+    "SectionLabel": "Lieferung",
+    "SetName": "Orders",
     "SortOrder": 1
   }
 ]

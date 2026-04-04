@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "Currency": "EUR",
+    "CustomerID": "C002",
+    "DeliveryDate": "",
+    "ID": "49d3a978-a74c-4c09-a75e-1390130a60f6",
+    "Note": "",
+    "OrderDate": "2026-04-02T00:14:59+02:00",
+    "Quantity": 0,
+    "Status": "P",
+    "StatusCriticality": 2,
+    "TotalAmount": "0"
+  }
+]
