@@ -128,6 +128,67 @@ pub fn build_manifest_json_with_default(
     let app_id = format!("{}.app", default_entity.set_name().to_lowercase());
     let app_title = default_entity.tile_title();
 
+    build_manifest_value(&app_id, &app_title, routes, targets, inbounds, settings)
+}
+
+/// Baut ein manifest.json fuer eine einzelne Entitaet (CDM-Modus).
+/// Nur Routen/Targets/Inbounds der Entitaet und ihrer Kompositions-Kinder
+/// werden aufgenommen — so erkennt die UShell Cross-App-Navigation korrekt.
+pub fn build_entity_manifest(
+    entities: &[&dyn ODataEntity],
+    settings: &Settings,
+    entity_idx: usize,
+) -> Value {
+    let target_entity = entities[entity_idx];
+    let target_set = target_entity.set_name();
+    let app_id = format!("{}.app", target_set.to_lowercase());
+    let app_title = target_entity.tile_title();
+
+    let mut routes = Vec::new();
+    let mut targets = serde_json::Map::new();
+    let mut inbounds = serde_json::Map::new();
+
+    for (idx, entity) in entities.iter().enumerate() {
+        // Only include the target entity itself and its composition children.
+        let dominated_by_target = entity.parent_set_name() == Some(target_set);
+        if idx != entity_idx && !dominated_by_target {
+            continue;
+        }
+
+        let entity_routes = entity.manifest_routes();
+        if idx == entity_idx {
+            // Default route for the main entity
+            if let Some(first_route) = entity_routes.first() {
+                if let Some(target) = first_route.get("target") {
+                    routes.push(json!({
+                        "pattern": ":?query:",
+                        "name": "default",
+                        "target": target
+                    }));
+                }
+            }
+        }
+        routes.extend(entity_routes);
+        for (key, val) in entity.manifest_targets() {
+            targets.insert(key, val);
+        }
+        let (inbound_key, inbound_val) = entity.manifest_inbound();
+        if !inbound_val.is_null() {
+            inbounds.insert(inbound_key, inbound_val);
+        }
+    }
+
+    build_manifest_value(&app_id, &app_title, routes, targets, inbounds, settings)
+}
+
+fn build_manifest_value(
+    app_id: &str,
+    app_title: &str,
+    routes: Vec<Value>,
+    targets: serde_json::Map<String, Value>,
+    inbounds: serde_json::Map<String, Value>,
+    settings: &Settings,
+) -> Value {
     json!({
         "_version": "1.65.0",
         "sap.app": {
@@ -194,9 +255,172 @@ pub fn build_manifest_json_with_default(
     })
 }
 
+/// Baut das CDM 3.1 Site-Dokument aus allen registrierten Entitaeten.
+/// Wird von der UShell im CDM-Modus ueber /cdm/site.json geladen.
+pub fn build_cdm_site_json(entities: &[&dyn ODataEntity]) -> Value {
+    let mut applications = serde_json::Map::new();
+    let mut visualizations = serde_json::Map::new();
+    let mut viz_refs = serde_json::Map::new();
+    let mut viz_order = Vec::new();
+
+    for entity in entities {
+        let entry = match entity.apps_json_entry() {
+            Some((_, v)) => v,
+            None => continue,
+        };
+
+        let set_name = entity.set_name();
+        let title = entry.get("title").and_then(|v| v.as_str()).unwrap_or(set_name);
+        let description = entry.get("description").and_then(|v| v.as_str()).unwrap_or("");
+        let icon = entry.get("icon").and_then(|v| v.as_str()).unwrap_or("sap-icon://sys-help");
+        let semantic_object = entry.get("semanticObject").and_then(|v| v.as_str()).unwrap_or(set_name);
+        let action = entry.get("action").and_then(|v| v.as_str()).unwrap_or("display");
+
+        let app_key = format!("{}-{}", semantic_object, action);
+        let app_id = format!("{}.app", set_name.to_lowercase());
+        let viz_key = format!("{}-viz", app_key);
+
+        // Application entry (CDM format)
+        // The CDM applications map key MUST equal sap.app.id — CSTR resolves
+        // appId from sap.app.id, and the sap-ui-app-id-hint on the navigation
+        // hash must match this key for readApplications.getInboundTarget() to
+        // find the application.
+        let (inbound_key, inbound_val) = entity.manifest_inbound();
+        let mut inbounds = serde_json::Map::new();
+        inbounds.insert(inbound_key.clone(), inbound_val);
+
+        applications.insert(app_id.clone(), json!({
+            "sap.app": {
+                "id": app_id,
+                "title": title,
+                "subTitle": description,
+                "crossNavigation": {
+                    "inbounds": inbounds
+                }
+            },
+            "sap.ui5": {
+                "componentName": app_id
+            },
+            "sap.platform.runtime": {
+                "componentProperties": {
+                    "url": format!("./apps/{}/", set_name)
+                }
+            },
+            "sap.flp": {
+                "type": "application"
+            },
+            "sap.ui": {
+                "technology": "UI5",
+                "deviceTypes": {
+                    "desktop": true,
+                    "tablet": true,
+                    "phone": true
+                }
+            }
+        }));
+
+        // Visualization entry
+        visualizations.insert(viz_key.clone(), json!({
+            "vizType": "sap.ushell.StaticAppLauncher",
+            "businessApp": app_id,
+            "target": {
+                "semanticObject": semantic_object,
+                "action": action
+            },
+            "vizConfig": {
+                "sap.flp": {
+                    "target": {
+                        "appId": app_id,
+                        "inboundId": inbound_key
+                    }
+                },
+                "sap.app": {
+                    "title": title,
+                    "subTitle": description,
+                    "icon": icon,
+                    "info": ""
+                }
+            }
+        }));
+
+        // Viz reference for the home page section
+        viz_refs.insert(viz_key.clone(), json!({
+            "id": viz_key,
+            "vizId": viz_key
+        }));
+        viz_order.push(viz_key);
+    }
+
+    // Build the single home page with one section containing all viz refs
+    let page = json!({
+        "identification": {
+            "id": "home-page",
+            "title": "Home"
+        },
+        "payload": {
+            "layout": {
+                "sectionOrder": ["apps-section"]
+            },
+            "sections": {
+                "apps-section": {
+                    "id": "apps-section",
+                    "title": "Applications",
+                    "default": true,
+                    "visible": true,
+                    "preset": true,
+                    "locked": false,
+                    "layout": {
+                        "vizOrder": viz_order
+                    },
+                    "viz": viz_refs
+                }
+            }
+        }
+    });
+
+    json!({
+        "_version": "3.1.0",
+        "site": {
+            "identification": {
+                "id": "local-flp-site",
+                "title": "Local Fiori Launchpad"
+            },
+            "payload": {}
+        },
+        "applications": applications,
+        "visualizations": visualizations,
+        "vizTypes": {},
+        "pages": {
+            "home-page": page
+        },
+        "menus": {
+            "main": {
+                "payload": {
+                    "menuEntries": [
+                        {
+                            "id": "home-space-entry",
+                            "title": "Home",
+                            "type": "IBN",
+                            "target": {
+                                "semanticObject": "Launchpad",
+                                "action": "openFLPPage",
+                                "parameters": [
+                                    { "name": "spaceId", "value": "home-space" },
+                                    { "name": "pageId", "value": "home-page" }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "systemAliases": {}
+    })
+}
+
 /// Baut die flp.html dynamisch aus den Settings (UI5-Version, Theme, Sprache etc.).
-/// Anwendungs-Kacheln werden NICHT eingebettet — sie werden von flp-init.js
-/// aus /config/apps.json geladen.
+/// Verwendet den CDM-Modus der UShell — Anwendungen werden ueber das
+/// CDM Site-Dokument (/cdm/site.json) geladen statt ueber apps.json.
 pub fn build_flp_html(settings: &Settings) -> String {
     let libs = settings.libs.join(", ");
     let search_flag = if settings.enable_search { "true" } else { "false" };
@@ -213,28 +437,6 @@ pub fn build_flp_html(settings: &Settings) -> String {
         String::new()
     };
 
-    let user_profile = format!(
-        r#",
-            services: {{
-                Container: {{
-                    adapter: {{
-                        config: {{
-                            id: "{user_id}",
-                            firstName: "{first}",
-                            lastName: "{last}",
-                            fullName: "{full}",
-                            email: "{email}"
-                        }}
-                    }}
-                }}
-            }}"#,
-        user_id = settings.user_id,
-        first = settings.user_first_name,
-        last = settings.user_last_name,
-        full = settings.user_full_name,
-        email = settings.user_email,
-    );
-
     format!(
         r##"<!doctype html>
 <html>
@@ -248,20 +450,78 @@ pub fn build_flp_html(settings: &Settings) -> String {
     <script type="text/javascript">
         window["sap-ushell-config"] = {{
             defaultRenderer: "{renderer}",
+            ushell: {{
+                spaces: {{
+                    enabled: true,
+                    myHome: {{
+                        enabled: false
+                    }}
+                }},
+                shell: {{
+                    enablePersonalization: false
+                }}
+            }},
             renderers: {{
                 fiori2: {{
                     componentData: {{
                         config: {{
-                            enableSearch: {search}
+                            enableSearch: {search},
+                            rootIntent: "Shell-home"
                         }}
                     }}
                 }}
             }},
-            // Passed to flp-init.js so it can enrich each app entry
-            _flpComponent: {{
-                id: "{comp_id}",
-                resourceRoot: "{res_root}"
-            }}{ushell_props}{user_profile}
+            services: {{
+                CommonDataModel: {{
+                    adapter: {{
+                        config: {{
+                            siteDataUrl: "/cdm/site.json"
+                        }}
+                    }}
+                }},
+                // CDM platform has no UserInfoAdapter — use the local one
+                UserInfo: {{
+                    adapter: {{
+                        module: "sap.ushell.adapters.local.UserInfoAdapter",
+                        config: {{
+                            id: "{user_id}",
+                            firstName: "{first}",
+                            lastName: "{last}",
+                            fullName: "{full}",
+                            email: "{email}"
+                        }}
+                    }}
+                }},
+                Container: {{
+                    adapter: {{
+                        config: {{
+                            id: "{user_id}",
+                            firstName: "{first}",
+                            lastName: "{last}",
+                            fullName: "{full}",
+                            email: "{email}",
+                            storageResourceRoot: "/"
+                        }}
+                    }}
+                }},
+                // Use local Personalization adapter (localStorage-based)
+                Personalization: {{
+                    adapter: {{
+                        module: "sap.ushell.adapters.local.PersonalizationAdapter",
+                        config: {{
+                            storageResourceRoot: "/"
+                        }}
+                    }}
+                }},
+                PersonalizationV2: {{
+                    adapter: {{
+                        module: "sap.ushell.adapters.local.PersonalizationAdapter",
+                        config: {{
+                            storageResourceRoot: "/"
+                        }}
+                    }}
+                }}
+            }}{ushell_props}
         }};
     </script>
 
@@ -298,7 +558,11 @@ pub fn build_flp_html(settings: &Settings) -> String {
         comp_id = settings.component_id,
         res_root = settings.resource_root,
         ushell_props = ushell_properties,
-        user_profile = user_profile,
+        user_id = settings.user_id,
+        first = settings.user_first_name,
+        last = settings.user_last_name,
+        full = settings.user_full_name,
+        email = settings.user_email,
         ui5 = settings.ui5_version,
         libs = libs,
         theme = settings.theme,

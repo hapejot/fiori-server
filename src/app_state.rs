@@ -25,6 +25,8 @@ pub struct AppState {
     pub flp_html: String,
     /// Dynamisch generierte apps.json (statische + generische Entitaeten zusammengefuehrt).
     pub apps_json: RwLock<String>,
+    /// CDM 3.1 Site-Dokument fuer den CDM-Modus der UShell.
+    pub cdm_site_json: RwLock<String>,
     /// Mutable Data-Store (abstracted behind DataStore trait)
     pub data_store: Box<dyn DataStore>,
     /// Settings (UI5-Version, Theme etc.)
@@ -78,7 +80,7 @@ impl AppState {
         let mut entity_manifests = HashMap::new();
         for (idx, entity) in new_entities.iter().enumerate() {
             let manifest_val =
-                builders::build_manifest_json_with_default(&new_entities, &self.settings, idx);
+                builders::build_entity_manifest(&new_entities, &self.settings, idx);
             entity_manifests.insert(
                 entity.set_name().to_string(),
                 serde_json::to_string_pretty(&manifest_val).unwrap_or_default(),
@@ -86,6 +88,10 @@ impl AppState {
         }
 
         let apps_json = build_apps_json(&new_entities);
+
+        let cdm_site_json =
+            serde_json::to_string_pretty(&builders::build_cdm_site_json(&new_entities))
+                .unwrap_or_default();
 
         // 5. Update DataStore entity list
         self.data_store.update_entities(new_entities.clone());
@@ -96,6 +102,7 @@ impl AppState {
         *self.manifest_json.write().unwrap() = manifest_json;
         *self.entity_manifests.write().unwrap() = entity_manifests;
         *self.apps_json.write().unwrap() = apps_json;
+        *self.cdm_site_json.write().unwrap() = cdm_site_json;
 
         info!("  [activate_config] Done – entities rebuilt.");
     }
@@ -188,7 +195,7 @@ impl AppStateBuilder {
         let mut entity_manifests = HashMap::new();
         for (idx, entity) in entities.iter().enumerate() {
             let manifest_val =
-                builders::build_manifest_json_with_default(&entities, &settings, idx);
+                builders::build_entity_manifest(&entities, &settings, idx);
             entity_manifests.insert(
                 entity.set_name().to_string(),
                 serde_json::to_string_pretty(&manifest_val).unwrap_or_default(),
@@ -198,6 +205,10 @@ impl AppStateBuilder {
         let flp_html = builders::build_flp_html(&settings);
 
         let apps_json = build_apps_json(&entities);
+
+        let cdm_site_json =
+            serde_json::to_string_pretty(&builders::build_cdm_site_json(&entities))
+                .unwrap_or_default();
 
         // Data-Verzeichnis
         let data_dir = self
@@ -216,6 +227,7 @@ impl AppStateBuilder {
             entity_manifests: RwLock::new(entity_manifests),
             flp_html,
             apps_json: RwLock::new(apps_json),
+            cdm_site_json: RwLock::new(cdm_site_json),
             data_store,
             settings,
             data_dir,

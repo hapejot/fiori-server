@@ -7,6 +7,18 @@
     "Note": "",
     "OrderDate": "2026-04-02T00:14:59+02:00",
     "Quantity": 0,
+    "Status": "N",
+    "StatusCriticality": 2,
+    "TotalAmount": "0"
+  },
+  {
+    "Currency": "EUR",
+    "CustomerID": "C003",
+    "DeliveryDate": "",
+    "ID": "422370d0-0c9c-412a-a91f-359b83ee1793",
+    "Note": "",
+    "OrderDate": "2026-04-01T22:27:04+02:00",
+    "Quantity": 0,
     "Status": "P",
     "StatusCriticality": 2,
     "TotalAmount": "0"

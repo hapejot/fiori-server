@@ -1,7 +1,7 @@
 # Copilot Instructions — fake-fiori-server
 
 ## Project Overview
-Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled CRUD, batch requests, metadata (EDMX), and a Fiori Launchpad shell.
+Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled CRUD, batch requests, metadata (EDMX), and a Fiori Launchpad shell using the CDM 3.1 platform.
 
 ## Architecture
 
@@ -14,7 +14,7 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 - `src/annotations.rs` — Structured annotation types (`PV`, `Rec`, `Ann`, `Anns`), builder functions, `FieldDef`, `ValueListDef`
 - `src/entity.rs` — `ODataEntity` trait definition
 - `src/entities/` — Entity implementations (products, orders, meta tables, generic entities)
-- `src/builders.rs` — Build metadata XML, manifests, apps.json
+- `src/builders.rs` — Build metadata XML, manifests, CDM site document, FLP HTML
 - `src/routing.rs` — OData URL parsing
 - `src/query.rs` — OData query execution ($filter, $orderby, $select, $expand)
 - `migrations/` — SQL schema files for PostgreSQL
@@ -23,7 +23,7 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 1. Create struct implementing `ODataEntity` trait
 2. Implement: `set_name`, `key_field`, `type_name`, `mock_data`, `entity_set`, `fields_def`, `annotations_def`
 3. Register in `AppStateBuilder` via `.entity()`
-4. Automatically included in EDMX, manifest.json, apps.json
+4. Automatically included in EDMX, manifest.json, CDM site document
 5. Optional: JSON file in `data/` for persistence; falls back to `mock_data()`
 6. Optional: `navigation_properties()` for compositions/references, `parent_set_name()` for child entities
 
@@ -105,7 +105,7 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 - EntityField.ValueSource dropdown: `key_property: "ID"`, `display_property: "ListName"` — stores UUID, shows name
 
 ### AppState RwLock Pattern
-- Mutable fields wrapped in `RwLock`: `entities`, `metadata_xml`, `manifest_json`, `entity_manifests`, `apps_json`
+- Mutable fields wrapped in `RwLock`: `entities`, `metadata_xml`, `manifest_json`, `entity_manifests`, `apps_json`, `cdm_site_json`
 - Immutable fields: `flp_html`, `settings`, `data_dir`, `data_store`
 - Handlers acquire `.read().unwrap()` for reads; `activate_config()` acquires `.write().unwrap()`
 - **Important**: Extract owned data from `ODataPath` before dropping `RwLock` guard (borrow checker safety)
@@ -141,6 +141,17 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
   - `query_collection_from()` in `query.rs` — builds `(ListID, Code) → Description` lookup from FieldValueListItems, injects into collection results
   - `resolve_value_texts()` in `data_store.rs` — same logic for single entity reads
 - Fiori `Common.ValueListWithFixedValues` only controls dropdown vs dialog in edit mode; display-mode text requires `Common.Text` + server-side resolution
+
+### CDM 3.1 Platform
+- UShell boots in CDM platform mode via `Container.init("cdm")` — NOT local sandbox mode
+- `build_cdm_site_json()` in `builders.rs` generates the CDM 3.1 site document from all entities with `apps_json_entry()`
+- Site document served at `GET /cdm/site.json`, referenced by `services.CommonDataModel.adapter.config.siteDataUrl` in the FLP HTML
+- Site structure: `applications` (with `crossNavigation.inbounds`), `visualizations` (StaticAppLauncher tiles), `pages` (single home page with one section), `vizTypes` (empty, auto-populated by UShell)
+- `flp-init.js` is minimal (~100 lines): boots Container in `"cdm"` mode, applies company logo + user profile post-init
+- `cdm_site_json` is a `RwLock<String>` field on `AppState`, rebuilt during `activate_config()` alongside metadata/manifest
+- Spaces & pages enabled via `ushell.spaces.enabled: true` in the FLP HTML config
+- Intent-based navigation works natively through CDM inbounds — no manual CSTR/NavTargetResolution wiring needed
+- `/config/apps.json` endpoint retained for backward compatibility
 
 ## Build & Test
 - `cargo test` — all tests must pass before committing

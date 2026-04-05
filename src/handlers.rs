@@ -934,6 +934,37 @@ fn handle_static_files(path: &str, state: &AppState) -> Response {
             .unwrap();
     }
 
+    // LREP Flexibility stubs — return empty responses so the UI5 flex
+    // framework does not log 404 errors for every app startup.
+    if raw_path.starts_with("/sap/bc/lrep/flex/") {
+        let body = if raw_path.contains("/flex/settings") {
+            r#"{"isKeyUser":false,"isVariantSharingEnabled":false,"isAtoAvailable":false,"isAtoEnabled":false,"isProductiveSystem":true}"#
+        } else {
+            // flex/data responses — empty changes
+            r#"{"changes":[],"compVariants":[],"variantChanges":[],"variantDependentControlChanges":[],"variantManagementChanges":[],"variants":[]}"#
+        };
+        let mut builder = Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "application/json;charset=utf-8");
+        for (k, v) in cors_headers() {
+            builder = builder.header(k, v);
+        }
+        return builder.body(Body::from(body)).unwrap();
+    }
+
+    // CDM 3.1 Site-Dokument fuer den UShell CDM-Modus ausliefern
+    if relative == "cdm/site.json" {
+        let mut builder = Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "application/json;charset=utf-8");
+        for (k, v) in cors_headers() {
+            builder = builder.header(k, v);
+        }
+        return builder
+            .body(Body::from(state.cdm_site_json.read().unwrap().clone()))
+            .unwrap();
+    }
+
     // Component.js wird dynamisch generiert — der Klassenname muss zum
     // sap.app.id im jeweiligen Manifest passen, sonst cached UI5 den
     // falschen Component fuer die zweite App.
