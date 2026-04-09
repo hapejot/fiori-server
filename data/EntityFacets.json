@@ -98,5 +98,15 @@
     "SectionLabel": "Lieferung",
     "SetName": "Orders",
     "SortOrder": 1
+  },
+  {
+    "FacetID": "Partner_main",
+    "FieldGroupFields": "Name,Ort",
+    "FieldGroupLabel": "Main",
+    "FieldGroupQualifier": "MainGroup",
+    "SectionId": "MainID",
+    "SectionLabel": "Main",
+    "SetName": "Partners",
+    "SortOrder": 0
   }
 ]

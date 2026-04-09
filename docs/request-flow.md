@@ -13,6 +13,7 @@
    - Per-entity manifests are generated so each entity can serve as the default route when accessed via `/apps/{EntitySet}/`.
    - `build_flp_html()` — generates the Fiori Launchpad HTML shell, injecting UI5 CDN URL, theme, language, company logo, and user profile into `sap-ushell-config`.
    - `build_apps_json()` — merges the static `webapp/config/apps.json` with dynamic tile entries from generic entities.
+   - `build_cdm_site_json()` — generates the CDM 3.1 site document with applications, visualizations, pages/sections, and navigation inbounds.
 7. The `InMemoryDataStore` (or `PgDataStore` if the `postgres` feature is active and `DATABASE_URL` is set) is created. For each registered entity it loads records from `data/{EntitySet}.json`, falling back to `mock_data()` if the file is absent. Draft flags (`IsActiveEntity`, `HasActiveEntity`, `HasDraftEntity`) are injected into every record.
 8. Axum routes are registered:
    - `GET /health` — health check.
@@ -29,9 +30,9 @@
 2. `handle_static_files()` normalizes the path to `flp.html` and returns the pre-generated FLP HTML from `AppState.flp_html`.
 3. The HTML loads the UI5 core from the SAP CDN (version from settings), along with the UShell bootstrap libraries.
 4. The `xx-bootTask` script tag executes `flp-init.js` (served as an embedded file).
-5. `flp-init.js` fetches `/config/apps.json` (served dynamically from `AppState.apps_json`).
-6. It transforms each application entry into a UShell CDM site configuration — tiles, navigation targets, and inbounds.
-7. The UShell is initialized in local CDM mode. After renderer load, `applyUshellProperties()` sets the company logo and `applyUserProfile()` applies user info.
+5. `flp-init.js` boots the UShell in CDM platform mode (`Container.init("cdm")`). The `CommonDataModelAdapter` automatically fetches the CDM 3.1 site document from `/cdm/site.json`.
+6. The site document contains all application definitions, visualizations, pages with sections, and navigation inbounds.
+7. After renderer load, `applyUshellProperties()` sets the company logo and `applyUserProfile()` applies user info.
 8. The Launchpad renders tiles for each application. Clicking a tile triggers intent-based navigation.
 
 ## 3. Opening an Application (GET /apps/{EntitySet}/...)
@@ -55,7 +56,7 @@
 3. `ODataQuery::parse()` extracts query options from the URL (`$filter`, `$orderby`, `$select`, `$expand`, `$top`, `$skip`, `$count`).
 4. `DataStore::get_collection()` is called:
    - Reads all records for the entity set from the in-memory store.
-   - Applies the `$filter` expression (supports `eq`, `ne`, `lt`, `gt`, `le`, `ge`, `contains`, `and`).
+   - Applies the `$filter` expression (supports `eq`, `ne`, `lt`, `gt`, `le`, `ge`, `and`).
    - Applies `$orderby` (ascending/descending, string/numeric comparison).
    - For value-list text fields, resolves `_text` suffixed fields by looking up FieldValueListItems.
    - Processes `$expand` — for each navigation property, calls `expand_record()` on the entity to attach related data.
@@ -112,7 +113,7 @@
    - `reconstruct_configs_from_data()` re-reads all meta table JSON files.
    - `create_generic_entities()` rebuilds the generic entities.
    - Builtin entities (meta tables, value lists) are kept; old generic entities are replaced.
-   - EDMX metadata, manifest.json, per-entity manifests, and apps.json are all regenerated.
+   - EDMX metadata, manifest.json, per-entity manifests, apps.json, and CDM site document are all regenerated.
    - `DataStore::update_entities()` registers any new entity sets and loads their data.
    - All RwLock-protected fields on AppState are swapped to the new values.
 4. Subsequent requests immediately see the updated metadata, manifests, and entity definitions.

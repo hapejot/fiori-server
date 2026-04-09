@@ -29,14 +29,9 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 
 ### Built-in Entities
 
-**Domain entities:**
-- `Products` (key: ID/Guid) — standalone, 12 fields, DataPoints (Price/Stock/Rating), 2 facets, helper: `product_id()`
-- `Orders` (key: ID/Guid) — parent of OrderItems, 10 fields, nested ObjectPage routing, helper: `order_id()`
-- `OrderItems` (key: ID/Guid, parent: Orders) — composition child, FK `OrderID` → Orders, FK `ProductID` → Products (with `text_path` for display), nav ref `Product`
-
 **Meta tables** (configure generic entities at runtime):
 - `EntityConfigs` (key: SetName) — parent of Fields/Facets/Navigations/TableFacets, `publishConfig` action
-- `EntityFields` (key: FieldID, parent: EntityConfigs) — 17 fields, nav ref `_ValueList` → FieldValueLists
+- `EntityFields` (key: FieldID, parent: EntityConfigs) — 20 fields, nav ref `_ValueList` → FieldValueLists
 - `EntityFacets` (key: FacetID, parent: EntityConfigs)
 - `EntityNavigations` (key: NavID, parent: EntityConfigs)
 - `EntityTableFacets` (key: TableFacetID, parent: EntityConfigs)
@@ -44,6 +39,12 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 **Value lists:**
 - `FieldValueLists` (key: ID/Guid) — parent of Items, has Launchpad tile
 - `FieldValueListItems` (key: ID/Guid, parent: FieldValueLists) — FK: ListID
+
+**Pre-configured generic entities** (defined in `data/EntityConfigs.json`, not hardcoded):
+- `Products` (key: ID/Guid) — standalone, 12 fields, DataPoints (Price/Stock/Rating), 2 facets
+- `Orders` (key: ID/Guid) — parent of OrderItems, 10 fields, nested ObjectPage routing
+- `OrderItems` (key: ID/Guid, parent: Orders) — composition child, FK `OrderID` → Orders, FK `ProductID` → Products (with `text_path` for display), nav ref `Product`
+- `Customers`, `Contacts`, `Partners`, `Tests` — additional sample entities
 
 ### Annotation Architecture
 
@@ -76,7 +77,6 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 - All entities use `ID` as key field with type `Edm.Guid`
 - `create_entity()` auto-generates the key as a random UUID v4 when not provided
 - Mock data uses deterministic UUIDs via `value_list_id()` (UUID v5 from a fixed namespace + name)
-- Domain entities expose helper functions for cross-referencing: `product_id("P001")`, `order_id("O001")`
 - FK fields (e.g. `OrderItems.OrderID`, `OrderItems.ProductID`) store the UUID of the referenced entity
 
 ### Title Field (Common.Text)
@@ -147,7 +147,7 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 - `build_cdm_site_json()` in `builders.rs` generates the CDM 3.1 site document from all entities with `apps_json_entry()`
 - Site document served at `GET /cdm/site.json`, referenced by `services.CommonDataModel.adapter.config.siteDataUrl` in the FLP HTML
 - Site structure: `applications` (with `crossNavigation.inbounds`), `visualizations` (StaticAppLauncher tiles), `pages` (single home page with one section), `vizTypes` (empty, auto-populated by UShell)
-- `flp-init.js` is minimal (~100 lines): boots Container in `"cdm"` mode, applies company logo + user profile post-init
+- `flp-init.js` is minimal (~180 lines): boots Container in `"cdm"` mode, registers CDM adapter shims, applies company logo + user profile post-init
 - `cdm_site_json` is a `RwLock<String>` field on `AppState`, rebuilt during `activate_config()` alongside metadata/manifest
 - Spaces & pages enabled via `ushell.spaces.enabled: true` in the FLP HTML config
 - Intent-based navigation works natively through CDM inbounds — no manual CSTR/NavTargetResolution wiring needed

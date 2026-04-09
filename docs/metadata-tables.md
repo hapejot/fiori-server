@@ -92,8 +92,11 @@ Defines each property/column of a generic entity.
 | `Precision` | Edm.Int32 | | `Precision` facet on `Edm.Decimal` properties. |
 | `Scale` | Edm.Int32 | | `Scale` facet on `Edm.Decimal` properties. |
 | `IsImmutable` | Edm.Boolean | | `true` → `Core.Immutable` — editable at creation, read-only afterward. |
+| `IsComputed` | Edm.Boolean | | `true` → `Core.Computed` — field is server-generated, never shown in create/edit forms. |
 | `SemanticObject` | Edm.String(40) | | Enables intent-based navigation (e.g. `"Customers"` → opens Customers app). |
 | `ValueSource` | Edm.String(40) | | **UUID** of a FieldValueList. Generates dropdown and auto `_text` field. (See [Value Lists](#value-text-resolution) below.) |
+| `TextPath` | Edm.String(80) | | Explicit text path override for `Common.Text` annotation (e.g. `"Customer/CustomerName"`). When empty, auto-derived from navigation properties. |
+| `DefaultValue` | Edm.String(120) | | Default value for new records. Applied during entity creation when the field is not provided in the request body. |
 | `SortOrder` | Edm.Int32 | | Controls order in EDMX and FieldGroups. |
 | `ShowInLineItem` | Edm.Boolean | | `true` → field appears as a column in the ListReport table (`UI.LineItem`). |
 | `LineItemImportance` | Edm.String(10) | | `UI.Importance` on the column (e.g. `"High"` — always visible on narrow screens). |
@@ -127,8 +130,11 @@ Defines each property/column of a generic entity.
   "Precision": null,
   "Scale": null,
   "IsImmutable": false,
+  "IsComputed": false,
   "SemanticObject": "",
   "ValueSource": "",
+  "TextPath": "",
+  "DefaultValue": "",
   "SortOrder": 2,
   "ShowInLineItem": true,
   "LineItemImportance": "",

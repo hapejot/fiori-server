@@ -8,8 +8,8 @@ Known platforms:
 
 | Platform   | Used By                                      |
 |------------|----------------------------------------------|
-| `local`    | Local development sandboxes (this server)    |
-| `cdm`      | SAP Build Work Zone, SAP Portal Service (FLPD) |
+| `local`    | Local development sandboxes                  |
+| `cdm`      | SAP Build Work Zone, SAP Portal Service (FLPD), **this server** |
 | `abap`     | SAP S/4HANA on-premise FLP                   |
 
 ## CDM Platform Architecture
