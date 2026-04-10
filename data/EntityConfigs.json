@@ -10,7 +10,7 @@
     "SetName": "Contacts",
     "TileDescription": "Ansprechpartner-Übersicht",
     "TileIcon": "sap-icon://person-placeholder",
-    "TileTitle": "Ansprechpartner",
+    "Title": "Ansprechpartner",
     "TypeName": "Contact"
   },
   {
@@ -24,7 +24,7 @@
     "SetName": "Customers",
     "TileDescription": "Kundenübersicht",
     "TileIcon": "sap-icon://customer",
-    "TileTitle": "Kunden",
+    "Title": "Kunden",
     "TypeName": "Customer"
   },
   {
@@ -38,7 +38,7 @@
     "SetName": "Partners",
     "TileDescription": "Business Partner",
     "TileIcon": "sap-icon://customer-and-supplier",
-    "TileTitle": "Partner",
+    "Title": "Partner",
     "TypeName": "Partner"
   },
   {
@@ -52,7 +52,7 @@
     "SetName": "Tests",
     "TileDescription": "kleine Tests",
     "TileIcon": "sap-icon://test",
-    "TileTitle": "Test",
+    "Title": "Test",
     "TypeName": "Test"
   },
   {
@@ -69,7 +69,7 @@
     "SetName": "Products",
     "TileDescription": "Produktuebersicht",
     "TileIcon": "sap-icon://product",
-    "TileTitle": "Produkte",
+    "Title": "Produkte",
     "TypeName": "Product"
   },
   {
@@ -86,7 +86,7 @@
     "SetName": "Orders",
     "TileDescription": "Bestelluebersicht",
     "TileIcon": "sap-icon://sales-order",
-    "TileTitle": "Bestellungen",
+    "Title": "Bestellungen",
     "TypeName": "Order"
   },
   {
@@ -103,7 +103,7 @@
     "SetName": "OrderItems",
     "TileDescription": "",
     "TileIcon": "",
-    "TileTitle": "",
+    "Title": "",
     "TypeName": "OrderItem"
   }
 ]

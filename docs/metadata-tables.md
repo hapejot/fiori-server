@@ -41,7 +41,7 @@ Master configuration record for each generic entity. One record per entity set.
 | `KeyField` | Edm.String(40) | | Name of the key property. If `"ID"` → auto Edm.Guid with computed key. Otherwise the field must exist in EntityFields. |
 | `TypeName` | Edm.String(40) | | OData entity type name (e.g. `"Customer"`) → EDMX `<EntityType Name="Customer">` |
 | `ParentSetName` | Edm.String(40) | | If non-empty, marks this entity as a **composition child** of the named parent set. Enables draft propagation and nested ObjectPage routing. |
-| `TileTitle` | Edm.String(80) | | Fiori Launchpad tile title. Leave empty for no tile (e.g. child entities). |
+| `Title` | Edm.String(80) | | Fiori Launchpad tile title. Leave empty for no tile (e.g. child entities). |
 | `TileDescription` | Edm.String(120) | | Tile subtitle text. |
 | `TileIcon` | Edm.String(80) | | SAP icon URI (e.g. `"sap-icon://customer"`). |
 | `HeaderTypeName` | Edm.String(40) | | `UI.HeaderInfo/TypeName` — singular label on the ObjectPage (e.g. `"Kunde"`). |
@@ -57,7 +57,7 @@ Master configuration record for each generic entity. One record per entity set.
   "KeyField": "CustomerID",
   "TypeName": "Customer",
   "ParentSetName": "",
-  "TileTitle": "Kunden",
+  "Title": "Kunden",
   "TileDescription": "Kundenübersicht",
   "TileIcon": "sap-icon://customer",
   "HeaderTypeName": "Kunde",

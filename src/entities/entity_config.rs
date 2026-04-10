@@ -28,7 +28,7 @@ impl ODataEntity for EntityConfigEntity {
         static FIELDS: &[FieldDef] = &[
             FieldDef {
                 name: "SetName",
-                label: "EntitySet",
+                label: "{i18n>entityset}",
                 edm_type: "Edm.String",
                 max_length: Some(40),
                 precision: None,
@@ -42,7 +42,7 @@ impl ODataEntity for EntityConfigEntity {
             },
             FieldDef {
                 name: "KeyField",
-                label: "Schluesselfeld",
+                label: "{i18n>keyfield}",
                 edm_type: "Edm.String",
                 max_length: Some(40),
                 precision: None,
@@ -56,7 +56,7 @@ impl ODataEntity for EntityConfigEntity {
             },
             FieldDef {
                 name: "TypeName",
-                label: "Entity-Typ",
+                label: "{i18n>entitytype}",
                 edm_type: "Edm.String",
                 max_length: Some(40),
                 precision: None,
@@ -70,7 +70,7 @@ impl ODataEntity for EntityConfigEntity {
             },
             FieldDef {
                 name: "ParentSetName",
-                label: "Eltern-EntitySet",
+                label: "{i18n>parententityset}",
                 edm_type: "Edm.String",
                 max_length: Some(40),
                 precision: None,
@@ -83,8 +83,8 @@ impl ODataEntity for EntityConfigEntity {
                 text_path: None,
             },
             FieldDef {
-                name: "TileTitle",
-                label: "Kachel-Titel",
+                name: "Title",
+                label: "{i18n>title}",
                 edm_type: "Edm.String",
                 max_length: Some(80),
                 precision: None,
@@ -388,7 +388,7 @@ impl ODataEntity for EntityConfigEntity {
                     semantic_object: None,
                 },
                 LineItemField {
-                    name: "TileTitle",
+                    name: "Title",
                     label: None,
                     importance: None,
                     criticality_path: None,
@@ -453,7 +453,7 @@ impl ODataEntity for EntityConfigEntity {
                 },
                 FieldGroupDef {
                     qualifier: "Tile",
-                    fields: &["TileTitle", "TileDescription", "TileIcon"],
+                    fields: &["Title", "TileDescription", "TileIcon"],
                 },
                 FieldGroupDef {
                     qualifier: "Header",

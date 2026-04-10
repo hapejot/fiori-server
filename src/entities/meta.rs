@@ -50,7 +50,7 @@ fn generate_meta_data(
             "KeyField":             config.key_field,
             "TypeName":             config.type_name,
             "ParentSetName":        config.parent_set_name.as_deref().unwrap_or(""),
-            "TileTitle":            tile.map(|t| t.title.as_str()).unwrap_or(""),
+            "Title":            tile.map(|t| t.title.as_str()).unwrap_or(""),
             "TileDescription":      tile.and_then(|t| t.description.as_deref()).unwrap_or(""),
             "TileIcon":             tile.and_then(|t| t.icon.as_deref()).unwrap_or(""),
             "HeaderTypeName":       hi.map(|h| h.type_name.as_str()).unwrap_or(""),
@@ -410,7 +410,7 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
             };
 
             // Tile
-            let tile_title = str_val(cr, "TileTitle");
+            let tile_title = str_val(cr, "Title");
             let tile = if !tile_title.is_empty() {
                 Some(TileConfig {
                     title: tile_title,
@@ -793,7 +793,7 @@ mod tests {
         assert_eq!(cr["HeaderTitlePath"], "ProductName");
         assert_eq!(cr["HeaderDescriptionPath"], "ProductID");
         assert_eq!(cr["SelectionFields"], "ProductName");
-        assert_eq!(cr["TileTitle"], "Produkte");
+        assert_eq!(cr["Title"], "Produkte");
         assert_eq!(cr["TileDescription"], "Produktkatalog");
         assert_eq!(cr["TileIcon"], "sap-icon://product");
     }
@@ -908,7 +908,7 @@ mod tests {
         // Header info should be empty strings
         assert_eq!(configs[0]["HeaderTypeName"], "");
         assert_eq!(configs[0]["SelectionFields"], "");
-        assert_eq!(configs[0]["TileTitle"], "");
+        assert_eq!(configs[0]["Title"], "");
     }
 
     #[test]

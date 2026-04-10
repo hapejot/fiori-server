@@ -194,6 +194,7 @@ fn build_manifest_value(
         "sap.app": {
             "id": app_id,
             "type": "application",
+            "i18n": "i18n/i18n.properties",
             "applicationVersion": {
                 "version": "1.0.0"
             },
@@ -235,6 +236,12 @@ fn build_manifest_value(
                         "operationMode": "Server",
                         "autoExpandSelect": true,
                         "earlyRequests": true
+                    }
+                },
+                "i18n": {
+                    "type": "sap.ui.model.resource.ResourceModel",
+                    "settings": {
+                        "bundleUrl": "i18n/i18n.properties"
                     }
                 }
             },
