@@ -1,0 +1,58 @@
+[
+  {
+    "ID": "4c34b4fa-07b4-51f5-b55a-ebb66dc04d46",
+    "Title": "Firewall-Regeln aktualisieren",
+    "Description": "Neue Firewall-Regeln für den Zugriff auf die Cloud-Dienste des Partners XYZ einrichten.",
+    "Priority": "P2",
+    "Status": "APR",
+    "StatusCriticality": 1,
+    "ChangeType": "NRM",
+    "Risk": "MED",
+    "RequesterID": "f046bb00-857d-5985-9b7a-cd9d84e28ed4",
+    "ApproverID": "2a66bbbb-8f0d-5885-99b6-acc25927e58a",
+    "PlannedStart": "2026-04-15T22:00:00Z",
+    "PlannedEnd": "2026-04-16T02:00:00Z"
+  },
+  {
+    "ID": "94985ead-b7b3-5f47-9cdc-be1c04e0d628",
+    "Title": "Windows-Server patchen",
+    "Description": "Quartalsmäßiges Sicherheitsupdate für alle Windows-Server in der DMZ.",
+    "Priority": "P2",
+    "Status": "SUB",
+    "StatusCriticality": 2,
+    "ChangeType": "STD",
+    "Risk": "LOW",
+    "RequesterID": "de4db8b6-85c7-5c78-a345-ecc6a22ff12a",
+    "ApproverID": null,
+    "PlannedStart": "2026-04-20T00:00:00Z",
+    "PlannedEnd": "2026-04-20T06:00:00Z"
+  },
+  {
+    "ID": "8c603fbb-0f18-5c67-9491-1bd6c2d7e326",
+    "Title": "Datenbankserver-Migration",
+    "Description": "Migration des Oracle-Datenbankservers von Version 19c auf 23ai. Erfordert Downtime.",
+    "Priority": "P1",
+    "Status": "DRF",
+    "StatusCriticality": 0,
+    "ChangeType": "NRM",
+    "Risk": "HIG",
+    "RequesterID": "f046bb00-857d-5985-9b7a-cd9d84e28ed4",
+    "ApproverID": null,
+    "PlannedStart": null,
+    "PlannedEnd": null
+  },
+  {
+    "ID": "54195a8a-aa86-5ef0-acf4-3c306647a91a",
+    "Title": "Notfall-Patch Exchange-Server",
+    "Description": "Kritische Sicherheitslücke CVE-2026-1234 erfordert sofortigen Patch des Exchange-Servers.",
+    "Priority": "P1",
+    "Status": "IMP",
+    "StatusCriticality": 2,
+    "ChangeType": "EMG",
+    "Risk": "HIG",
+    "RequesterID": "f046bb00-857d-5985-9b7a-cd9d84e28ed4",
+    "ApproverID": "2a66bbbb-8f0d-5885-99b6-acc25927e58a",
+    "PlannedStart": "2026-04-12T10:00:00Z",
+    "PlannedEnd": "2026-04-12T12:00:00Z"
+  }
+]

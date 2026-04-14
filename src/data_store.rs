@@ -4,8 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 
 use serde_json::{json, Value};
-use tower_http::trace;
-use tracing::{error, info};
+use tracing::info;
 use uuid::Uuid;
 
 use crate::entity::ODataEntity;
@@ -747,12 +746,31 @@ impl DataStore for InMemoryDataStore {
             }
         }
 
+        // Berechnete Felder aktualisieren
+        entity.compute_fields(&mut new_record);
+
+        // Auto-create child entities
+        let children = entity.auto_create_children(&mut new_record);
+
         let mut result = new_record.clone();
         inject_odata_context(&mut result, set_name);
         store
             .entry(set_name.to_string())
             .or_insert_with(Vec::new)
             .push(new_record);
+
+        // Push auto-created children to store
+        for (child_set, mut child_data) in children {
+            if let Some(child_obj) = child_data.as_object_mut() {
+                child_obj.insert("IsActiveEntity".to_string(), json!(false));
+                child_obj.insert("HasActiveEntity".to_string(), json!(false));
+                child_obj.insert("HasDraftEntity".to_string(), json!(false));
+            }
+            store
+                .entry(child_set)
+                .or_insert_with(Vec::new)
+                .push(child_data);
+        }
 
         Ok(result)
     }
@@ -800,6 +818,9 @@ impl DataStore for InMemoryDataStore {
                 }
             }
         }
+
+        // Berechnete Felder aktualisieren
+        entity.compute_fields(record);
 
         let mut result = record.clone();
         inject_odata_context(&mut result, set_name);
@@ -1586,11 +1607,17 @@ mod tests {
                     scale: None,
                     immutable: true,
                     computed: false,
-                    semantic_object: None,
+                    references_entity: None,
                     value_source: None,
-                    value_list: None,
+                    prefer_dialog: false,
                     text_path: None,
-                },
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
+            },
                 FieldDef {
                     name: "ProductName",
                     label: "Name",
@@ -1600,11 +1627,17 @@ mod tests {
                     scale: None,
                     immutable: false,
                     computed: false,
-                    semantic_object: None,
+                    references_entity: None,
                     value_source: None,
-                    value_list: None,
+                    prefer_dialog: false,
                     text_path: None,
-                },
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
+            },
                 FieldDef {
                     name: "Price",
                     label: "Price",
@@ -1614,11 +1647,17 @@ mod tests {
                     scale: Some(2),
                     immutable: false,
                     computed: false,
-                    semantic_object: None,
+                    references_entity: None,
                     value_source: None,
-                    value_list: None,
+                    prefer_dialog: false,
                     text_path: None,
-                },
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
+            },
                 FieldDef {
                     name: "Status",
                     label: "Status",
@@ -1628,11 +1667,17 @@ mod tests {
                     scale: None,
                     immutable: false,
                     computed: false,
-                    semantic_object: None,
+                    references_entity: None,
                     value_source: None,
-                    value_list: None,
+                    prefer_dialog: false,
                     text_path: None,
-                },
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
+            },
             ];
             Some(FIELDS)
         }
@@ -2340,11 +2385,17 @@ mod tests {
                     scale: None,
                     immutable: true,
                     computed: false,
-                    semantic_object: None,
+                    references_entity: None,
                     value_source: None,
-                    value_list: None,
+                    prefer_dialog: false,
                     text_path: None,
-                },
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
+            },
                 FieldDef {
                     name: "ListName",
                     label: "Listenname",
@@ -2354,11 +2405,17 @@ mod tests {
                     scale: None,
                     immutable: false,
                     computed: false,
-                    semantic_object: None,
+                    references_entity: None,
                     value_source: None,
-                    value_list: None,
+                    prefer_dialog: false,
                     text_path: None,
-                },
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
+            },
                 FieldDef {
                     name: "Description",
                     label: "Beschreibung",
@@ -2368,11 +2425,17 @@ mod tests {
                     scale: None,
                     immutable: false,
                     computed: false,
-                    semantic_object: None,
+                    references_entity: None,
                     value_source: None,
-                    value_list: None,
+                    prefer_dialog: false,
                     text_path: None,
-                },
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
+            },
             ];
             Some(FIELDS)
         }
@@ -2424,11 +2487,17 @@ mod tests {
                     scale: None,
                     immutable: true,
                     computed: false,
-                    semantic_object: None,
+                    references_entity: None,
                     value_source: None,
-                    value_list: None,
+                    prefer_dialog: false,
                     text_path: None,
-                },
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
+            },
                 FieldDef {
                     name: "ListID",
                     label: "Listen-ID",
@@ -2438,11 +2507,17 @@ mod tests {
                     scale: None,
                     immutable: true,
                     computed: false,
-                    semantic_object: None,
+                    references_entity: None,
                     value_source: None,
-                    value_list: None,
+                    prefer_dialog: false,
                     text_path: None,
-                },
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
+            },
                 FieldDef {
                     name: "Code",
                     label: "Code",
@@ -2452,11 +2527,17 @@ mod tests {
                     scale: None,
                     immutable: false,
                     computed: false,
-                    semantic_object: None,
+                    references_entity: None,
                     value_source: None,
-                    value_list: None,
+                    prefer_dialog: false,
                     text_path: None,
-                },
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
+            },
                 FieldDef {
                     name: "Description",
                     label: "Beschreibung",
@@ -2466,11 +2547,17 @@ mod tests {
                     scale: None,
                     immutable: false,
                     computed: false,
-                    semantic_object: None,
+                    references_entity: None,
                     value_source: None,
-                    value_list: None,
+                    prefer_dialog: false,
                     text_path: None,
-                },
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
+            },
                 FieldDef {
                     name: "SortOrder",
                     label: "Reihenfolge",
@@ -2480,11 +2567,17 @@ mod tests {
                     scale: None,
                     immutable: false,
                     computed: false,
-                    semantic_object: None,
+                    references_entity: None,
                     value_source: None,
-                    value_list: None,
+                    prefer_dialog: false,
                     text_path: None,
-                },
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
+            },
             ];
             Some(FIELDS)
         }

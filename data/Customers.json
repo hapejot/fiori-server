@@ -2,9 +2,9 @@
   {
     "City": "Berlin",
     "Country": "DE",
-    "CustomerID": "C004",
     "CustomerName": "DisplayMax SE",
     "Email": "service@displaymax.de",
+    "ID": "640987dd-2c2e-575b-b764-4ede52acbd0f",
     "Phone": "+49 30 55667-800",
     "PostalCode": "10117",
     "Street": "Friedrichstr. 100"
@@ -12,9 +12,9 @@
   {
     "City": "München",
     "Country": "DE",
-    "CustomerID": "C001",
     "CustomerName": "TechCorp GmbH",
     "Email": "info@techcorp.de",
+    "ID": "e526775a-b370-5a20-8350-ee7b596af4f4",
     "Phone": "+49 89 12345-0",
     "PostalCode": "80802",
     "Street": "Leopoldstr. 42"
@@ -22,9 +22,9 @@
   {
     "City": "London",
     "Country": "GB",
-    "CustomerID": "C003",
     "CustomerName": "ConnectWorld Ltd.",
     "Email": "sales@connectworld.co.uk",
+    "ID": "40eceb19-2bbe-5570-bcc2-b3e638e325d8",
     "Phone": "+44 20 7946-0958",
     "PostalCode": "NW1 6XE",
     "Street": "12 Baker Street"
@@ -32,9 +32,9 @@
   {
     "City": "Wien",
     "Country": "AT",
-    "CustomerID": "C005",
     "CustomerName": "LightDesign KG",
     "Email": "hello@lightdesign.at",
+    "ID": "abe7e76f-193f-5c64-b3e7-6352ad62139d",
     "Phone": "+43 1 234-5678",
     "PostalCode": "1070",
     "Street": "Mariahilfer Str. 88"
@@ -42,9 +42,9 @@
   {
     "City": "Zürich",
     "Country": "CH",
-    "CustomerID": "C002",
     "CustomerName": "PeriphTech AG",
     "Email": "kontakt@periphtech.ch",
+    "ID": "0066acd3-3d2f-573a-abd0-f4f2ea728695",
     "Phone": "+41 44 987-6543",
     "PostalCode": "8001",
     "Street": "Bahnhofstr. 7"

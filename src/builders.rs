@@ -238,11 +238,9 @@ fn build_manifest_value(
                         "earlyRequests": true
                     }
                 },
-                "i18n": {
+                "@i18n": {
                     "type": "sap.ui.model.resource.ResourceModel",
-                    "settings": {
-                        "bundleUrl": "i18n/i18n.properties"
-                    }
+                    "uri": "i18n/i18n.properties"
                 }
             },
             "routing": {

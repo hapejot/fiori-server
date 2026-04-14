@@ -75,5 +75,362 @@
     "ID": "ab4e80b5-6e38-4afa-baee-71e1519b78c6",
     "ListID": "68529b35-6721-4d72-a844-14e8a207c32c",
     "SortOrder": 0
+  },
+  {
+    "ID": "26ce9015-2a7d-5952-a2b4-b5a569485bbd",
+    "ListID": "3b198107-13ba-5e27-8a8b-f3cc1d7d2a0c",
+    "Code": "P1",
+    "Description": "Kritisch",
+    "SortOrder": 0
+  },
+  {
+    "ID": "783a6aa5-af97-5c69-be5b-fb4490700963",
+    "ListID": "3b198107-13ba-5e27-8a8b-f3cc1d7d2a0c",
+    "Code": "P2",
+    "Description": "Hoch",
+    "SortOrder": 1
+  },
+  {
+    "ID": "f8290c49-2fda-5b59-a8a1-9546d69a7fe9",
+    "ListID": "3b198107-13ba-5e27-8a8b-f3cc1d7d2a0c",
+    "Code": "P3",
+    "Description": "Mittel",
+    "SortOrder": 2
+  },
+  {
+    "ID": "68db9cdd-6774-5495-a408-a5e27d84419b",
+    "ListID": "3b198107-13ba-5e27-8a8b-f3cc1d7d2a0c",
+    "Code": "P4",
+    "Description": "Niedrig",
+    "SortOrder": 3
+  },
+  {
+    "ID": "008b3807-d779-5a15-b530-447afb6be3d4",
+    "ListID": "dfcfe534-098c-52ee-b0ff-3441af2c5b33",
+    "Code": "NEW",
+    "Description": "Neu",
+    "SortOrder": 0
+  },
+  {
+    "ID": "8233e3e1-01c4-5fd6-b2d7-7c7b61e94767",
+    "ListID": "dfcfe534-098c-52ee-b0ff-3441af2c5b33",
+    "Code": "INP",
+    "Description": "In Bearbeitung",
+    "SortOrder": 1
+  },
+  {
+    "ID": "5083ec94-6062-5df0-bac4-5a3af76583b7",
+    "ListID": "dfcfe534-098c-52ee-b0ff-3441af2c5b33",
+    "Code": "RES",
+    "Description": "Gelöst",
+    "SortOrder": 2
+  },
+  {
+    "ID": "e7dfa029-d77b-546b-a21c-c64908b47322",
+    "ListID": "dfcfe534-098c-52ee-b0ff-3441af2c5b33",
+    "Code": "CLS",
+    "Description": "Geschlossen",
+    "SortOrder": 3
+  },
+  {
+    "ID": "2e7b1c2f-1ce7-5e71-baf0-1347fc7c4cc6",
+    "ListID": "41c312eb-76ee-51aa-8157-ef888d202838",
+    "Code": "NET",
+    "Description": "Netzwerk",
+    "SortOrder": 0
+  },
+  {
+    "ID": "975d71f2-788c-5f3f-a528-d8891e535cf9",
+    "ListID": "41c312eb-76ee-51aa-8157-ef888d202838",
+    "Code": "HW",
+    "Description": "Hardware",
+    "SortOrder": 1
+  },
+  {
+    "ID": "9c243ef3-9218-5448-b342-191e3f1cee59",
+    "ListID": "41c312eb-76ee-51aa-8157-ef888d202838",
+    "Code": "SW",
+    "Description": "Software",
+    "SortOrder": 2
+  },
+  {
+    "ID": "d760e5fc-9a19-5ee3-a350-27ec93bffb53",
+    "ListID": "41c312eb-76ee-51aa-8157-ef888d202838",
+    "Code": "ACC",
+    "Description": "Zugang",
+    "SortOrder": 3
+  },
+  {
+    "ID": "71c22547-8836-5e21-8a2d-b4fc3605d308",
+    "ListID": "41c312eb-76ee-51aa-8157-ef888d202838",
+    "Code": "OTH",
+    "Description": "Sonstiges",
+    "SortOrder": 4
+  },
+  {
+    "ID": "dae252e4-c507-502c-a525-341a08c20159",
+    "ListID": "4910f44a-3b54-547f-be18-93a9abd36d4a",
+    "Code": "NEW",
+    "Description": "Neu",
+    "SortOrder": 0
+  },
+  {
+    "ID": "c4e78442-8621-56e1-8448-ce6301e8eba0",
+    "ListID": "4910f44a-3b54-547f-be18-93a9abd36d4a",
+    "Code": "APR",
+    "Description": "Genehmigt",
+    "SortOrder": 1
+  },
+  {
+    "ID": "2cfef45e-ade9-5b93-8666-e7524738fb38",
+    "ListID": "4910f44a-3b54-547f-be18-93a9abd36d4a",
+    "Code": "INP",
+    "Description": "In Bearbeitung",
+    "SortOrder": 2
+  },
+  {
+    "ID": "d05240dc-8bf7-56af-ae22-a16169e7052b",
+    "ListID": "4910f44a-3b54-547f-be18-93a9abd36d4a",
+    "Code": "FUL",
+    "Description": "Erfüllt",
+    "SortOrder": 3
+  },
+  {
+    "ID": "a5b14950-0d48-5d26-b502-182937fe3577",
+    "ListID": "4910f44a-3b54-547f-be18-93a9abd36d4a",
+    "Code": "CLS",
+    "Description": "Geschlossen",
+    "SortOrder": 4
+  },
+  {
+    "ID": "a2ab453a-9c92-571d-8c10-77ac7a9f61ef",
+    "ListID": "8fa130ff-a7fc-515f-a955-ef5d92520495",
+    "Code": "ACCT",
+    "Description": "Benutzerkonto",
+    "SortOrder": 0
+  },
+  {
+    "ID": "440f282a-ad0b-5c26-b69e-a3601cd35c64",
+    "ListID": "8fa130ff-a7fc-515f-a955-ef5d92520495",
+    "Code": "EQUIP",
+    "Description": "Ausstattung",
+    "SortOrder": 1
+  },
+  {
+    "ID": "76b58019-fb5d-556c-86df-faba17f74f13",
+    "ListID": "8fa130ff-a7fc-515f-a955-ef5d92520495",
+    "Code": "SW",
+    "Description": "Software",
+    "SortOrder": 2
+  },
+  {
+    "ID": "1fb80d2f-6958-5040-908a-378ea18f18cc",
+    "ListID": "8fa130ff-a7fc-515f-a955-ef5d92520495",
+    "Code": "ACC",
+    "Description": "Zugang",
+    "SortOrder": 3
+  },
+  {
+    "ID": "e67af869-8884-56f4-ac50-2848c50bd431",
+    "ListID": "8fa130ff-a7fc-515f-a955-ef5d92520495",
+    "Code": "OTH",
+    "Description": "Sonstiges",
+    "SortOrder": 4
+  },
+  {
+    "ID": "c1333166-cac4-59db-adf8-c873e72d48d8",
+    "ListID": "2dad2b3f-399c-5147-b1b1-5d1e659db0a6",
+    "Code": "DRF",
+    "Description": "Entwurf",
+    "SortOrder": 0
+  },
+  {
+    "ID": "4a305e2a-661b-5239-a459-101fd379ff29",
+    "ListID": "2dad2b3f-399c-5147-b1b1-5d1e659db0a6",
+    "Code": "SUB",
+    "Description": "Eingereicht",
+    "SortOrder": 1
+  },
+  {
+    "ID": "ab10b0bb-c512-57a1-97ea-91f597b99d21",
+    "ListID": "2dad2b3f-399c-5147-b1b1-5d1e659db0a6",
+    "Code": "APR",
+    "Description": "Genehmigt",
+    "SortOrder": 2
+  },
+  {
+    "ID": "42798027-97dc-5936-a8fd-bad89eb63b72",
+    "ListID": "2dad2b3f-399c-5147-b1b1-5d1e659db0a6",
+    "Code": "IMP",
+    "Description": "In Umsetzung",
+    "SortOrder": 3
+  },
+  {
+    "ID": "3a77c335-ce1b-519b-88a2-c22e78cf1cc3",
+    "ListID": "2dad2b3f-399c-5147-b1b1-5d1e659db0a6",
+    "Code": "CMP",
+    "Description": "Abgeschlossen",
+    "SortOrder": 4
+  },
+  {
+    "ID": "700a8f51-5ba4-5b36-957d-4af2a3573c22",
+    "ListID": "2dad2b3f-399c-5147-b1b1-5d1e659db0a6",
+    "Code": "REJ",
+    "Description": "Abgelehnt",
+    "SortOrder": 5
+  },
+  {
+    "ID": "604a1908-caf3-5912-b9ab-5e0823d923fa",
+    "ListID": "6fe919e5-e59a-5106-b8b2-2643d60b6e6e",
+    "Code": "STD",
+    "Description": "Standard",
+    "SortOrder": 0
+  },
+  {
+    "ID": "0fec0906-0bcf-5ab4-ae6e-74e1c2649d12",
+    "ListID": "6fe919e5-e59a-5106-b8b2-2643d60b6e6e",
+    "Code": "NRM",
+    "Description": "Normal",
+    "SortOrder": 1
+  },
+  {
+    "ID": "ae02f7ae-c1c4-597a-9259-d3e70b5179a4",
+    "ListID": "6fe919e5-e59a-5106-b8b2-2643d60b6e6e",
+    "Code": "EMG",
+    "Description": "Notfall",
+    "SortOrder": 2
+  },
+  {
+    "ID": "92e73ab7-d640-5116-8057-738a78288ec8",
+    "ListID": "62ff382b-3c5a-5c06-a598-4b199c16b422",
+    "Code": "LOW",
+    "Description": "Niedrig",
+    "SortOrder": 0
+  },
+  {
+    "ID": "45f9e23c-fd1e-5e82-9105-67e053f358c9",
+    "ListID": "62ff382b-3c5a-5c06-a598-4b199c16b422",
+    "Code": "MED",
+    "Description": "Mittel",
+    "SortOrder": 1
+  },
+  {
+    "ID": "0763d7e3-4d58-5bd6-85af-1e7915777651",
+    "ListID": "62ff382b-3c5a-5c06-a598-4b199c16b422",
+    "Code": "HIG",
+    "Description": "Hoch",
+    "SortOrder": 2
+  },
+  {
+    "ID": "eead4c1a-d7a8-5fe5-b015-e38f9bdf0e6f",
+    "ListID": "62ff382b-3c5a-5c06-a598-4b199c16b422",
+    "Code": "CRT",
+    "Description": "Kritisch",
+    "SortOrder": 3
+  },
+  {
+    "ID": "a6f02d80-3864-5bab-9d9e-2c11f15f4808",
+    "ListID": "8444530e-6584-5020-8ca8-1fc2d5c8b1f2",
+    "Code": "NEW",
+    "Description": "Neu",
+    "SortOrder": 0
+  },
+  {
+    "ID": "15860eef-5999-519a-b3ea-2c29a7e68df4",
+    "ListID": "8444530e-6584-5020-8ca8-1fc2d5c8b1f2",
+    "Code": "CNF",
+    "Description": "Bestätigt",
+    "SortOrder": 1
+  },
+  {
+    "ID": "c6706aa2-f722-53b0-a883-3b42bec14248",
+    "ListID": "8444530e-6584-5020-8ca8-1fc2d5c8b1f2",
+    "Code": "INP",
+    "Description": "In Bearbeitung",
+    "SortOrder": 2
+  },
+  {
+    "ID": "4a699ea3-ff41-52ac-9ace-1459000841a2",
+    "ListID": "8444530e-6584-5020-8ca8-1fc2d5c8b1f2",
+    "Code": "FIX",
+    "Description": "Behoben",
+    "SortOrder": 3
+  },
+  {
+    "ID": "3fa8d904-7358-5668-b73b-72a855cc2947",
+    "ListID": "8444530e-6584-5020-8ca8-1fc2d5c8b1f2",
+    "Code": "VER",
+    "Description": "Verifiziert",
+    "SortOrder": 4
+  },
+  {
+    "ID": "d13259c9-e405-540b-8ea7-5ce8707e4940",
+    "ListID": "8444530e-6584-5020-8ca8-1fc2d5c8b1f2",
+    "Code": "CLS",
+    "Description": "Geschlossen",
+    "SortOrder": 5
+  },
+  {
+    "ID": "5ab6e185-4654-5c9c-adb5-54be99894fa6",
+    "ListID": "56706664-e1a7-5427-9d6a-3949b20fb6f2",
+    "Code": "CRT",
+    "Description": "Kritisch",
+    "SortOrder": 0
+  },
+  {
+    "ID": "e4346c6e-e6ea-59c6-919f-cafe2f0a5b7e",
+    "ListID": "56706664-e1a7-5427-9d6a-3949b20fb6f2",
+    "Code": "MAJ",
+    "Description": "Schwerwiegend",
+    "SortOrder": 1
+  },
+  {
+    "ID": "fc6040a1-ee64-5e39-b5cb-103e7eaf177c",
+    "ListID": "56706664-e1a7-5427-9d6a-3949b20fb6f2",
+    "Code": "MIN",
+    "Description": "Geringfügig",
+    "SortOrder": 2
+  },
+  {
+    "ID": "0792e360-efa5-55d7-a907-404745c558cf",
+    "ListID": "56706664-e1a7-5427-9d6a-3949b20fb6f2",
+    "Code": "COS",
+    "Description": "Kosmetisch",
+    "SortOrder": 3
+  },
+  {
+    "ID": "5b16722c-fd98-571b-9e93-03f71066c1fd",
+    "ListID": "4299c778-6186-5bbe-8695-5a8fa430ce5f",
+    "Code": "FE",
+    "Description": "Frontend",
+    "SortOrder": 0
+  },
+  {
+    "ID": "e17237ba-5478-5f5f-b95b-5b7f9553ba84",
+    "ListID": "4299c778-6186-5bbe-8695-5a8fa430ce5f",
+    "Code": "BE",
+    "Description": "Backend",
+    "SortOrder": 1
+  },
+  {
+    "ID": "880518af-173f-539e-976a-ddb95df15643",
+    "ListID": "4299c778-6186-5bbe-8695-5a8fa430ce5f",
+    "Code": "DB",
+    "Description": "Datenbank",
+    "SortOrder": 2
+  },
+  {
+    "ID": "1aa17bde-bcc1-56bb-870c-662da3b89e00",
+    "ListID": "4299c778-6186-5bbe-8695-5a8fa430ce5f",
+    "Code": "API",
+    "Description": "API",
+    "SortOrder": 3
+  },
+  {
+    "ID": "1f60866f-cf9e-5031-94ac-96960c324c46",
+    "ListID": "4299c778-6186-5bbe-8695-5a8fa430ce5f",
+    "Code": "INF",
+    "Description": "Infrastruktur",
+    "SortOrder": 4
   }
 ]

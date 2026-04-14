@@ -12,17 +12,30 @@ pub struct FieldDef {
     pub immutable: bool,
     /// Feld wird vom Server berechnet/generiert (Core.Computed) – nie im Formular sichtbar.
     pub computed: bool,
-    /// Semantic Object fuer Intent-Based Navigation (z.B. "Products").
-    pub semantic_object: Option<&'static str>,
-    /// Name einer Werteliste (z.B. "EdmTypes") – erzeugt Common.ValueList
+    /// FK-Referenz auf ein anderes EntitySet (z.B. "Customers").
+    /// Erzeugt automatisch: 1:1 NavigationProperty, Common.Text, ValueList, Intent-Based Navigation.
+    pub references_entity: Option<&'static str>,
+    /// Name einer Werteliste (UUID der FieldValueList) – erzeugt Common.ValueList
     /// mit CollectionPath="FieldValueListItems", Out=Code, Display=Description.
     pub value_source: Option<&'static str>,
-    /// Flexible ValueList-Definition – überschreibt value_source wenn gesetzt.
-    /// Erlaubt beliebige CollectionPath, Key- und Display-Felder.
-    pub value_list: Option<&'static ValueListDef>,
+    /// true → Suchdialog bevorzugen, false → Dropdown (betrifft value_source und references_entity).
+    pub prefer_dialog: bool,
     /// Pfad fuer Common.Text bei FK-Referenzen (z.B. "_ValueList/ListName").
     /// Erzeugt Common.Text + UI.TextArrangement/TextOnly auf diesem Feld.
     pub text_path: Option<&'static str>,
+    // ── Annotation-Steuerung (abgeleitet in build_annotations) ──
+    /// Feld erscheint als Suchfilter (UI.SelectionFields).
+    pub searchable: bool,
+    /// Feld erscheint als Listenspalte (UI.LineItem).
+    pub show_in_list: bool,
+    /// Reihenfolge in der Liste (aufsteigend sortiert).
+    pub list_sort_order: Option<u32>,
+    /// Wichtigkeit in der Liste ("High", "Medium", "Low").
+    pub list_importance: Option<&'static str>,
+    /// Pfad fuer Criticality-Indikator in der Liste.
+    pub list_criticality_path: Option<&'static str>,
+    /// FieldGroup-Qualifier – ordnet das Feld einer Formulargruppe zu (z.B. "Basic", "Tile").
+    pub form_group: Option<&'static str>,
 }
 
 /// Flexible ValueList-Konfiguration fuer Custom-Wertehilfen.
@@ -35,19 +48,6 @@ pub struct ValueListDef {
     pub display_property: Option<&'static str>,
     /// true → Dropdown (Common.ValueListWithFixedValues), false → Dialog
     pub fixed_values: bool,
-}
-
-/// LineItem-Referenz mit Annotation-spezifischen Attributen.
-pub struct LineItemField {
-    pub name: &'static str,
-    /// Optionales Label-Override (falls name ein Pfad wie "Product/ProductName" ist).
-    pub label: Option<&'static str>,
-    pub importance: Option<&'static str>,
-    pub criticality_path: Option<&'static str>,
-    /// Navigation-Property-Pfad – erzeugt UI.DataFieldWithNavigationPath.
-    pub navigation_path: Option<&'static str>,
-    /// Semantic Object – erzeugt UI.DataFieldWithIntentBasedNavigation.
-    pub semantic_object: Option<&'static str>,
 }
 
 /// NavigationProperty-Definition im EntityType.
@@ -76,12 +76,6 @@ pub struct HeaderFacetDef {
     pub label: &'static str,
 }
 
-/// Eine Gruppe von Feldern (z.B. "General", "Pricing").
-pub struct FieldGroupDef {
-    pub qualifier: &'static str,
-    pub fields: &'static [&'static str],
-}
-
 /// Ein CollectionFacet auf der Object Page, verweist auf eine FieldGroup.
 pub struct FacetSectionDef {
     pub label: &'static str,
@@ -108,13 +102,10 @@ pub struct HeaderInfoDef {
 
 /// Komplette Annotation-Definition fuer eine Entitaet.
 pub struct AnnotationsDef {
-    pub selection_fields: &'static [&'static str],
-    pub line_item: &'static [LineItemField],
     pub header_info: HeaderInfoDef,
     pub header_facets: &'static [HeaderFacetDef],
     pub data_points: &'static [DataPointDef],
     pub facet_sections: &'static [FacetSectionDef],
-    pub field_groups: &'static [FieldGroupDef],
     /// Tabellen-Facets fuer Kompositionen (z.B. OrderItems).
     pub table_facets: &'static [TableFacetDef],
 }
@@ -353,50 +344,53 @@ pub fn build_annotations(
     let target = format!("{}.{}", NAMESPACE, entity_type_name);
     let mut anns = Vec::new();
 
-    // ── SelectionFields ──
+    // ── SelectionFields (derived from FieldDef.searchable) ──
     anns.push(Ann {
         term: "UI.SelectionFields".into(),
         qualifier: None,
         content: AnnContent::PropertyPaths(
-            def.selection_fields.iter().map(|s| (*s).into()).collect(),
+            fields
+                .iter()
+                .filter(|f| f.searchable)
+                .map(|f| f.name.into())
+                .collect(),
         ),
     });
 
-    // ── LineItem ──
+    // ── LineItem (derived from FieldDef.show_in_list, sorted by list_sort_order) ──
+    let mut line_item_fields: Vec<&FieldDef> = fields
+        .iter()
+        .filter(|f| f.show_in_list)
+        .collect();
+    line_item_fields.sort_by_key(|f| f.list_sort_order.unwrap_or(u32::MAX));
     let mut records = Vec::new();
-    for f in def.line_item {
-        let label = f.label.unwrap_or_else(|| {
-            fields
-                .iter()
-                .find(|fd| fd.name == f.name)
-                .map(|fd| fd.label)
-                .unwrap_or(f.name)
-        });
-        let record_type = if f.semantic_object.is_some() {
+    for f in &line_item_fields {
+        let record_type = if f.references_entity.is_some() {
             "UI.DataFieldWithIntentBasedNavigation"
-        } else if f.navigation_path.is_some() {
-            "UI.DataFieldWithNavigationPath"
         } else {
             "UI.DataField"
         };
         let mut props = vec![
             PV::Path("Value".into(), f.name.into()),
-            PV::Str("Label".into(), label.into()),
         ];
-        if let Some(so) = f.semantic_object {
-            props.push(PV::Str("SemanticObject".into(), so.into()));
+        if let Some(re) = f.references_entity {
+            props.push(PV::Str("SemanticObject".into(), re.into()));
             props.push(PV::Str("Action".into(), "display".into()));
+            props.push(PV::Collection("Mapping".into(), vec![Rec {
+                record_type: Some("Common.SemanticObjectMappingType".into()),
+                props: vec![
+                    PV::PropPath("LocalProperty".into(), f.name.into()),
+                    PV::Str("SemanticObjectProperty".into(), "ID".into()),
+                ],
+            }]));
         }
-        if let Some(nav) = f.navigation_path {
-            props.push(PV::NavPropPath("Target".into(), nav.into()));
-        }
-        if let Some(imp) = f.importance {
+        if let Some(imp) = f.list_importance {
             props.push(PV::EnumMember(
                 "![@UI.Importance]".into(),
                 format!("UI.ImportanceType/{}", imp),
             ));
         }
-        if let Some(crit) = f.criticality_path {
+        if let Some(crit) = f.list_criticality_path {
             props.push(PV::Path("Criticality".into(), crit.into()));
         }
         records.push(Rec {
@@ -534,32 +528,46 @@ pub fn build_annotations(
         content: AnnContent::Collection(facet_records),
     });
 
-    // ── FieldGroups ──
-    for fg in def.field_groups {
+    // ── FieldGroups (derived from FieldDef.form_group) ──
+    // Collect unique qualifiers in order of first appearance, then emit one FieldGroup per qualifier.
+    let mut seen_qualifiers: Vec<&str> = Vec::new();
+    for f in fields {
+        if let Some(q) = f.form_group {
+            if !seen_qualifiers.contains(&q) {
+                seen_qualifiers.push(q);
+            }
+        }
+    }
+    for qualifier in &seen_qualifiers {
         let mut fg_records = Vec::new();
-        for name in fg.fields {
-            let field_def = fields.iter().find(|fd| fd.name == *name);
-            let label = field_def.map(|fd| fd.label).unwrap_or(name);
-            let semantic_obj = field_def.and_then(|fd| fd.semantic_object);
-            let mut props = vec![
-                PV::Path("Value".into(), (*name).into()),
-                PV::Str("Label".into(), label.into()),
-            ];
-            let record_type = if let Some(so) = semantic_obj {
-                props.push(PV::Str("SemanticObject".into(), so.into()));
-                props.push(PV::Str("Action".into(), "display".into()));
-                "UI.DataFieldWithIntentBasedNavigation"
-            } else {
-                "UI.DataField"
-            };
-            fg_records.push(Rec {
-                record_type: Some(record_type.into()),
-                props,
-            });
+        for f in fields {
+            if f.form_group == Some(qualifier) {
+                let mut props = vec![
+                    PV::Path("Value".into(), f.name.into()),
+                ];
+                let record_type = if let Some(re) = f.references_entity {
+                    props.push(PV::Str("SemanticObject".into(), re.into()));
+                    props.push(PV::Str("Action".into(), "display".into()));
+                    props.push(PV::Collection("Mapping".into(), vec![Rec {
+                        record_type: Some("Common.SemanticObjectMappingType".into()),
+                        props: vec![
+                            PV::PropPath("LocalProperty".into(), f.name.into()),
+                            PV::Str("SemanticObjectProperty".into(), "ID".into()),
+                        ],
+                    }]));
+                    "UI.DataFieldWithIntentBasedNavigation"
+                } else {
+                    "UI.DataField"
+                };
+                fg_records.push(Rec {
+                    record_type: Some(record_type.into()),
+                    props,
+                });
+            }
         }
         anns.push(Ann {
             term: "UI.FieldGroup".into(),
-            qualifier: Some(fg.qualifier.into()),
+            qualifier: Some((*qualifier).into()),
             content: AnnContent::Record(Rec {
                 record_type: Some("UI.FieldGroupType".into()),
                 props: vec![PV::Collection("Data".into(), fg_records)],
@@ -572,16 +580,29 @@ pub fn build_annotations(
         annotations: anns,
     });
 
-    // ── Property-level Common.SemanticObject annotations ──
+    // ── Property-level Common.SemanticObject + SemanticObjectMapping annotations ──
     for f in fields {
-        if let Some(so) = f.semantic_object {
+        if let Some(re) = f.references_entity {
             blocks.push(Anns {
                 target: format!("{}.{}/{}", NAMESPACE, entity_type_name, f.name),
-                annotations: vec![Ann {
-                    term: "Common.SemanticObject".into(),
-                    qualifier: None,
-                    content: AnnContent::Str(so.into()),
-                }],
+                annotations: vec![
+                    Ann {
+                        term: "Common.SemanticObject".into(),
+                        qualifier: None,
+                        content: AnnContent::Str(re.into()),
+                    },
+                    Ann {
+                        term: "Common.SemanticObjectMapping".into(),
+                        qualifier: None,
+                        content: AnnContent::Collection(vec![Rec {
+                            record_type: None,
+                            props: vec![
+                                PV::PropPath("LocalProperty".into(), f.name.into()),
+                                PV::Str("SemanticObjectProperty".into(), "ID".into()),
+                            ],
+                        }]),
+                    },
+                ],
             });
         }
     }
@@ -740,7 +761,7 @@ pub fn build_capabilities(
             qualifier: None,
             content: AnnContent::Str(f.label.into()),
         }];
-        if f.edm_type == "Edm.Guid" {
+        if f.edm_type == "Edm.Guid" && f.computed {
             prop_anns.push(Ann {
                 term: "UI.Hidden".into(),
                 qualifier: None,
@@ -796,14 +817,23 @@ pub fn build_capabilities(
                 ),
             });
         }
-        if let Some(vl) = f.value_list {
-            prop_anns.extend(build_value_list_anns(f.name, vl, None));
+        if let Some(re) = f.references_entity {
+            // FK→entity reference: derive ValueList from references_entity.
+            // Display property derived from text_path (e.g. "Customer/CustomerName" → "CustomerName").
+            let display = f.text_path.and_then(|tp| tp.rsplit('/').next());
+            let vl = ValueListDef {
+                collection_path: re,
+                key_property: "ID",
+                display_property: display,
+                fixed_values: !f.prefer_dialog,
+            };
+            prop_anns.extend(build_value_list_anns(f.name, &vl, None));
         } else if let Some(vs) = f.value_source {
             let classic_vl = ValueListDef {
                 collection_path: "FieldValueListItems",
                 key_property: "Code",
                 display_property: Some("Description"),
-                fixed_values: true,
+                fixed_values: !f.prefer_dialog,
             };
             prop_anns.extend(build_value_list_anns(f.name, &classic_vl, Some(vs)));
         }
@@ -982,10 +1012,16 @@ mod tests {
                 scale: None,
                 immutable: true,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: true,
+                list_sort_order: Some(0),
+                list_importance: Some("High"),
+                list_criticality_path: None,
+                form_group: Some("Main"),
             },
             FieldDef {
                 name: "ProductName",
@@ -996,10 +1032,16 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: true,
+                show_in_list: true,
+                list_sort_order: Some(1),
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Main"),
             },
             FieldDef {
                 name: "Price",
@@ -1010,35 +1052,22 @@ mod tests {
                 scale: Some(2),
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Main"),
             },
         ]
     }
 
     fn simple_annotations() -> AnnotationsDef {
         AnnotationsDef {
-            selection_fields: &["ProductName"],
-            line_item: &[
-                LineItemField {
-                    name: "ProductID",
-                    label: None,
-                    importance: Some("High"),
-                    criticality_path: None,
-                    navigation_path: None,
-                    semantic_object: None,
-                },
-                LineItemField {
-                    name: "ProductName",
-                    label: None,
-                    importance: None,
-                    criticality_path: None,
-                    navigation_path: None,
-                    semantic_object: None,
-                },
-            ],
             header_info: HeaderInfoDef {
                 type_name: "Product",
                 type_name_plural: "Products",
@@ -1052,10 +1081,6 @@ mod tests {
                 id: "GeneralSection",
                 field_group_qualifier: "Main",
                 field_group_label: "Main Data",
-            }],
-            field_groups: &[FieldGroupDef {
-                qualifier: "Main",
-                fields: &["ProductID", "ProductName", "Price"],
             }],
             table_facets: &[],
         }
@@ -1080,25 +1105,36 @@ mod tests {
     fn annotations_xml_line_item_basic() {
         let xml = build_annotations_xml("Product", &simple_annotations(), &simple_fields());
         assert!(xml.contains("<Annotation Term=\"UI.LineItem\">"));
-        // ProductID field: should use label from FieldDef
+        // ProductID field: value path from FieldDef
         assert!(xml.contains("Property=\"Value\" Path=\"ProductID\""));
-        assert!(xml.contains("Property=\"Label\" String=\"Product Nr.\""));
+        // Label comes from Common.Label on the property, not from DataField
         // High importance
         assert!(xml.contains("EnumMember=\"UI.ImportanceType/High\""));
     }
 
     #[test]
     fn annotations_xml_line_item_with_semantic_object() {
+        let fields = vec![FieldDef {
+            name: "CustomerID",
+            label: "Customer",
+            edm_type: "Edm.String",
+            max_length: None,
+            precision: None,
+            scale: None,
+            immutable: false,
+            computed: false,
+            references_entity: Some("Customers"),
+            value_source: None,
+            prefer_dialog: false,
+            text_path: None,
+            searchable: false,
+            show_in_list: true,
+            list_sort_order: Some(0),
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: None,
+        }];
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[LineItemField {
-                name: "CustomerID",
-                label: Some("Customer"),
-                importance: None,
-                criticality_path: None,
-                navigation_path: None,
-                semantic_object: Some("Customers"),
-            }],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1108,58 +1144,37 @@ mod tests {
             header_facets: &[],
             data_points: &[],
             facet_sections: &[],
-            field_groups: &[],
             table_facets: &[],
         };
-        let xml = build_annotations_xml("Test", &def, &[]);
+        let xml = build_annotations_xml("Test", &def, &fields);
         assert!(xml.contains("Record Type=\"UI.DataFieldWithIntentBasedNavigation\""));
         assert!(xml.contains("Property=\"SemanticObject\" String=\"Customers\""));
         assert!(xml.contains("Property=\"Action\" String=\"display\""));
-        assert!(xml.contains("Property=\"Label\" String=\"Customer\""));
-    }
-
-    #[test]
-    fn annotations_xml_line_item_with_navigation_path() {
-        let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[LineItemField {
-                name: "Customer/CustomerName",
-                label: Some("Kunde"),
-                importance: None,
-                criticality_path: None,
-                navigation_path: Some("Customer"),
-                semantic_object: None,
-            }],
-            header_info: HeaderInfoDef {
-                type_name: "T",
-                type_name_plural: "Ts",
-                title_path: "X",
-                description_path: "Y",
-            },
-            header_facets: &[],
-            data_points: &[],
-            facet_sections: &[],
-            field_groups: &[],
-            table_facets: &[],
-        };
-        let xml = build_annotations_xml("Test", &def, &[]);
-        assert!(xml.contains("Record Type=\"UI.DataFieldWithNavigationPath\""));
-        assert!(xml.contains("Property=\"Target\" NavigationPropertyPath=\"Customer\""));
-        assert!(xml.contains("Property=\"Label\" String=\"Kunde\""));
     }
 
     #[test]
     fn annotations_xml_line_item_with_criticality() {
+        let fields = vec![FieldDef {
+            name: "Status",
+            label: "Status",
+            edm_type: "Edm.String",
+            max_length: None,
+            precision: None,
+            scale: None,
+            immutable: false,
+            computed: false,
+            references_entity: None,
+            value_source: None,
+            prefer_dialog: false,
+            text_path: None,
+            searchable: false,
+            show_in_list: true,
+            list_sort_order: Some(0),
+            list_importance: None,
+            list_criticality_path: Some("StatusCriticality"),
+            form_group: None,
+        }];
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[LineItemField {
-                name: "Status",
-                label: Some("Status"),
-                importance: None,
-                criticality_path: Some("StatusCriticality"),
-                navigation_path: None,
-                semantic_object: None,
-            }],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1169,41 +1184,10 @@ mod tests {
             header_facets: &[],
             data_points: &[],
             facet_sections: &[],
-            field_groups: &[],
             table_facets: &[],
         };
-        let xml = build_annotations_xml("Test", &def, &[]);
+        let xml = build_annotations_xml("Test", &def, &fields);
         assert!(xml.contains("Property=\"Criticality\" Path=\"StatusCriticality\""));
-    }
-
-    #[test]
-    fn annotations_xml_line_item_label_fallback() {
-        // When no explicit label and no matching field → uses field name
-        let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[LineItemField {
-                name: "Unknown",
-                label: None,
-                importance: None,
-                criticality_path: None,
-                navigation_path: None,
-                semantic_object: None,
-            }],
-            header_info: HeaderInfoDef {
-                type_name: "T",
-                type_name_plural: "Ts",
-                title_path: "X",
-                description_path: "Y",
-            },
-            header_facets: &[],
-            data_points: &[],
-            facet_sections: &[],
-            field_groups: &[],
-            table_facets: &[],
-        };
-        let xml = build_annotations_xml("Test", &def, &[]);
-        // Falls back to field name as label
-        assert!(xml.contains("Property=\"Label\" String=\"Unknown\""));
     }
 
     #[test]
@@ -1226,8 +1210,6 @@ mod tests {
     #[test]
     fn annotations_xml_header_facets_with_data() {
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1246,7 +1228,6 @@ mod tests {
                 visualization: Some("Rating"),
             }],
             facet_sections: &[],
-            field_groups: &[],
             table_facets: &[],
         };
         let xml = build_annotations_xml("Test", &def, &[]);
@@ -1263,8 +1244,6 @@ mod tests {
     #[test]
     fn annotations_xml_data_point_minimal() {
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1280,7 +1259,6 @@ mod tests {
                 visualization: None,
             }],
             facet_sections: &[],
-            field_groups: &[],
             table_facets: &[],
         };
         let xml = build_annotations_xml("Test", &def, &[]);
@@ -1304,8 +1282,6 @@ mod tests {
     #[test]
     fn annotations_xml_table_facets() {
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1315,7 +1291,6 @@ mod tests {
             header_facets: &[],
             data_points: &[],
             facet_sections: &[],
-            field_groups: &[],
             table_facets: &[TableFacetDef {
                 label: "Positionen",
                 id: "ItemsFacet",
@@ -1334,11 +1309,9 @@ mod tests {
         let xml = build_annotations_xml("Product", &simple_annotations(), &simple_fields());
         assert!(xml.contains("Annotation Term=\"UI.FieldGroup\" Qualifier=\"Main\""));
         assert!(xml.contains("Record Type=\"UI.FieldGroupType\""));
-        // Fields should have labels from FieldDef
+        // Fields should use value paths from FieldDef (labels come from Common.Label)
         assert!(xml.contains("Property=\"Value\" Path=\"ProductID\""));
-        assert!(xml.contains("Property=\"Label\" String=\"Product Nr.\""));
         assert!(xml.contains("Property=\"Value\" Path=\"ProductName\""));
-        assert!(xml.contains("Property=\"Label\" String=\"Product Name\""));
         assert!(xml.contains("Property=\"Value\" Path=\"Price\""));
     }
 
@@ -1353,14 +1326,18 @@ mod tests {
             scale: None,
             immutable: false,
             computed: false,
-            semantic_object: Some("Customers"),
+            references_entity: Some("Customers"),
             value_source: None,
-            value_list: None,
+            prefer_dialog: false,
             text_path: None,
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: Some("Main"),
         }];
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1370,10 +1347,6 @@ mod tests {
             header_facets: &[],
             data_points: &[],
             facet_sections: &[],
-            field_groups: &[FieldGroupDef {
-                qualifier: "Main",
-                fields: &["CustomerID"],
-            }],
             table_facets: &[],
         };
         let xml = build_annotations_xml("Contact", &def, &fields);
@@ -1394,14 +1367,18 @@ mod tests {
             scale: None,
             immutable: false,
             computed: false,
-            semantic_object: Some("Customers"),
+            references_entity: Some("Customers"),
             value_source: None,
-            value_list: None,
+            prefer_dialog: false,
             text_path: None,
-        }];
+        searchable: false,
+        show_in_list: false,
+        list_sort_order: None,
+        list_importance: None,
+        list_criticality_path: None,
+        form_group: None,
+    }];
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1411,7 +1388,6 @@ mod tests {
             header_facets: &[],
             data_points: &[],
             facet_sections: &[],
-            field_groups: &[],
             table_facets: &[],
         };
         let xml = build_annotations_xml("Contact", &def, &fields);
@@ -1723,9 +1699,12 @@ mod tests {
 
     #[test]
     fn annotations_xml_multiple_selection_fields() {
+        let fields = vec![
+            FieldDef { name: "ProductName", label: "Name", edm_type: "Edm.String", max_length: None, precision: None, scale: None, immutable: false, computed: false, references_entity: None, value_source: None, prefer_dialog: false, text_path: None, searchable: true, show_in_list: false, list_sort_order: None, list_importance: None, list_criticality_path: None, form_group: None },
+            FieldDef { name: "Price", label: "Price", edm_type: "Edm.Decimal", max_length: None, precision: None, scale: None, immutable: false, computed: false, references_entity: None, value_source: None, prefer_dialog: false, text_path: None, searchable: true, show_in_list: false, list_sort_order: None, list_importance: None, list_criticality_path: None, form_group: None },
+            FieldDef { name: "Category", label: "Category", edm_type: "Edm.String", max_length: None, precision: None, scale: None, immutable: false, computed: false, references_entity: None, value_source: None, prefer_dialog: false, text_path: None, searchable: true, show_in_list: false, list_sort_order: None, list_importance: None, list_criticality_path: None, form_group: None },
+        ];
         let def = AnnotationsDef {
-            selection_fields: &["ProductName", "Price", "Category"],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1735,10 +1714,9 @@ mod tests {
             header_facets: &[],
             data_points: &[],
             facet_sections: &[],
-            field_groups: &[],
             table_facets: &[],
         };
-        let xml = build_annotations_xml("Test", &def, &[]);
+        let xml = build_annotations_xml("Test", &def, &fields);
         assert!(xml.contains("<PropertyPath>ProductName</PropertyPath>"));
         assert!(xml.contains("<PropertyPath>Price</PropertyPath>"));
         assert!(xml.contains("<PropertyPath>Category</PropertyPath>"));
@@ -1747,8 +1725,6 @@ mod tests {
     #[test]
     fn annotations_xml_empty_selection_fields() {
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1758,7 +1734,6 @@ mod tests {
             header_facets: &[],
             data_points: &[],
             facet_sections: &[],
-            field_groups: &[],
             table_facets: &[],
         };
         let xml = build_annotations_xml("Test", &def, &[]);
@@ -1768,17 +1743,11 @@ mod tests {
 
     #[test]
     fn annotations_xml_semantic_object_takes_precedence_over_navigation_path() {
-        // When both semantic_object and navigation_path are set, semantic_object wins
+        // semantic_object on FieldDef generates IntentBasedNavigation in LineItem
+        let fields = vec![FieldDef {
+            name: "CustomerID", label: "Customer", edm_type: "Edm.String", max_length: None, precision: None, scale: None, immutable: false, computed: false, references_entity: Some("Customers"), value_source: None, prefer_dialog: false, text_path: None, searchable: false, show_in_list: true, list_sort_order: Some(0), list_importance: None, list_criticality_path: None, form_group: None,
+        }];
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[LineItemField {
-                name: "CustomerID",
-                label: Some("Customer"),
-                importance: None,
-                criticality_path: None,
-                navigation_path: Some("Customer"),
-                semantic_object: Some("Customers"),
-            }],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1788,10 +1757,9 @@ mod tests {
             header_facets: &[],
             data_points: &[],
             facet_sections: &[],
-            field_groups: &[],
             table_facets: &[],
         };
-        let xml = build_annotations_xml("Test", &def, &[]);
+        let xml = build_annotations_xml("Test", &def, &fields);
         assert!(xml.contains("Record Type=\"UI.DataFieldWithIntentBasedNavigation\""));
         assert!(!xml.contains("Record Type=\"UI.DataFieldWithNavigationPath\""));
     }
@@ -1799,8 +1767,6 @@ mod tests {
     #[test]
     fn annotations_xml_multiple_data_points() {
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1825,7 +1791,6 @@ mod tests {
                 },
             ],
             facet_sections: &[],
-            field_groups: &[],
             table_facets: &[],
         };
         let xml = build_annotations_xml("Test", &def, &[]);
@@ -1851,10 +1816,16 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("General"),
             },
             FieldDef {
                 name: "Price",
@@ -1865,15 +1836,19 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Pricing"),
             },
         ];
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1883,16 +1858,6 @@ mod tests {
             header_facets: &[],
             data_points: &[],
             facet_sections: &[],
-            field_groups: &[
-                FieldGroupDef {
-                    qualifier: "General",
-                    fields: &["Name"],
-                },
-                FieldGroupDef {
-                    qualifier: "Pricing",
-                    fields: &["Price"],
-                },
-            ],
             table_facets: &[],
         };
         let xml = build_annotations_xml("Test", &def, &fields);
@@ -1903,8 +1868,6 @@ mod tests {
     #[test]
     fn annotations_xml_multiple_facet_sections() {
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1927,7 +1890,6 @@ mod tests {
                     field_group_label: "Detail Data",
                 },
             ],
-            field_groups: &[],
             table_facets: &[],
         };
         let xml = build_annotations_xml("Test", &def, &[]);
@@ -1940,8 +1902,6 @@ mod tests {
     #[test]
     fn annotations_xml_mixed_facets_and_table_facets() {
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1956,7 +1916,6 @@ mod tests {
                 field_group_qualifier: "Main",
                 field_group_label: "Main",
             }],
-            field_groups: &[],
             table_facets: &[TableFacetDef {
                 label: "Items",
                 id: "ItemsFacet",
@@ -1972,8 +1931,6 @@ mod tests {
     #[test]
     fn annotations_xml_multiple_header_facets() {
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -1992,7 +1949,6 @@ mod tests {
             ],
             data_points: &[],
             facet_sections: &[],
-            field_groups: &[],
             table_facets: &[],
         };
         let xml = build_annotations_xml("Test", &def, &[]);
@@ -2004,9 +1960,28 @@ mod tests {
 
     #[test]
     fn annotations_xml_field_group_unknown_field_uses_name_as_label() {
+        // Field label from FieldDef is used directly
+        let fields = vec![FieldDef {
+            name: "UnknownField",
+            label: "UnknownField",
+            edm_type: "Edm.String",
+            max_length: None,
+            precision: None,
+            scale: None,
+            immutable: false,
+            computed: false,
+            references_entity: None,
+            value_source: None,
+            prefer_dialog: false,
+            text_path: None,
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: Some("Main"),
+        }];
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -2016,16 +1991,10 @@ mod tests {
             header_facets: &[],
             data_points: &[],
             facet_sections: &[],
-            field_groups: &[FieldGroupDef {
-                qualifier: "Main",
-                fields: &["UnknownField"],
-            }],
             table_facets: &[],
         };
-        // Empty fields slice → field name used as fallback label
-        let xml = build_annotations_xml("Test", &def, &[]);
+        let xml = build_annotations_xml("Test", &def, &fields);
         assert!(xml.contains("Property=\"Value\" Path=\"UnknownField\""));
-        assert!(xml.contains("Property=\"Label\" String=\"UnknownField\""));
     }
 
     #[test]
@@ -2047,11 +2016,17 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: Some("Customers"),
+                references_entity: Some("Customers"),
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
-            },
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: None,
+        },
             FieldDef {
                 name: "ProductID",
                 label: "Product",
@@ -2061,15 +2036,19 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: Some("Products"),
+                references_entity: Some("Products"),
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
-            },
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: None,
+        },
         ];
         let def = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[],
             header_info: HeaderInfoDef {
                 type_name: "T",
                 type_name_plural: "Ts",
@@ -2079,7 +2058,6 @@ mod tests {
             header_facets: &[],
             data_points: &[],
             facet_sections: &[],
-            field_groups: &[],
             table_facets: &[],
         };
         let xml = build_annotations_xml("Order", &def, &fields);
@@ -2102,11 +2080,17 @@ mod tests {
             scale: None,
             immutable: false,
             computed: false,
-            semantic_object: None,
+            references_entity: None,
             value_source: None,
-            value_list: None,
+            prefer_dialog: false,
             text_path: None,
-        }];
+        searchable: false,
+        show_in_list: false,
+        list_sort_order: None,
+        list_importance: None,
+        list_criticality_path: None,
+        form_group: None,
+    }];
         let xml = build_capabilities_annotations("Tests", "Test", "Name", None, &fields, true);
         assert!(!xml.contains("Immutable"));
         assert!(xml.contains("Common.Label\" String=\"Name\""));
@@ -2134,11 +2118,17 @@ mod tests {
                 scale: None,
                 immutable: true,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
-            },
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: None,
+        },
             FieldDef {
                 name: "Code",
                 label: "Code",
@@ -2148,11 +2138,17 @@ mod tests {
                 scale: None,
                 immutable: true,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
-            },
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: None,
+        },
             FieldDef {
                 name: "Name",
                 label: "Name",
@@ -2162,11 +2158,17 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
-            },
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: None,
+        },
         ];
         let xml = build_capabilities_annotations("Tests", "Test", "ID", None, &fields, true);
         // Count occurrences of Immutable
@@ -2187,11 +2189,17 @@ mod tests {
             scale: None,
             immutable: false,
             computed: false,
-            semantic_object: None,
+            references_entity: None,
             value_source: None,
-            value_list: None,
+            prefer_dialog: false,
             text_path: None,
-        }];
+        searchable: false,
+        show_in_list: false,
+        list_sort_order: None,
+        list_importance: None,
+        list_criticality_path: None,
+        form_group: None,
+    }];
         let xml = build_entity_type_xml("Simple", "ID", &fields);
         assert!(xml.contains("Name=\"Description\""));
         assert!(xml.contains("Type=\"Edm.String\""));
@@ -2216,11 +2224,17 @@ mod tests {
                 scale: None,
                 immutable: true,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
-            },
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: None,
+        },
             FieldDef {
                 name: "Description",
                 label: "Desc",
@@ -2230,11 +2244,17 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
-            },
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: None,
+        },
         ];
         let xml = build_entity_type_xml("Order", "OrderID", &fields);
         // Key field (same name in both fields and key_field param) => Nullable="false"
@@ -2258,11 +2278,17 @@ mod tests {
             scale: None,
             immutable: false,
             computed: false,
-            semantic_object: None,
+            references_entity: None,
             value_source: None,
-            value_list: None,
+            prefer_dialog: false,
             text_path: None,
-        }];
+        searchable: false,
+        show_in_list: false,
+        list_sort_order: None,
+        list_importance: None,
+        list_criticality_path: None,
+        form_group: None,
+    }];
         let xml = build_entity_type_xml("Test", "ID", &fields);
         let desc_section = &xml[xml.find("Name=\"Description\"").unwrap()..];
         let end = desc_section.find("/>").unwrap();
@@ -2304,11 +2330,17 @@ mod tests {
                 scale: None,
                 immutable: true,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
-            },
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: None,
+        },
             FieldDef {
                 name: "Name",
                 label: "Name",
@@ -2318,22 +2350,19 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: true,
+                show_in_list: true,
+                list_sort_order: Some(0),
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Main"),
             },
         ];
         let def = AnnotationsDef {
-            selection_fields: &["Name"],
-            line_item: &[LineItemField {
-                name: "Name",
-                label: None,
-                importance: None,
-                criticality_path: None,
-                navigation_path: None,
-                semantic_object: None,
-            }],
             header_info: HeaderInfoDef {
                 type_name: "Partner",
                 type_name_plural: "Partners",
@@ -2348,12 +2377,6 @@ mod tests {
                     id: "GeneralSection",
                     field_group_qualifier: "Main",
                     field_group_label: "Partner Data",
-                },
-            ],
-            field_groups: &[
-                FieldGroupDef {
-                    qualifier: "Main",
-                    fields: &["Name"],
                 },
             ],
             table_facets: &[],
@@ -2371,7 +2394,6 @@ mod tests {
                     r#"Collection>"#,
                         r#"Record Type="UI.DataField">"#,
                             r#"PropertyValue Property="Value" Path="Name"/>"#,
-                            r#"PropertyValue Property="Label" String="Name"/>"#,
                         r#"/Record>"#,
                     r#"/Collection>"#,
                 r#"/Annotation>"#,
@@ -2417,7 +2439,6 @@ mod tests {
                             r#"Collection>"#,
                                 r#"Record Type="UI.DataField">"#,
                                     r#"PropertyValue Property="Value" Path="Name"/>"#,
-                                    r#"PropertyValue Property="Label" String="Name"/>"#,
                                 r#"/Record>"#,
                             r#"/Collection>"#,
                         r#"/PropertyValue>"#,
@@ -2444,10 +2465,16 @@ mod tests {
                 scale: None,
                 immutable: true,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: true,
+                show_in_list: true,
+                list_sort_order: Some(0),
+                list_importance: Some("High"),
+                list_criticality_path: None,
+                form_group: Some("Main"),
             },
             FieldDef {
                 name: "CustomerID",
@@ -2458,10 +2485,16 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: Some("Customers"),
+                references_entity: Some("Customers"),
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: true,
+                list_sort_order: Some(1),
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Main"),
             },
             FieldDef {
                 name: "TotalAmount",
@@ -2472,10 +2505,16 @@ mod tests {
                 scale: Some(2),
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Finance"),
             },
             FieldDef {
                 name: "Status",
@@ -2486,40 +2525,19 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
             },
         ];
         let def = AnnotationsDef {
-            selection_fields: &["CustomerID", "Status"],
-            line_item: &[
-                LineItemField {
-                    name: "OrderID",
-                    label: None,
-                    importance: Some("High"),
-                    criticality_path: None,
-                    navigation_path: None,
-                    semantic_object: None,
-                },
-                LineItemField {
-                    name: "CustomerID",
-                    label: None,
-                    importance: None,
-                    criticality_path: None,
-                    navigation_path: None,
-                    semantic_object: Some("Customers"),
-                },
-                LineItemField {
-                    name: "Status",
-                    label: None,
-                    importance: Some("Medium"),
-                    criticality_path: Some("StatusCriticality"),
-                    navigation_path: None,
-                    semantic_object: None,
-                },
-            ],
             header_info: HeaderInfoDef {
                 type_name: "Order",
                 type_name_plural: "Orders",
@@ -2549,16 +2567,6 @@ mod tests {
                     id: "FinancialSection",
                     field_group_qualifier: "Finance",
                     field_group_label: "Financial Data",
-                },
-            ],
-            field_groups: &[
-                FieldGroupDef {
-                    qualifier: "Main",
-                    fields: &["OrderID", "CustomerID", "Status"],
-                },
-                FieldGroupDef {
-                    qualifier: "Finance",
-                    fields: &["TotalAmount"],
                 },
             ],
             table_facets: &[TableFacetDef {
@@ -2607,11 +2615,17 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: Some(list_uuid),
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
-            },
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: None,
+        },
             FieldDef {
                 name: "Name",
                 label: "Name",
@@ -2621,11 +2635,17 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
-            },
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: None,
+        },
         ];
         let xml = build_capabilities_annotations("Tests", "Test", "EdmType", None, &fields, true);
 
@@ -2650,13 +2670,7 @@ mod tests {
     }
 
     #[test]
-    fn value_list_def_emits_custom_collection() {
-        static VL: ValueListDef = ValueListDef {
-            collection_path: "FieldValueLists",
-            key_property: "ListName",
-            display_property: Some("Description"),
-            fixed_values: false,
-        };
+    fn references_entity_emits_value_list() {
         let fields = vec![FieldDef {
             name: "ValueSource",
             label: "Werteliste",
@@ -2666,10 +2680,16 @@ mod tests {
             scale: None,
             immutable: false,
             computed: false,
-            semantic_object: None,
+            references_entity: Some("FieldValueLists"),
             value_source: None,
-            value_list: Some(&VL),
-            text_path: None,
+            prefer_dialog: true,
+            text_path: Some("ValueList/Description"),
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: None,
         }];
         let xml =
             build_capabilities_annotations("Tests", "Test", "ValueSource", None, &fields, true);
@@ -2677,9 +2697,9 @@ mod tests {
         assert!(xml.contains("Common.ValueList"));
         assert!(xml.contains("CollectionPath\" String=\"FieldValueLists\""));
         assert!(xml.contains("LocalDataProperty\" PropertyPath=\"ValueSource\""));
-        assert!(xml.contains("ValueListProperty\" String=\"ListName\""));
+        assert!(xml.contains("ValueListProperty\" String=\"ID\""));
         assert!(xml.contains("ValueListProperty\" String=\"Description\""));
-        // fixed_values=false → no ValueListWithFixedValues annotation
+        // prefer_dialog=true → no ValueListWithFixedValues annotation
         assert!(!xml.contains("Common.ValueListWithFixedValues"));
     }
 
@@ -2722,11 +2742,17 @@ mod tests {
             scale: None,
             immutable: true,
             computed: false,
-            semantic_object: None,
+            references_entity: None,
             value_source: None,
-            value_list: None,
+            prefer_dialog: false,
             text_path: None,
-        }];
+        searchable: false,
+        show_in_list: false,
+        list_sort_order: None,
+        list_importance: None,
+        list_criticality_path: None,
+        form_group: None,
+    }];
         let xml = build_capabilities_annotations(
             "EntityConfigs",
             "EntityConfig",

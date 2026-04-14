@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use serde_json::{json, Value};
+use uuid::Uuid;
 
 use crate::annotations::*;
 use crate::entity::ODataEntity;
@@ -14,7 +15,7 @@ impl ODataEntity for EntityConfigEntity {
         "EntityConfigs"
     }
     fn key_field(&self) -> &'static str {
-        "SetName"
+        "ID"
     }
     fn type_name(&self) -> &'static str {
         "EntityConfig"
@@ -27,214 +28,304 @@ impl ODataEntity for EntityConfigEntity {
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
             FieldDef {
-                name: "SetName",
-                label: "{i18n>entityset}",
-                edm_type: "Edm.String",
-                max_length: Some(40),
+                name: "ID",
+                label: "ID",
+                edm_type: "Edm.Guid",
+                max_length: None,
                 precision: None,
                 scale: None,
                 immutable: true,
-                computed: false,
-                semantic_object: None,
+                computed: true,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
             },
             FieldDef {
-                name: "KeyField",
-                label: "{i18n>keyfield}",
+                name: "SetName",
+                label: "{@i18n>entityset}",
                 edm_type: "Edm.String",
                 max_length: Some(40),
                 precision: None,
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: true,
+                show_in_list: true,
+                list_sort_order: Some(0),
+                list_importance: Some("High"),
+                list_criticality_path: None,
+                form_group: Some("Basic"),
             },
             FieldDef {
                 name: "TypeName",
-                label: "{i18n>entitytype}",
+                label: "{@i18n>entitytype}",
                 edm_type: "Edm.String",
                 max_length: Some(40),
                 precision: None,
                 scale: None,
                 immutable: false,
-                computed: false,
-                semantic_object: None,
+                computed: true,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: true,
+                show_in_list: true,
+                list_sort_order: Some(1),
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Basic"),
             },
-            FieldDef {
-                name: "ParentSetName",
-                label: "{i18n>parententityset}",
-                edm_type: "Edm.String",
-                max_length: Some(40),
-                precision: None,
-                scale: None,
-                immutable: false,
-                computed: false,
-                semantic_object: None,
-                value_source: None,
-                value_list: None,
-                text_path: None,
-            },
+            // FieldDef {
+            //     name: "ParentSetName",
+            //     label: "{@i18n>parententityset}",
+            //     edm_type: "Edm.String",
+            //     max_length: Some(40),
+            //     precision: None,
+            //     scale: None,
+            //     immutable: false,
+            //     computed: false,
+            //     references_entity: None,
+            //     value_source: None,
+            //     prefer_dialog: false,
+            //     text_path: None,
+            //     searchable: false,
+            //     show_in_list: false,
+            //     list_sort_order: None,
+            //     list_importance: None,
+            //     list_criticality_path: None,
+            //     form_group: Some("Basic"),
+            // },
             FieldDef {
                 name: "Title",
-                label: "{i18n>title}",
+                label: "{@i18n>title}",
                 edm_type: "Edm.String",
                 max_length: Some(80),
                 precision: None,
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: true,
+                list_sort_order: Some(3),
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Tile"),
             },
             FieldDef {
                 name: "TileDescription",
-                label: "Kachel-Beschreibung",
+                label: "{@i18n>tileDescription}",
                 edm_type: "Edm.String",
                 max_length: Some(120),
                 precision: None,
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Tile"),
             },
             FieldDef {
                 name: "TileIcon",
-                label: "Kachel-Icon",
+                label: "{@i18n>tileIcon}",
                 edm_type: "Edm.String",
                 max_length: Some(80),
                 precision: None,
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: true,
+                list_sort_order: Some(4),
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Tile"),
             },
             FieldDef {
                 name: "HeaderTypeName",
-                label: "Typ-Name",
+                label: "{@i18n>headerTypeName}",
                 edm_type: "Edm.String",
                 max_length: Some(40),
                 precision: None,
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Header"),
             },
             FieldDef {
                 name: "HeaderTypeNamePlural",
-                label: "Typ-Name Plural",
+                label: "{@i18n>headerTypeNamePlural}",
                 edm_type: "Edm.String",
                 max_length: Some(40),
                 precision: None,
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: true,
+                list_sort_order: Some(5),
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Header"),
             },
             FieldDef {
                 name: "HeaderTitlePath",
-                label: "Titel-Pfad",
-                edm_type: "Edm.String",
-                max_length: Some(40),
+                label: "{@i18n>headerTitlePath}",
+                edm_type: "Edm.Guid",
+                max_length: None,
                 precision: None,
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: Some("EntityFields"),
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Header"),
             },
             FieldDef {
                 name: "HeaderDescriptionPath",
-                label: "Beschreibungs-Pfad",
-                edm_type: "Edm.String",
-                max_length: Some(40),
+                label: "{@i18n>headerDescriptionPath}",
+                edm_type: "Edm.Guid",
+                max_length: None,
                 precision: None,
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Header"),
             },
             FieldDef {
                 name: "SelectionFields",
-                label: "Suchfelder",
+                label: "{@i18n>selectionFields}",
                 edm_type: "Edm.String",
                 max_length: Some(200),
                 precision: None,
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: Some("Basic"),
             },
             FieldDef {
                 name: "DefaultValues",
-                label: "Standardwerte (JSON)",
+                label: "{@i18n>defaultValues}",
                 edm_type: "Edm.String",
                 max_length: Some(500),
                 precision: None,
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
             },
             FieldDef {
                 name: "HeaderFacets",
-                label: "Header-Facetten (JSON)",
+                label: "{@i18n>headerFacets}",
                 edm_type: "Edm.String",
                 max_length: Some(2000),
                 precision: None,
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
             },
             FieldDef {
                 name: "DataPoints",
-                label: "DataPoints (JSON)",
+                label: "{@i18n>dataPoints}",
                 edm_type: "Edm.String",
                 max_length: Some(2000),
                 precision: None,
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
                 value_source: None,
-                value_list: None,
+                prefer_dialog: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
             },
         ];
         Some(FIELDS)
@@ -246,28 +337,72 @@ impl ODataEntity for EntityConfigEntity {
                 name: "Fields",
                 target_type: "EntityField",
                 is_collection: true,
-                foreign_key: None,
+                foreign_key: Some("ConfigID"),
             },
             NavigationPropertyDef {
                 name: "Facets",
                 target_type: "EntityFacet",
                 is_collection: true,
-                foreign_key: None,
+                foreign_key: Some("ConfigID"),
             },
             NavigationPropertyDef {
                 name: "Navigations",
                 target_type: "EntityNavigation",
                 is_collection: true,
-                foreign_key: None,
+                foreign_key: Some("ConfigID"),
             },
             NavigationPropertyDef {
                 name: "TableFacets",
                 target_type: "EntityTableFacet",
                 is_collection: true,
-                foreign_key: None,
+                foreign_key: Some("ConfigID"),
             },
         ];
         NAV
+    }
+
+    fn compute_fields(&self, record: &mut Value) {
+        if let Some(obj) = record.as_object_mut() {
+            // TypeName = HeaderTypeName + "Type"
+            if let Some(htn) = obj.get("HeaderTypeName").and_then(|v| v.as_str()) {
+                if !htn.is_empty() {
+                    obj.insert("TypeName".to_string(), json!(format!("{}Type", htn)));
+                }
+            }
+        }
+    }
+
+    fn auto_create_children(&self, parent_record: &mut Value) -> Vec<(String, Value)> {
+        let config_id = parent_record
+            .get("ID")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if config_id.is_empty() {
+            return vec![];
+        }
+        let name_field_id = Uuid::new_v4().to_string();
+        // Set HeaderTitlePath to the auto-created Name field
+        if let Some(obj) = parent_record.as_object_mut() {
+            obj.insert("HeaderTitlePath".to_string(), json!(&name_field_id));
+        }
+        vec![(
+            "EntityFields".to_string(),
+            json!({
+                "ID": name_field_id,
+                "ConfigID": config_id,
+                "FieldName": "Name",
+                "Label": "Name",
+                "EdmType": "Edm.String",
+                "MaxLength": 80,
+                "IsImmutable": false,
+                "IsComputed": false,
+                "SortOrder": 0,
+                "ShowInLineItem": true,
+                "Searchable": true,
+                "FormGroup": "General",
+            }),
+        )]
     }
 
     fn expand_record(
@@ -277,69 +412,33 @@ impl ODataEntity for EntityConfigEntity {
         _entities: &[&dyn ODataEntity],
         data_store: &HashMap<String, Vec<Value>>,
     ) {
-        let set_name = record
-            .get("SetName")
+        let parent_id = record
+            .get("ID")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
-        if let Some(sn) = set_name {
-            if nav_properties.contains(&"Fields") {
-                let children: Vec<Value> = data_store
-                    .get("EntityFields")
-                    .map(|records| {
-                        records
-                            .iter()
-                            .filter(|r| r.get("SetName").and_then(|v| v.as_str()) == Some(&sn))
-                            .cloned()
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                if let Some(obj) = record.as_object_mut() {
-                    obj.insert("Fields".to_string(), Value::Array(children));
-                }
-            }
-            if nav_properties.contains(&"Facets") {
-                let children: Vec<Value> = data_store
-                    .get("EntityFacets")
-                    .map(|records| {
-                        records
-                            .iter()
-                            .filter(|r| r.get("SetName").and_then(|v| v.as_str()) == Some(&sn))
-                            .cloned()
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                if let Some(obj) = record.as_object_mut() {
-                    obj.insert("Facets".to_string(), Value::Array(children));
-                }
-            }
-            if nav_properties.contains(&"Navigations") {
-                let children: Vec<Value> = data_store
-                    .get("EntityNavigations")
-                    .map(|records| {
-                        records
-                            .iter()
-                            .filter(|r| r.get("SetName").and_then(|v| v.as_str()) == Some(&sn))
-                            .cloned()
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                if let Some(obj) = record.as_object_mut() {
-                    obj.insert("Navigations".to_string(), Value::Array(children));
-                }
-            }
-            if nav_properties.contains(&"TableFacets") {
-                let children: Vec<Value> = data_store
-                    .get("EntityTableFacets")
-                    .map(|records| {
-                        records
-                            .iter()
-                            .filter(|r| r.get("SetName").and_then(|v| v.as_str()) == Some(&sn))
-                            .cloned()
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                if let Some(obj) = record.as_object_mut() {
-                    obj.insert("TableFacets".to_string(), Value::Array(children));
+        if let Some(pid) = parent_id {
+            for &(nav, set) in &[
+                ("Fields", "EntityFields"),
+                ("Facets", "EntityFacets"),
+                ("Navigations", "EntityNavigations"),
+                ("TableFacets", "EntityTableFacets"),
+            ] {
+                if nav_properties.contains(&nav) {
+                    let children: Vec<Value> = data_store
+                        .get(set)
+                        .map(|records| {
+                            records
+                                .iter()
+                                .filter(|r| {
+                                    r.get("ConfigID").and_then(|v| v.as_str()) == Some(&pid)
+                                })
+                                .cloned()
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if let Some(obj) = record.as_object_mut() {
+                        obj.insert(nav.to_string(), Value::Array(children));
+                    }
                 }
             }
         }
@@ -361,57 +460,6 @@ impl ODataEntity for EntityConfigEntity {
 
     fn annotations_def(&self) -> Option<&'static AnnotationsDef> {
         static DEF: AnnotationsDef = AnnotationsDef {
-            selection_fields: &["SetName", "TypeName"],
-            line_item: &[
-                LineItemField {
-                    name: "SetName",
-                    label: None,
-                    importance: Some("High"),
-                    criticality_path: None,
-                    navigation_path: None,
-                    semantic_object: None,
-                },
-                LineItemField {
-                    name: "TypeName",
-                    label: None,
-                    importance: None,
-                    criticality_path: None,
-                    navigation_path: None,
-                    semantic_object: None,
-                },
-                LineItemField {
-                    name: "KeyField",
-                    label: None,
-                    importance: None,
-                    criticality_path: None,
-                    navigation_path: None,
-                    semantic_object: None,
-                },
-                LineItemField {
-                    name: "Title",
-                    label: None,
-                    importance: None,
-                    criticality_path: None,
-                    navigation_path: None,
-                    semantic_object: None,
-                },
-                LineItemField {
-                    name: "TileIcon",
-                    label: None,
-                    importance: None,
-                    criticality_path: None,
-                    navigation_path: None,
-                    semantic_object: None,
-                },
-                LineItemField {
-                    name: "HeaderTypeNamePlural",
-                    label: None,
-                    importance: None,
-                    criticality_path: None,
-                    navigation_path: None,
-                    semantic_object: None,
-                },
-            ],
             header_info: HeaderInfoDef {
                 type_name: "Entity-Konfiguration",
                 type_name_plural: "Entity-Konfigurationen",
@@ -438,31 +486,6 @@ impl ODataEntity for EntityConfigEntity {
                     id: "HeaderInfo",
                     field_group_qualifier: "Header",
                     field_group_label: "Object-Page-Header",
-                },
-            ],
-            field_groups: &[
-                FieldGroupDef {
-                    qualifier: "Basic",
-                    fields: &[
-                        "SetName",
-                        "KeyField",
-                        "TypeName",
-                        "ParentSetName",
-                        "SelectionFields",
-                    ],
-                },
-                FieldGroupDef {
-                    qualifier: "Tile",
-                    fields: &["Title", "TileDescription", "TileIcon"],
-                },
-                FieldGroupDef {
-                    qualifier: "Header",
-                    fields: &[
-                        "HeaderTypeName",
-                        "HeaderTypeNamePlural",
-                        "HeaderTitlePath",
-                        "HeaderDescriptionPath",
-                    ],
                 },
             ],
             table_facets: &[
@@ -610,6 +633,35 @@ impl ODataEntity for EntityConfigEntity {
     }
 
     fn extra_annotations_xml(&self) -> String {
+        let ns = NAMESPACE;
+        let ty = self.type_name();
+        // ValueList annotation template for HeaderTitlePath / HeaderDescriptionPath
+        let vl_ann = |prop: &str| {
+            format!(
+                "<Annotations Target=\"{ns}.{ty}/{prop}\">\
+                 <Annotation Term=\"Common.ValueList\">\
+                 <Record Type=\"Common.ValueListType\">\
+                 <PropertyValue Property=\"CollectionPath\" String=\"EntityFields\"/>\
+                 <PropertyValue Property=\"Parameters\">\
+                 <Collection>\
+                 <Record Type=\"Common.ValueListParameterOut\">\
+                 <PropertyValue Property=\"LocalDataProperty\" PropertyPath=\"{prop}\"/>\
+                 <PropertyValue Property=\"ValueListProperty\" String=\"ID\"/>\
+                 </Record>\
+                 <Record Type=\"Common.ValueListParameterDisplayOnly\">\
+                 <PropertyValue Property=\"ValueListProperty\" String=\"FieldName\"/>\
+                 </Record>\
+                 <Record Type=\"Common.ValueListParameterIn\">\
+                 <PropertyValue Property=\"LocalDataProperty\" PropertyPath=\"ID\"/>\
+                 <PropertyValue Property=\"ValueListProperty\" String=\"ConfigID\"/>\
+                 </Record>\
+                 </Collection>\
+                 </PropertyValue>\
+                 </Record>\
+                 </Annotation>\
+                 </Annotations>"
+            )
+        };
         format!(
             "<Annotations Target=\"{ns}.{ty}\">\
              <Annotation Term=\"UI.Identification\">\
@@ -620,9 +672,11 @@ impl ODataEntity for EntityConfigEntity {
              </Record>\
              </Collection>\
              </Annotation>\
-             </Annotations>",
-            ns = NAMESPACE,
-            ty = self.type_name()
+             </Annotations>\
+             {}\
+             {}",
+            vl_ann("HeaderTitlePath"),
+            vl_ann("HeaderDescriptionPath"),
         )
     }
 }

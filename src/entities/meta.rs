@@ -45,9 +45,19 @@ fn generate_meta_data(
         let hi = ann.map(|a| &a.header_info);
 
         // ── EntityConfigs-Datensatz ─────────────────────────────────
+        let config_uuid = value_list_id(&format!("config_{}", config.set_name));
+        // Resolve HeaderTitlePath / HeaderDescriptionPath to field UUIDs
+        let resolve_field_uuid = |path: &str| -> String {
+            if path.is_empty() {
+                return String::new();
+            }
+            value_list_id(&format!("field_{}_{}", config.set_name, path))
+        };
+        let title_uuid = hi.map(|h| resolve_field_uuid(&h.title_path)).unwrap_or_default();
+        let desc_uuid = hi.map(|h| resolve_field_uuid(&h.description_path)).unwrap_or_default();
         config_records.push(json!({
+            "ID":                   config_uuid,
             "SetName":              config.set_name,
-            "KeyField":             config.key_field,
             "TypeName":             config.type_name,
             "ParentSetName":        config.parent_set_name.as_deref().unwrap_or(""),
             "Title":            tile.map(|t| t.title.as_str()).unwrap_or(""),
@@ -55,8 +65,8 @@ fn generate_meta_data(
             "TileIcon":             tile.and_then(|t| t.icon.as_deref()).unwrap_or(""),
             "HeaderTypeName":       hi.map(|h| h.type_name.as_str()).unwrap_or(""),
             "HeaderTypeNamePlural": hi.map(|h| h.type_name_plural.as_str()).unwrap_or(""),
-            "HeaderTitlePath":      hi.map(|h| h.title_path.as_str()).unwrap_or(""),
-            "HeaderDescriptionPath":hi.map(|h| h.description_path.as_str()).unwrap_or(""),
+            "HeaderTitlePath":      title_uuid,
+            "HeaderDescriptionPath":desc_uuid,
             "SelectionFields":      ann.map(|a| a.selection_fields.join(",")).unwrap_or_default(),
             "DefaultValues":        config.default_values.as_ref()
                                         .map(|v| serde_json::to_string(v).unwrap_or_default())
@@ -68,21 +78,10 @@ fn generate_meta_data(
         }));
 
         // ── EntityFields-Datensaetze ────────────────────────────────
-        // LineItem-Info auf Feld-Ebene zuordnen (nur "echte" Felder, keine Nav-Pfade)
-        let line_items: HashMap<&str, _> = ann
-            .map(|a| {
-                a.line_item
-                    .iter()
-                    .filter(|li| !li.name.contains('/'))
-                    .map(|li| (li.name.as_str(), li))
-                    .collect()
-            })
-            .unwrap_or_default();
-
         for (idx, field) in config.fields.iter().enumerate() {
-            let li = line_items.get(field.name.as_str());
             field_records.push(json!({
-                "FieldID":                format!("{}_{}", config.set_name, field.name),
+                "ID":                    value_list_id(&format!("field_{}_{}", config.set_name, field.name)),
+                "ConfigID":              config_uuid,
                 "SetName":                config.set_name,
                 "FieldName":              field.name,
                 "Label":                  field.label,
@@ -92,15 +91,18 @@ fn generate_meta_data(
                 "Scale":                  field.scale,
                 "IsImmutable":            field.immutable,
                 "IsComputed":             field.computed,
-                "SemanticObject":         field.semantic_object.as_deref().unwrap_or(""),
+                "ReferencesEntity":       field.references_entity.as_deref().unwrap_or(""),
                 "ValueSource":            field.value_source.as_deref().unwrap_or(""),
+                "PreferDialog":           field.prefer_dialog,
                 "TextPath":               field.text_path.as_deref().unwrap_or(""),
-                "SortOrder":              idx as u32,
-                "ShowInLineItem":         li.is_some(),
-                "LineItemImportance":     li.and_then(|l| l.importance.as_deref()).unwrap_or(""),
-                "LineItemLabel":          li.and_then(|l| l.label.as_deref()).unwrap_or(""),
-                "LineItemCriticalityPath":li.and_then(|l| l.criticality_path.as_deref()).unwrap_or(""),
-                "LineItemSemanticObject": li.and_then(|l| l.semantic_object.as_deref()).unwrap_or(""),
+                "SortOrder":              field.list_sort_order.unwrap_or(idx as u32),
+                "ShowInLineItem":         field.show_in_list,
+                "LineItemImportance":     field.list_importance.as_deref().unwrap_or(""),
+                "LineItemLabel":          "",
+                "LineItemCriticalityPath":field.list_criticality_path.as_deref().unwrap_or(""),
+                "LineItemSemanticObject": "",
+                "Searchable":             field.searchable,
+                "FormGroup":              field.form_group.as_deref().unwrap_or(""),
             }));
         }
 
@@ -115,7 +117,8 @@ fn generate_meta_data(
             for (idx, section) in ann.facet_sections.iter().enumerate() {
                 let fg = fg_map.get(section.field_group_qualifier.as_str());
                 facet_records.push(json!({
-                    "FacetID":              format!("{}_{}", config.set_name, section.id),
+                    "ID":                  value_list_id(&format!("facet_{}_{}", config.set_name, section.id)),
+                    "ConfigID":            config_uuid,
                     "SetName":              config.set_name,
                     "SectionLabel":         section.label,
                     "SectionId":            section.id,
@@ -129,7 +132,8 @@ fn generate_meta_data(
             // ── EntityTableFacets-Datensaetze ───────────────────────
             for (idx, tf) in ann.table_facets.iter().enumerate() {
                 table_facet_records.push(json!({
-                    "TableFacetID":       format!("{}_{}", config.set_name, tf.id),
+                    "ID":                value_list_id(&format!("tablefacet_{}_{}", config.set_name, tf.id)),
+                    "ConfigID":          config_uuid,
                     "SetName":            config.set_name,
                     "FacetLabel":         tf.label,
                     "FacetId":            tf.id,
@@ -142,7 +146,8 @@ fn generate_meta_data(
         // ── EntityNavigations-Datensaetze ───────────────────────────
         for (idx, nav) in config.navigation_properties.iter().enumerate() {
             nav_records.push(json!({
-                "NavID":          format!("{}_{}", config.set_name, nav.name),
+                "ID":            value_list_id(&format!("nav_{}_{}", config.set_name, nav.name)),
+                "ConfigID":      config_uuid,
                 "SetName":        config.set_name,
                 "NavName":        nav.name,
                 "TargetType":     nav.target_type,
@@ -270,10 +275,10 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
             .map(String::from)
     };
 
-    let filter_sorted = |records: &[Value], set_name: &str| -> Vec<Value> {
+    let filter_sorted = |records: &[Value], config_id: &str| -> Vec<Value> {
         let mut filtered: Vec<Value> = records
             .iter()
-            .filter(|r| r.get("SetName").and_then(|v| v.as_str()) == Some(set_name))
+            .filter(|r| r.get("ConfigID").and_then(|v| v.as_str()) == Some(config_id))
             .cloned()
             .collect();
         filtered.sort_by_key(|f| f.get("SortOrder").and_then(|v| v.as_i64()).unwrap_or(999));
@@ -284,10 +289,11 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
         .iter()
         .map(|cr| {
             let set_name = str_val(cr, "SetName");
-            let field_records = filter_sorted(&all_fields, &set_name);
-            let facet_records = filter_sorted(&all_facets, &set_name);
-            let nav_records = filter_sorted(&all_navs, &set_name);
-            let table_facet_records = filter_sorted(&all_table_facets, &set_name);
+            let config_id = str_val(cr, "ID");
+            let field_records = filter_sorted(&all_fields, &config_id);
+            let facet_records = filter_sorted(&all_facets, &config_id);
+            let nav_records = filter_sorted(&all_navs, &config_id);
+            let table_facet_records = filter_sorted(&all_table_facets, &config_id);
 
             // Fields
             let fields: Vec<FieldConfig> = field_records
@@ -319,9 +325,28 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
                         .get("IsComputed")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false),
-                    semantic_object: opt_str(f, "SemanticObject"),
+                    references_entity: opt_str(f, "ReferencesEntity"),
                     value_source: opt_str(f, "ValueSource"),
+                    prefer_dialog: f
+                        .get("PreferDialog")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
                     text_path: opt_str(f, "TextPath"),
+                    searchable: f
+                        .get("Searchable")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
+                    show_in_list: f
+                        .get("ShowInLineItem")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
+                    list_sort_order: f
+                        .get("SortOrder")
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v as u32),
+                    list_importance: opt_str(f, "LineItemImportance"),
+                    list_criticality_path: opt_str(f, "LineItemCriticalityPath"),
+                    form_group: opt_str(f, "FormGroup"),
                 })
                 .collect();
 
@@ -401,12 +426,23 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
                 .filter(|s| !s.is_empty())
                 .collect();
 
-            // HeaderInfo
+            // HeaderInfo — resolve field UUIDs to field names
+            let resolve_field_name = |uuid_str: &str| -> String {
+                if uuid_str.is_empty() {
+                    return String::new();
+                }
+                field_records
+                    .iter()
+                    .find(|f| f.get("ID").and_then(|v| v.as_str()) == Some(uuid_str))
+                    .and_then(|f| f.get("FieldName").and_then(|v| v.as_str()))
+                    .unwrap_or(uuid_str)
+                    .to_string()
+            };
             let header_info = HeaderInfoConfig {
                 type_name: str_val(cr, "HeaderTypeName"),
                 type_name_plural: str_val(cr, "HeaderTypeNamePlural"),
-                title_path: str_val(cr, "HeaderTitlePath"),
-                description_path: str_val(cr, "HeaderDescriptionPath"),
+                title_path: resolve_field_name(&str_val(cr, "HeaderTitlePath")),
+                description_path: resolve_field_name(&str_val(cr, "HeaderDescriptionPath")),
             };
 
             // Tile
@@ -477,10 +513,20 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
                 .filter(|s| !s.is_empty())
                 .and_then(|s| serde_json::from_str(s).ok());
 
+            // TypeName: derive from HeaderTypeName + "Type" (computed field)
+            let type_name = {
+                let stored = str_val(cr, "TypeName");
+                if stored.is_empty() {
+                    let htn = str_val(cr, "HeaderTypeName");
+                    if htn.is_empty() { String::new() } else { format!("{}Type", htn) }
+                } else {
+                    stored
+                }
+            };
+
             EntityConfig {
                 set_name,
-                key_field: str_val(cr, "KeyField"),
-                type_name: str_val(cr, "TypeName"),
+                type_name,
                 parent_set_name: opt_str(cr, "ParentSetName"),
                 fields,
                 navigation_properties,
@@ -498,19 +544,24 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
 ///
 /// Gibt den EntityConfigs-Datensatz des publizierten EntitySets zurueck.
 pub fn publish_entity_config(
-    set_name: &str,
+    key_value: &str,
     data_store: &dyn crate::data_store::DataStore,
 ) -> Result<Value, String> {
     let config_record = data_store
         .get_records("EntityConfigs")
         .into_iter()
         .find(|r| {
-            r.get("SetName").and_then(|v| v.as_str()) == Some(set_name)
+            r.get("ID").and_then(|v| v.as_str()) == Some(key_value)
                 && r.get("IsActiveEntity")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(true)
         })
-        .ok_or_else(|| format!("Entity-Config '{}' nicht gefunden", set_name))?;
+        .ok_or_else(|| format!("Entity-Config '{}' nicht gefunden", key_value))?;
+
+    let set_name = config_record
+        .get("SetName")
+        .and_then(|v| v.as_str())
+        .unwrap_or(key_value);
 
     data_store.commit();
 
@@ -533,7 +584,6 @@ mod tests {
     fn test_config() -> EntityConfig {
         EntityConfig {
             set_name: "Products".to_string(),
-            key_field: "ProductID".to_string(),
             type_name: "Product".to_string(),
             parent_set_name: None,
             fields: vec![
@@ -545,10 +595,17 @@ mod tests {
                     precision: None,
                     scale: None,
                     immutable: true,
-                    semantic_object: None,
+                    references_entity: None,
+                    prefer_dialog: false,
                     value_source: None,
                     computed: false,
                     text_path: None,
+                    searchable: false,
+                    show_in_list: true,
+                    list_sort_order: Some(0),
+                    list_importance: Some("High".to_string()),
+                    list_criticality_path: None,
+                    form_group: None,
                 },
                 FieldConfig {
                     name: "ProductName".to_string(),
@@ -558,10 +615,17 @@ mod tests {
                     precision: None,
                     scale: None,
                     immutable: false,
-                    semantic_object: None,
+                    references_entity: None,
+                    prefer_dialog: false,
                     value_source: None,
                     computed: false,
                     text_path: None,
+                    searchable: false,
+                    show_in_list: true,
+                    list_sort_order: Some(1),
+                    list_importance: None,
+                    list_criticality_path: None,
+                    form_group: None,
                 },
                 FieldConfig {
                     name: "Price".to_string(),
@@ -571,10 +635,17 @@ mod tests {
                     precision: Some(15),
                     scale: Some(2),
                     immutable: false,
-                    semantic_object: None,
+                    references_entity: None,
+                    prefer_dialog: false,
                     value_source: None,
                     computed: false,
                     text_path: None,
+                    searchable: false,
+                    show_in_list: false,
+                    list_sort_order: Some(2),
+                    list_importance: None,
+                    list_criticality_path: None,
+                    form_group: None,
                 },
             ],
             navigation_properties: vec![NavPropertyConfig {
@@ -641,7 +712,6 @@ mod tests {
     fn config_with_table_facets() -> EntityConfig {
         let mut config = test_config();
         config.set_name = "Orders".to_string();
-        config.key_field = "OrderID".to_string();
         config.type_name = "Order".to_string();
         config.fields = vec![FieldConfig {
             name: "OrderID".to_string(),
@@ -652,9 +722,16 @@ mod tests {
             scale: None,
             immutable: true,
             computed: false,
-            semantic_object: None,
+            references_entity: None,
+            prefer_dialog: false,
             value_source: None,
             text_path: None,
+            searchable: false,
+            show_in_list: false,
+            list_sort_order: None,
+            list_importance: None,
+            list_criticality_path: None,
+            form_group: None,
         }];
         config.navigation_properties = vec![NavPropertyConfig {
             name: "Items".to_string(),
@@ -785,13 +862,13 @@ mod tests {
         let (config_records, _, _, _, _, _, _) = generate_meta_data(&configs);
         assert_eq!(config_records.len(), 1);
         let cr = &config_records[0];
+        assert!(cr["ID"].as_str().unwrap().len() > 0, "ID should be a UUID");
         assert_eq!(cr["SetName"], "Products");
-        assert_eq!(cr["KeyField"], "ProductID");
         assert_eq!(cr["TypeName"], "Product");
         assert_eq!(cr["HeaderTypeName"], "Produkt");
         assert_eq!(cr["HeaderTypeNamePlural"], "Produkte");
-        assert_eq!(cr["HeaderTitlePath"], "ProductName");
-        assert_eq!(cr["HeaderDescriptionPath"], "ProductID");
+        assert_eq!(cr["HeaderTitlePath"], value_list_id("field_Products_ProductName"));
+        assert_eq!(cr["HeaderDescriptionPath"], value_list_id("field_Products_ProductID"));
         assert_eq!(cr["SelectionFields"], "ProductName");
         assert_eq!(cr["Title"], "Produkte");
         assert_eq!(cr["TileDescription"], "Produktkatalog");
@@ -806,7 +883,8 @@ mod tests {
 
         // First field: ProductID (immutable, in line_item with High importance)
         let f0 = &field_records[0];
-        assert_eq!(f0["FieldID"], "Products_ProductID");
+        assert!(f0["ID"].as_str().unwrap().len() > 0, "ID should be a UUID");
+        assert!(f0["ConfigID"].as_str().unwrap().len() > 0, "ConfigID should be a UUID");
         assert_eq!(f0["SetName"], "Products");
         assert_eq!(f0["FieldName"], "ProductID");
         assert_eq!(f0["Label"], "Produkt-Nr.");
@@ -838,7 +916,8 @@ mod tests {
         let (_, _, facet_records, _, _, _, _) = generate_meta_data(&configs);
         assert_eq!(facet_records.len(), 1);
         let fr = &facet_records[0];
-        assert_eq!(fr["FacetID"], "Products_General");
+        assert!(fr["ID"].as_str().unwrap().len() > 0, "ID should be a UUID");
+        assert!(fr["ConfigID"].as_str().unwrap().len() > 0, "ConfigID should be a UUID");
         assert_eq!(fr["SetName"], "Products");
         assert_eq!(fr["SectionLabel"], "Allgemein");
         assert_eq!(fr["SectionId"], "General");
@@ -853,7 +932,9 @@ mod tests {
         let (_, _, _, nav_records, _, _, _) = generate_meta_data(&configs);
         assert_eq!(nav_records.len(), 1);
         let nr = &nav_records[0];
-        assert_eq!(nr["NavID"], "Products_Supplier");
+        assert!(nr["ID"].as_str().unwrap().len() > 0, "ID should be a UUID");
+        assert!(nr["ConfigID"].as_str().unwrap().len() > 0, "ConfigID should be a UUID");
+        assert_eq!(nr["SetName"], "Products");
         assert_eq!(nr["NavName"], "Supplier");
         assert_eq!(nr["TargetType"], "Supplier");
         assert_eq!(nr["TargetSet"], "Suppliers");
@@ -867,7 +948,9 @@ mod tests {
         let (_, _, _, _, table_facet_records, _, _) = generate_meta_data(&configs);
         assert_eq!(table_facet_records.len(), 1);
         let tf = &table_facet_records[0];
-        assert_eq!(tf["TableFacetID"], "Orders_ItemsFacet");
+        assert!(tf["ID"].as_str().unwrap().len() > 0, "ID should be a UUID");
+        assert!(tf["ConfigID"].as_str().unwrap().len() > 0, "ConfigID should be a UUID");
+        assert_eq!(tf["SetName"], "Orders");
         assert_eq!(tf["FacetLabel"], "Positionen");
         assert_eq!(tf["FacetId"], "ItemsFacet");
         assert_eq!(tf["NavigationProperty"], "Items");
@@ -877,7 +960,6 @@ mod tests {
     fn meta_no_annotations_produces_empty_meta() {
         let config = EntityConfig {
             set_name: "Simple".to_string(),
-            key_field: "ID".to_string(),
             type_name: "Simple".to_string(),
             parent_set_name: None,
             fields: vec![FieldConfig {
@@ -889,9 +971,16 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
+                prefer_dialog: false,
                 value_source: None,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
             }],
             navigation_properties: vec![],
             annotations: None,
@@ -933,7 +1022,6 @@ mod tests {
     fn meta_parent_set_name_propagated() {
         let config = EntityConfig {
             set_name: "OrderItems".to_string(),
-            key_field: "ItemID".to_string(),
             type_name: "OrderItem".to_string(),
             parent_set_name: Some("Orders".to_string()),
             fields: vec![FieldConfig {
@@ -945,9 +1033,16 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: None,
+                references_entity: None,
+                prefer_dialog: false,
                 value_source: None,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
             }],
             navigation_properties: vec![],
             annotations: None,
@@ -960,10 +1055,9 @@ mod tests {
     }
 
     #[test]
-    fn meta_semantic_object_on_field() {
+    fn meta_references_entity_on_field() {
         let config = EntityConfig {
             set_name: "Contacts".to_string(),
-            key_field: "ContactID".to_string(),
             type_name: "Contact".to_string(),
             parent_set_name: None,
             fields: vec![FieldConfig {
@@ -975,9 +1069,16 @@ mod tests {
                 scale: None,
                 immutable: false,
                 computed: false,
-                semantic_object: Some("Customers".to_string()),
+                references_entity: Some("Customers".to_string()),
+                prefer_dialog: false,
                 value_source: None,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
             }],
             navigation_properties: vec![],
             annotations: None,
@@ -986,7 +1087,7 @@ mod tests {
             value_lists: vec![],
         };
         let (_, field_records, _, _, _, _, _) = generate_meta_data(&[config]);
-        assert_eq!(field_records[0]["SemanticObject"], "Customers");
+        assert_eq!(field_records[0]["ReferencesEntity"], "Customers");
     }
 
     // ── Roundtrip: generate_meta_data → write → reconstruct ─────
@@ -1003,7 +1104,6 @@ mod tests {
         let r = &reconstructed[0];
 
         assert_eq!(r.set_name, "Products");
-        assert_eq!(r.key_field, "ProductID");
         assert_eq!(r.type_name, "Product");
         assert_eq!(r.fields.len(), 3);
         assert_eq!(r.fields[0].name, "ProductID");
@@ -1078,11 +1178,13 @@ mod tests {
     fn meta_publish_returns_config_record() {
         let mock_store = MockDataStore::from_meta(&[test_config()]);
 
-        let result = publish_entity_config("Products", &mock_store);
+        // publish_entity_config now takes the UUID key
+        let configs_data = mock_store.get_records("EntityConfigs");
+        let config_id = configs_data[0]["ID"].as_str().unwrap();
+        let result = publish_entity_config(config_id, &mock_store);
         assert!(result.is_ok());
         let record = result.unwrap();
         assert_eq!(record["SetName"], "Products");
-        assert_eq!(record["KeyField"], "ProductID");
     }
 
     // ── write_meta_data Tests ───────────────────────────────────
@@ -1157,7 +1259,6 @@ mod tests {
 
         for config in &configs {
             assert!(!config.set_name.is_empty());
-            assert!(!config.key_field.is_empty());
             assert!(!config.type_name.is_empty());
             assert!(
                 !config.fields.is_empty(),

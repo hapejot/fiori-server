@@ -21,16 +21,11 @@ fn leak_vec<T>(v: Vec<T>) -> &'static [T] {
     Box::leak(v.into_boxed_slice())
 }
 
-fn leak_strs(v: &[String]) -> &'static [&'static str] {
-    leak_vec(v.iter().map(|s| leak_str(s)).collect())
-}
-
 // ── JSON Config Schema ──────────────────────────────────────────────────
 
 #[derive(Deserialize, Serialize)]
 pub struct EntityConfig {
     pub set_name: String,
-    pub key_field: String,
     pub type_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_set_name: Option<String>,
@@ -75,14 +70,30 @@ pub struct FieldConfig {
     pub immutable: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub computed: bool,
+    /// FK-Referenz auf ein anderes EntitySet (z.B. "Customers").
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub semantic_object: Option<String>,
-    /// Name einer Werteliste (z.B. "EdmTypes") fuer Fixed-Value-Dropdown.
+    pub references_entity: Option<String>,
+    /// Name einer Werteliste (UUID) fuer Fixed-Value-Dropdown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value_source: Option<String>,
+    /// true → Suchdialog statt Dropdown.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub prefer_dialog: bool,
     /// Expliziter Textpfad fuer Common.Text (z.B. "Product/ProductName").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_path: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub searchable: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub show_in_list: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub list_sort_order: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub list_importance: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub list_criticality_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub form_group: Option<String>,
 }
 
 fn default_edm_string() -> String {
@@ -223,10 +234,16 @@ fn convert_field(f: &FieldConfig) -> FieldDef {
         scale: f.scale,
         immutable: f.immutable,
         computed: f.computed,
-        semantic_object: leak_opt(&f.semantic_object),
+        references_entity: leak_opt(&f.references_entity),
         value_source: leak_opt(&f.value_source),
-        value_list: None,
+        prefer_dialog: f.prefer_dialog,
         text_path,
+        searchable: f.searchable,
+        show_in_list: f.show_in_list,
+        list_sort_order: f.list_sort_order,
+        list_importance: leak_opt(&f.list_importance),
+        list_criticality_path: leak_opt(&f.list_criticality_path),
+        form_group: leak_opt(&f.form_group),
     }
 }
 
@@ -239,21 +256,8 @@ fn convert_nav_property(n: &NavPropertyConfig) -> NavigationPropertyDef {
     }
 }
 
-fn convert_line_item(c: &LineItemConfig) -> LineItemField {
-    LineItemField {
-        name: leak_str(&c.name),
-        label: leak_opt(&c.label),
-        importance: leak_opt(&c.importance),
-        criticality_path: leak_opt(&c.criticality_path),
-        navigation_path: leak_opt(&c.navigation_path),
-        semantic_object: leak_opt(&c.semantic_object),
-    }
-}
-
 fn convert_annotations(c: &AnnotationsConfig) -> &'static AnnotationsDef {
     let def = AnnotationsDef {
-        selection_fields: leak_strs(&c.selection_fields),
-        line_item: leak_vec(c.line_item.iter().map(convert_line_item).collect()),
         header_info: HeaderInfoDef {
             type_name: leak_str(&c.header_info.type_name),
             type_name_plural: leak_str(&c.header_info.type_name_plural),
@@ -292,15 +296,6 @@ fn convert_annotations(c: &AnnotationsConfig) -> &'static AnnotationsDef {
                 })
                 .collect(),
         ),
-        field_groups: leak_vec(
-            c.field_groups
-                .iter()
-                .map(|g| FieldGroupDef {
-                    qualifier: leak_str(&g.qualifier),
-                    fields: leak_strs(&g.fields),
-                })
-                .collect(),
-        ),
         table_facets: leak_vec(
             c.table_facets
                 .iter()
@@ -319,7 +314,6 @@ fn convert_annotations(c: &AnnotationsConfig) -> &'static AnnotationsDef {
 
 pub struct GenericEntity {
     set_name: &'static str,
-    key_field: &'static str,
     type_name: &'static str,
     parent_set_name: Option<&'static str>,
     fields: &'static [FieldDef],
@@ -341,7 +335,7 @@ impl fmt::Debug for GenericEntity {
 }
 
 impl GenericEntity {
-    pub fn from_config(config: EntityConfig, title_paths: &HashMap<String, String>, key_fields: &HashMap<String, String>) -> Self {
+    pub fn from_config(mut config: EntityConfig, title_paths: &HashMap<String, String>) -> Self {
         let set_name = leak_str(&config.set_name);
         let type_name = leak_str(&config.type_name);
 
@@ -365,86 +359,133 @@ impl GenericEntity {
         );
         xml.push_str("\n</EntitySet>");
 
-        // Auto-derive text_path for FK fields with 1:1 navigation properties.
-        // For each 1:1 nav, if the FK field has no explicit text_path and no value_source,
-        // set text_path = "{nav_name}/{target_title_path}".
+        // Auto-derive text_path for FK fields with references_entity.
+        // Convention: NavName is derived from FK field name minus "ID" suffix, or uses target set name (singular).
+        // text_path = "{NavName}/{target_title_path}"
         let mut field_configs = config.fields;
-        for nav in &config.navigation_properties {
-            if nav.is_collection {
-                continue;
-            }
-            let fk = match &nav.foreign_key {
-                Some(fk) => fk.clone(),
-                None => continue,
+        for field in field_configs.iter_mut() {
+            let ref_entity = match &field.references_entity {
+                Some(re) if !re.is_empty() => re.clone(),
+                _ => continue,
             };
-            let target_title = match title_paths.get(&nav.target_set) {
+            if field.text_path.is_some() {
+                continue; // explicit override takes priority
+            }
+            let target_title = match title_paths.get(&ref_entity) {
                 Some(tp) => tp.clone(),
                 None => continue,
             };
-            if let Some(field) = field_configs.iter_mut().find(|f| f.name == fk) {
-                if field.text_path.is_none() && field.value_source.is_none() {
-                    field.text_path = Some(format!("{}/{}", nav.name, target_title));
+            // Derive nav name from FK field name: "CustomerID" → "Customer"
+            let nav_name = if field.name.ends_with("ID") && field.name.len() > 2 {
+                field.name[..field.name.len() - 2].to_string()
+            } else {
+                // Fallback: singular of target set (strip trailing 's')
+                let s = &ref_entity;
+                if s.ends_with('s') { s[..s.len() - 1].to_string() } else { s.clone() }
+            };
+            field.text_path = Some(format!("{}/{}", nav_name, target_title));
+        }
+
+        // Apply FieldGroup mapping from annotations config to FieldConfig.form_group.
+        // EntityFacets defines qualifier → field list, but FieldConfig.form_group (from EntityFields)
+        // is typically empty. Backfill it so build_annotations() can derive UI.FieldGroup.
+        if let Some(ref ann) = config.annotations {
+            for fg in &ann.field_groups {
+                for field_name in &fg.fields {
+                    if let Some(fc) = field_configs.iter_mut().find(|f| &f.name == field_name) {
+                        if fc.form_group.is_none() {
+                            fc.form_group = Some(fg.qualifier.clone());
+                        }
+                    }
                 }
             }
         }
 
-        // Convention: key_field == "ID" → Edm.Guid, auto-generated, hidden in UI.
+        // Convention: key is always ID (Edm.Guid, auto-generated, hidden in UI).
         // Ensure the ID field exists at position 0 with the correct type.
         let mut fields: Vec<FieldDef> = field_configs.iter().map(convert_field).collect();
-        if config.key_field == "ID" {
-            if let Some(pos) = fields.iter().position(|f| f.name == "ID") {
-                fields[pos].edm_type = "Edm.Guid";
-                fields[pos].immutable = true;
-                fields[pos].computed = true;
-                fields[pos].max_length = None;
-            } else {
-                fields.insert(
-                    0,
-                    FieldDef {
-                        name: "ID",
-                        label: "ID",
-                        edm_type: "Edm.Guid",
-                        max_length: None,
-                        precision: None,
-                        scale: None,
-                        immutable: true,
-                        computed: true,
-                        semantic_object: None,
-                        value_source: None,
-                        value_list: None,
-                        text_path: None,
-                    },
-                );
-            }
+        if let Some(pos) = fields.iter().position(|f| f.name == "ID") {
+            fields[pos].edm_type = "Edm.Guid";
+            fields[pos].immutable = true;
+            fields[pos].computed = true;
+            fields[pos].max_length = None;
+        } else {
+            fields.insert(
+                0,
+                FieldDef {
+                    name: "ID",
+                    label: "ID",
+                    edm_type: "Edm.Guid",
+                    max_length: None,
+                    precision: None,
+                    scale: None,
+                    immutable: true,
+                    computed: true,
+                    references_entity: None,
+                    prefer_dialog: false,
+                    value_source: None,
+                    text_path: None,
+                    searchable: false,
+                    show_in_list: false,
+                    list_sort_order: None,
+                    list_importance: None,
+                    list_criticality_path: None,
+                    form_group: None,
+                },
+            );
         }
 
-        // Auto-derive ValueList for FK fields with 1:1 navigation properties.
-        // This enables a selection dialog when editing the FK field.
-        for nav in &config.navigation_properties {
-            if nav.is_collection {
-                continue;
-            }
-            let fk = match &nav.foreign_key {
-                Some(fk) => fk.as_str(),
-                None => continue,
+        // Build nav props: start from config (1:N), then auto-add 1:1 from references_entity.
+        let mut nav_props: Vec<NavigationPropertyDef> = config
+            .navigation_properties
+            .iter()
+            .map(convert_nav_property)
+            .collect();
+
+        // Auto-generate 1:1 NavigationPropertyDef from fields with references_entity.
+        // Convention: nav name derived from FK field name ("CustomerID" → "Customer").
+        for f in &fields {
+            let ref_entity = match f.references_entity {
+                Some(re) if !re.is_empty() => re,
+                _ => continue,
             };
-            let target_title = match title_paths.get(&nav.target_set) {
-                Some(tp) => tp.as_str(),
-                None => continue,
+            // Derive nav name
+            let nav_name = if f.name.ends_with("ID") && f.name.len() > 2 {
+                &f.name[..f.name.len() - 2]
+            } else {
+                let s = ref_entity;
+                if s.ends_with('s') { &s[..s.len() - 1] } else { s }
             };
-            let target_key = match key_fields.get(&nav.target_set) {
-                Some(k) => k.as_str(),
-                None => continue,
+            // Derive target type name (singular of entity set)
+            let target_type = if ref_entity.ends_with('s') {
+                &ref_entity[..ref_entity.len() - 1]
+            } else {
+                ref_entity
             };
-            if let Some(field) = fields.iter_mut().find(|f| f.name == fk) {
-                if field.value_list.is_none() && field.value_source.is_none() {
-                    field.value_list = Some(Box::leak(Box::new(ValueListDef {
-                        collection_path: leak_str(&nav.target_set),
-                        key_property: leak_str(target_key),
-                        display_property: Some(leak_str(target_title)),
-                        fixed_values: false,
-                    })));
-                }
+            // Only add if not already present (from EntityNavigations)
+            if !nav_props.iter().any(|np| np.name == nav_name) {
+                nav_props.push(NavigationPropertyDef {
+                    name: leak_str(nav_name),
+                    target_type: leak_str(target_type),
+                    is_collection: false,
+                    foreign_key: Some(f.name),
+                });
+                // Also register in nav_configs so expand_record can resolve 1:1 navs at runtime
+                config.navigation_properties.push(NavPropertyConfig {
+                    name: nav_name.to_string(),
+                    target_type: target_type.to_string(),
+                    target_set: ref_entity.to_string(),
+                    is_collection: false,
+                    foreign_key: Some(f.name.to_string()),
+                });
+                // Add NavigationPropertyBinding to EntitySet XML
+                xml = xml.replace(
+                    "\n<NavigationPropertyBinding Path=\"SiblingEntity\"",
+                    &format!(
+                        "\n<NavigationPropertyBinding Path=\"{}\" Target=\"{}\"/>\n<NavigationPropertyBinding Path=\"SiblingEntity\"",
+                        nav_name, ref_entity
+                    ),
+                );
             }
         }
 
@@ -462,27 +503,26 @@ impl GenericEntity {
                 scale: None,
                 immutable: false,
                 computed: true,
-                semantic_object: None,
+                references_entity: None,
+                prefer_dialog: false,
                 value_source: None,
-                value_list: None,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
             })
             .collect();
         fields.extend(text_fields);
 
         GenericEntity {
             set_name,
-            key_field: leak_str(&config.key_field),
             type_name,
             parent_set_name: leak_opt(&config.parent_set_name),
             fields: leak_vec(fields),
-            nav_properties: leak_vec(
-                config
-                    .navigation_properties
-                    .iter()
-                    .map(convert_nav_property)
-                    .collect(),
-            ),
+            nav_properties: leak_vec(nav_props),
             nav_configs: config.navigation_properties,
             annotations: config.annotations.as_ref().map(convert_annotations),
             entity_set_xml: xml,
@@ -497,7 +537,7 @@ impl ODataEntity for GenericEntity {
         self.set_name
     }
     fn key_field(&self) -> &'static str {
-        self.key_field
+        "ID"
     }
     fn type_name(&self) -> &'static str {
         self.type_name
@@ -565,9 +605,9 @@ impl ODataEntity for GenericEntity {
 
             if nav.is_collection {
                 // 1:n – foreign_key auf dem Kind verweist auf unseren Key
-                let fk = nav.foreign_key.as_deref().unwrap_or(self.key_field);
+                let fk = nav.foreign_key.as_deref().unwrap_or("ID");
                 let key_val = record
-                    .get(self.key_field)
+                    .get("ID")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
                 if let Some(kv) = key_val {
@@ -766,15 +806,11 @@ pub fn create_generic_entities(configs: Vec<EntityConfig>) -> Vec<&'static dyn O
             })
         })
         .collect();
-    let key_fields: HashMap<String, String> = configs
-        .iter()
-        .map(|c| (c.set_name.clone(), c.key_field.clone()))
-        .collect();
 
     configs
         .into_iter()
         .map(|config| {
-            let entity = GenericEntity::from_config(config, &title_paths, &key_fields);
+            let entity = GenericEntity::from_config(config, &title_paths);
             let leaked: &'static GenericEntity = Box::leak(Box::new(entity));
             leaked as &'static dyn ODataEntity
         })
@@ -796,7 +832,6 @@ mod tests {
     fn minimal_config() -> EntityConfig {
         EntityConfig {
             set_name: "TestItems".to_string(),
-            key_field: "ItemID".to_string(),
             type_name: "TestItem".to_string(),
             parent_set_name: None,
             fields: vec![
@@ -808,10 +843,17 @@ mod tests {
                     precision: None,
                     scale: None,
                     immutable: true,
-                    semantic_object: None,
+                    references_entity: None,
+                    prefer_dialog: false,
                     value_source: None,
                     computed: false,
                     text_path: None,
+                    searchable: false,
+                    show_in_list: false,
+                    list_sort_order: None,
+                    list_importance: None,
+                    list_criticality_path: None,
+                    form_group: None,
                 },
                 FieldConfig {
                     name: "Name".to_string(),
@@ -821,10 +863,17 @@ mod tests {
                     precision: None,
                     scale: None,
                     immutable: false,
-                    semantic_object: None,
+                    references_entity: None,
+                    prefer_dialog: false,
                     value_source: None,
                     computed: false,
                     text_path: None,
+                    searchable: false,
+                    show_in_list: false,
+                    list_sort_order: None,
+                    list_importance: None,
+                    list_criticality_path: None,
+                    form_group: None,
                 },
             ],
             navigation_properties: vec![],
@@ -839,7 +888,6 @@ mod tests {
     fn full_config() -> EntityConfig {
         EntityConfig {
             set_name: "Orders".to_string(),
-            key_field: "OrderID".to_string(),
             type_name: "Order".to_string(),
             parent_set_name: None,
             fields: vec![
@@ -851,10 +899,17 @@ mod tests {
                     precision: None,
                     scale: None,
                     immutable: true,
-                    semantic_object: None,
+                    references_entity: None,
+                    prefer_dialog: false,
                     value_source: None,
                     computed: false,
                     text_path: None,
+                    searchable: false,
+                    show_in_list: false,
+                    list_sort_order: None,
+                    list_importance: None,
+                    list_criticality_path: None,
+                    form_group: None,
                 },
                 FieldConfig {
                     name: "Status".to_string(),
@@ -864,10 +919,17 @@ mod tests {
                     precision: None,
                     scale: None,
                     immutable: false,
-                    semantic_object: None,
+                    references_entity: None,
+                    prefer_dialog: false,
                     value_source: None,
                     computed: false,
                     text_path: None,
+                    searchable: false,
+                    show_in_list: false,
+                    list_sort_order: None,
+                    list_importance: None,
+                    list_criticality_path: None,
+                    form_group: None,
                 },
                 FieldConfig {
                     name: "Amount".to_string(),
@@ -877,10 +939,17 @@ mod tests {
                     precision: Some(15),
                     scale: Some(2),
                     immutable: false,
-                    semantic_object: None,
+                    references_entity: None,
+                    prefer_dialog: false,
                     value_source: None,
                     computed: false,
                     text_path: None,
+                    searchable: false,
+                    show_in_list: false,
+                    list_sort_order: None,
+                    list_importance: None,
+                    list_criticality_path: None,
+                    form_group: None,
                 },
             ],
             navigation_properties: vec![NavPropertyConfig {
@@ -951,7 +1020,6 @@ mod tests {
     fn child_config() -> EntityConfig {
         EntityConfig {
             set_name: "OrderItems".to_string(),
-            key_field: "ItemID".to_string(),
             type_name: "OrderItem".to_string(),
             parent_set_name: Some("Orders".to_string()),
             fields: vec![
@@ -963,10 +1031,17 @@ mod tests {
                     precision: None,
                     scale: None,
                     immutable: true,
-                    semantic_object: None,
+                    references_entity: None,
+                    prefer_dialog: false,
                     value_source: None,
                     computed: false,
                     text_path: None,
+                    searchable: false,
+                    show_in_list: false,
+                    list_sort_order: None,
+                    list_importance: None,
+                    list_criticality_path: None,
+                    form_group: None,
                 },
                 FieldConfig {
                     name: "OrderID".to_string(),
@@ -976,10 +1051,17 @@ mod tests {
                     precision: None,
                     scale: None,
                     immutable: true,
-                    semantic_object: Some("Orders".to_string()),
+                    references_entity: Some("Orders".to_string()),
+                    prefer_dialog: false,
                     value_source: None,
                     computed: false,
                     text_path: None,
+                    searchable: false,
+                    show_in_list: false,
+                    list_sort_order: None,
+                    list_importance: None,
+                    list_criticality_path: None,
+                    form_group: None,
                 },
             ],
             navigation_properties: vec![],
@@ -1019,7 +1101,6 @@ mod tests {
         let json = serde_json::to_string_pretty(&config).unwrap();
         let parsed: EntityConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.set_name, "TestItems");
-        assert_eq!(parsed.key_field, "ItemID");
         assert_eq!(parsed.fields.len(), 2);
         assert!(parsed.annotations.is_none());
         assert!(parsed.tile.is_none());
@@ -1068,7 +1149,7 @@ mod tests {
         let json = serde_json::to_string_pretty(&config).unwrap();
         let parsed: EntityConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.parent_set_name.as_deref(), Some("Orders"));
-        assert_eq!(parsed.fields[1].semantic_object.as_deref(), Some("Orders"));
+        assert_eq!(parsed.fields[1].references_entity.as_deref(), Some("Orders"));
     }
 
     #[test]
@@ -1117,7 +1198,6 @@ mod tests {
         }"#;
         let config: EntityConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.set_name, "Customers");
-        assert_eq!(config.key_field, "CustomerID");
         assert_eq!(config.fields.len(), 2);
         assert!(config.annotations.is_some());
         let ann = config.annotations.as_ref().unwrap();
@@ -1134,7 +1214,7 @@ mod tests {
             "type_name": "Contact",
             "fields": [
                 { "name": "ContactID", "label": "ID", "edm_type": "Edm.String", "max_length": 10, "immutable": true },
-                { "name": "CustomerID", "label": "Kunde", "edm_type": "Edm.String", "semantic_object": "Customers" }
+                { "name": "CustomerID", "label": "Kunde", "edm_type": "Edm.String", "references_entity": "Customers" }
             ],
             "navigation_properties": [
                 { "name": "Customer", "target_type": "Customer", "target_set": "Customers", "is_collection": false, "foreign_key": "CustomerID" }
@@ -1154,7 +1234,6 @@ mod tests {
         let serialized = serde_json::to_string_pretty(&config).unwrap();
         let reparsed: EntityConfig = serde_json::from_str(&serialized).unwrap();
         assert_eq!(config.set_name, reparsed.set_name);
-        assert_eq!(config.key_field, reparsed.key_field);
         assert_eq!(config.fields.len(), reparsed.fields.len());
         assert_eq!(
             config.navigation_properties.len(),
@@ -1171,9 +1250,9 @@ mod tests {
 
     #[test]
     fn generic_entity_basic_properties() {
-        let entity = GenericEntity::from_config(minimal_config(), &no_titles(), &no_titles());
+        let entity = GenericEntity::from_config(minimal_config(), &no_titles());
         assert_eq!(entity.set_name(), "TestItems");
-        assert_eq!(entity.key_field(), "ItemID");
+        assert_eq!(entity.key_field(), "ID");
         assert_eq!(entity.type_name(), "TestItem");
         assert!(entity.parent_set_name().is_none());
         assert_eq!(entity.mock_data().len(), 0);
@@ -1181,25 +1260,25 @@ mod tests {
 
     #[test]
     fn generic_entity_fields_def() {
-        let entity = GenericEntity::from_config(minimal_config(), &no_titles(), &no_titles());
+        let entity = GenericEntity::from_config(minimal_config(), &no_titles());
         let fields = entity.fields_def().unwrap();
-        assert_eq!(fields.len(), 2);
-        assert_eq!(fields[0].name, "ItemID");
-        assert_eq!(fields[0].label, "Item Nr.");
-        assert!(fields[0].immutable);
-        assert_eq!(fields[0].max_length, Some(10));
-        assert_eq!(fields[1].name, "Name");
-        assert!(!fields[1].immutable);
+        // ID auto-inserted + ItemID + Name = 3
+        assert_eq!(fields.len(), 3);
+        assert_eq!(fields[0].name, "ID");
+        assert_eq!(fields[0].edm_type, "Edm.Guid");
+        assert!(fields[0].computed);
+        assert_eq!(fields[1].name, "ItemID");
+        assert_eq!(fields[1].label, "Item Nr.");
+        assert!(fields[1].immutable);
+        assert_eq!(fields[1].max_length, Some(10));
+        assert_eq!(fields[2].name, "Name");
+        assert!(!fields[2].immutable);
     }
 
     #[test]
     fn generic_entity_annotations() {
-        let entity = GenericEntity::from_config(full_config(), &no_titles(), &no_titles());
+        let entity = GenericEntity::from_config(full_config(), &no_titles());
         let ann = entity.annotations_def().unwrap();
-        assert_eq!(ann.selection_fields, &["Status"]);
-        assert_eq!(ann.line_item.len(), 2);
-        assert_eq!(ann.line_item[0].name, "OrderID");
-        assert_eq!(ann.line_item[0].importance, Some("High"));
         assert_eq!(ann.header_info.type_name, "Auftrag");
         assert_eq!(ann.header_info.type_name_plural, "Auftraege");
         assert_eq!(ann.facet_sections.len(), 1);
@@ -1210,7 +1289,7 @@ mod tests {
 
     #[test]
     fn generic_entity_navigation_properties() {
-        let entity = GenericEntity::from_config(full_config(), &no_titles(), &no_titles());
+        let entity = GenericEntity::from_config(full_config(), &no_titles());
         let navs = entity.navigation_properties();
         assert_eq!(navs.len(), 1);
         assert_eq!(navs[0].name, "Items");
@@ -1220,13 +1299,13 @@ mod tests {
 
     #[test]
     fn generic_entity_parent_set_name() {
-        let entity = GenericEntity::from_config(child_config(), &no_titles(), &no_titles());
+        let entity = GenericEntity::from_config(child_config(), &no_titles());
         assert_eq!(entity.parent_set_name(), Some("Orders"));
     }
 
     #[test]
     fn generic_entity_entity_set_xml() {
-        let entity = GenericEntity::from_config(full_config(), &no_titles(), &no_titles());
+        let entity = GenericEntity::from_config(full_config(), &no_titles());
         let xml = entity.entity_set();
         assert!(xml.contains("EntitySet Name=\"Orders\""));
         assert!(xml.contains("EntityType=\"ProductsService.Order\""));
@@ -1237,7 +1316,7 @@ mod tests {
 
     #[test]
     fn generic_entity_entity_set_xml_no_nav() {
-        let entity = GenericEntity::from_config(minimal_config(), &no_titles(), &no_titles());
+        let entity = GenericEntity::from_config(minimal_config(), &no_titles());
         let xml = entity.entity_set();
         assert!(xml.contains("EntitySet Name=\"TestItems\""));
         // Only SiblingEntity + DraftAdministrativeData bindings
@@ -1247,7 +1326,7 @@ mod tests {
 
     #[test]
     fn generic_entity_apps_json_with_tile() {
-        let entity = GenericEntity::from_config(full_config(), &no_titles(), &no_titles());
+        let entity = GenericEntity::from_config(full_config(), &no_titles());
         let (key, entry) = entity.apps_json_entry().unwrap();
         assert_eq!(key, "Orders-display");
         assert_eq!(entry["title"], "Auftraege");
@@ -1259,14 +1338,14 @@ mod tests {
 
     #[test]
     fn generic_entity_apps_json_without_tile() {
-        let entity = GenericEntity::from_config(minimal_config(), &no_titles(), &no_titles());
+        let entity = GenericEntity::from_config(minimal_config(), &no_titles());
         assert!(entity.apps_json_entry().is_none());
     }
 
     #[test]
     fn generic_entity_expand_1n() {
-        let order_entity = GenericEntity::from_config(full_config(), &no_titles(), &no_titles());
-        let child_entity = GenericEntity::from_config(child_config(), &no_titles(), &no_titles());
+        let order_entity = GenericEntity::from_config(full_config(), &no_titles());
+        let child_entity = GenericEntity::from_config(child_config(), &no_titles());
         let entities: Vec<&dyn ODataEntity> = vec![
             &order_entity as &dyn ODataEntity,
             &child_entity as &dyn ODataEntity,
@@ -1282,7 +1361,7 @@ mod tests {
             ],
         );
 
-        let mut record = json!({"OrderID": "O001", "Status": "A"});
+        let mut record = json!({"ID": "O001", "Status": "A"});
         order_entity.expand_record(&mut record, &["Items"], &entities, &store);
 
         let items = record["Items"].as_array().unwrap();
@@ -1295,23 +1374,9 @@ mod tests {
     fn generic_entity_expand_1_1() {
         let contact_config = EntityConfig {
             set_name: "Contacts".to_string(),
-            key_field: "ContactID".to_string(),
             type_name: "Contact".to_string(),
             parent_set_name: None,
             fields: vec![
-                FieldConfig {
-                    name: "ContactID".to_string(),
-                    label: "ID".to_string(),
-                    edm_type: "Edm.String".to_string(),
-                    max_length: None,
-                    precision: None,
-                    scale: None,
-                    immutable: true,
-                    semantic_object: None,
-                    value_source: None,
-                    computed: false,
-                    text_path: None,
-                },
                 FieldConfig {
                     name: "CustomerID".to_string(),
                     label: "Kunde".to_string(),
@@ -1320,10 +1385,17 @@ mod tests {
                     precision: None,
                     scale: None,
                     immutable: false,
-                    semantic_object: None,
+                    references_entity: None,
+                    prefer_dialog: false,
                     value_source: None,
                     computed: false,
                     text_path: None,
+                    searchable: false,
+                    show_in_list: false,
+                    list_sort_order: None,
+                    list_importance: None,
+                    list_criticality_path: None,
+                    form_group: None,
                 },
             ],
             navigation_properties: vec![NavPropertyConfig {
@@ -1340,21 +1412,27 @@ mod tests {
         };
         let customer_config = EntityConfig {
             set_name: "Customers".to_string(),
-            key_field: "CustomerID".to_string(),
             type_name: "Customer".to_string(),
             parent_set_name: None,
             fields: vec![FieldConfig {
-                name: "CustomerID".to_string(),
-                label: "ID".to_string(),
+                name: "CustomerName".to_string(),
+                label: "Name".to_string(),
                 edm_type: "Edm.String".to_string(),
                 max_length: None,
                 precision: None,
                 scale: None,
-                immutable: true,
-                semantic_object: None,
+                immutable: false,
+                references_entity: None,
+                prefer_dialog: false,
                 value_source: None,
                 computed: false,
                 text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
             }],
             navigation_properties: vec![],
             annotations: None,
@@ -1363,8 +1441,8 @@ mod tests {
             value_lists: vec![],
         };
 
-        let contact_entity = GenericEntity::from_config(contact_config, &no_titles(), &no_titles());
-        let customer_entity = GenericEntity::from_config(customer_config, &no_titles(), &no_titles());
+        let contact_entity = GenericEntity::from_config(contact_config, &no_titles());
+        let customer_entity = GenericEntity::from_config(customer_config, &no_titles());
         let entities: Vec<&dyn ODataEntity> = vec![
             &contact_entity as &dyn ODataEntity,
             &customer_entity as &dyn ODataEntity,
@@ -1374,21 +1452,21 @@ mod tests {
         store.insert(
             "Customers".to_string(),
             vec![
-                json!({"CustomerID": "C001", "Name": "Acme"}),
-                json!({"CustomerID": "C002", "Name": "Global"}),
+                json!({"ID": "C001", "CustomerName": "Acme"}),
+                json!({"ID": "C002", "CustomerName": "Global"}),
             ],
         );
 
-        let mut record = json!({"ContactID": "K001", "CustomerID": "C002"});
+        let mut record = json!({"ID": "K001", "CustomerID": "C002"});
         contact_entity.expand_record(&mut record, &["Customer"], &entities, &store);
 
-        assert_eq!(record["Customer"]["CustomerID"], "C002");
-        assert_eq!(record["Customer"]["Name"], "Global");
+        assert_eq!(record["Customer"]["ID"], "C002");
+        assert_eq!(record["Customer"]["CustomerName"], "Global");
     }
 
     #[test]
     fn generic_entity_expand_unknown_nav_ignored() {
-        let entity = GenericEntity::from_config(full_config(), &no_titles(), &no_titles());
+        let entity = GenericEntity::from_config(full_config(), &no_titles());
         let entities: Vec<&dyn ODataEntity> = vec![&entity as &dyn ODataEntity];
         let store: HashMap<String, Vec<Value>> = HashMap::new();
 
@@ -1400,7 +1478,7 @@ mod tests {
 
     #[test]
     fn generic_entity_debug_impl() {
-        let entity = GenericEntity::from_config(minimal_config(), &no_titles(), &no_titles());
+        let entity = GenericEntity::from_config(minimal_config(), &no_titles());
         let dbg = format!("{:?}", entity);
         assert!(dbg.contains("TestItems"));
         assert!(dbg.contains("TestItem"));

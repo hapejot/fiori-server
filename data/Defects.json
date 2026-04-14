@@ -1,0 +1,72 @@
+[
+  {
+    "ID": "bd2b2b97-5fbf-5ef6-a013-8195bc22271f",
+    "Title": "Login-Seite zeigt falsches Logo",
+    "Description": "Nach dem letzten Deployment wird auf der Login-Seite das alte Firmenlogo angezeigt.",
+    "Priority": "P4",
+    "Status": "FIX",
+    "StatusCriticality": 1,
+    "Severity": "COS",
+    "Component": "FE",
+    "ReporterID": "d8dd023b-8bc7-543b-aa1e-3406a27ffc28",
+    "AssignedToID": "c89b9237-28e3-5bf5-a6f0-3d78157e9fef",
+    "FoundIn": "2.3.1",
+    "FixedIn": "2.3.2"
+  },
+  {
+    "ID": "56a92ca8-8619-590e-896c-cae85c63332b",
+    "Title": "API gibt 500 bei Sonderzeichen",
+    "Description": "REST-API liefert Internal Server Error wenn Sonderzeichen (ä,ö,ü) im Suchfeld verwendet werden.",
+    "Priority": "P2",
+    "Status": "INP",
+    "StatusCriticality": 2,
+    "Severity": "MAJ",
+    "Component": "API",
+    "ReporterID": "cdb2fb76-0666-5752-92e0-15dde2280566",
+    "AssignedToID": "f046bb00-857d-5985-9b7a-cd9d84e28ed4",
+    "FoundIn": "2.3.0",
+    "FixedIn": ""
+  },
+  {
+    "ID": "819011b8-4814-5253-b301-f3bf52c67bbc",
+    "Title": "Doppelte Einträge bei Concurrent Insert",
+    "Description": "Bei gleichzeitigem Anlegen von Datensätzen werden gelegentlich doppelte Einträge erzeugt.",
+    "Priority": "P1",
+    "Status": "CNF",
+    "StatusCriticality": 2,
+    "Severity": "CRT",
+    "Component": "DB",
+    "ReporterID": "f046bb00-857d-5985-9b7a-cd9d84e28ed4",
+    "AssignedToID": null,
+    "FoundIn": "2.2.0",
+    "FixedIn": ""
+  },
+  {
+    "ID": "53b36bf2-2904-5137-91f3-d40eac1ce49b",
+    "Title": "Dashboard lädt langsam",
+    "Description": "Das Management-Dashboard benötigt >10s zum Laden wenn mehr als 1000 Datensätze vorhanden sind.",
+    "Priority": "P3",
+    "Status": "NEW",
+    "StatusCriticality": 2,
+    "Severity": "MIN",
+    "Component": "FE",
+    "ReporterID": "2a66bbbb-8f0d-5885-99b6-acc25927e58a",
+    "AssignedToID": null,
+    "FoundIn": "2.3.1",
+    "FixedIn": ""
+  },
+  {
+    "ID": "4d658985-45c2-5ea3-9a3c-56a4f6007bd7",
+    "Title": "Export als CSV fehlt Spaltenüberschriften",
+    "Description": "Beim CSV-Export der Berichtsdaten fehlen die Spaltenüberschriften in der ersten Zeile.",
+    "Priority": "P3",
+    "Status": "VER",
+    "StatusCriticality": 1,
+    "Severity": "MIN",
+    "Component": "BE",
+    "ReporterID": "d2c2e63c-c19e-589d-91ba-5622c83adbd8",
+    "AssignedToID": "c89b9237-28e3-5bf5-a6f0-3d78157e9fef",
+    "FoundIn": "2.3.0",
+    "FixedIn": "2.3.2"
+  }
+]

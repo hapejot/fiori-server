@@ -1,7 +1,7 @@
 [
   {
     "Currency": "EUR",
-    "CustomerID": "C002",
+    "CustomerID": "0066acd3-3d2f-573a-abd0-f4f2ea728695",
     "DeliveryDate": "",
     "ID": "49d3a978-a74c-4c09-a75e-1390130a60f6",
     "Note": "",
@@ -13,7 +13,7 @@
   },
   {
     "Currency": "EUR",
-    "CustomerID": "C003",
+    "CustomerID": "40eceb19-2bbe-5570-bcc2-b3e638e325d8",
     "DeliveryDate": "",
     "ID": "422370d0-0c9c-412a-a91f-359b83ee1793",
     "Note": "",

@@ -52,6 +52,15 @@ pub trait ODataEntity: Sync + Debug {
     fn default_values(&self) -> Option<Value> {
         None
     }
+    /// Berechnete Felder aktualisieren (z.B. TypeName = HeaderTypeName + "Type").
+    /// Wird nach create_entity und patch_entity aufgerufen.
+    fn compute_fields(&self, _record: &mut Value) {}
+    /// Automatische Kind-Entitaeten bei Neu-Anlage erzeugen.
+    /// Gibt (child_set_name, child_data)-Paare zurueck.
+    /// Darf parent_record mutieren (z.B. FK-Referenz auf das Kind).
+    fn auto_create_children(&self, _parent_record: &mut Value) -> Vec<(String, Value)> {
+        vec![]
+    }
     /// Primaeres Textfeld, das anstelle des Schluessels angezeigt wird.
     /// Default: HeaderInfo.title_path (falls vorhanden).
     /// Erzeugt Common.Text + UI.TextArrangement auf dem Schluesselfeld.

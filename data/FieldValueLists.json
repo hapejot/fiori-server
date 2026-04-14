@@ -8,5 +8,60 @@
     "Description": "Partner Status",
     "ID": "68529b35-6721-4d72-a844-14e8a207c32c",
     "ListName": "PartnerStatus"
+  },
+  {
+    "ID": "3b198107-13ba-5e27-8a8b-f3cc1d7d2a0c",
+    "ListName": "TicketPriority",
+    "Description": "Priorität"
+  },
+  {
+    "ID": "dfcfe534-098c-52ee-b0ff-3441af2c5b33",
+    "ListName": "IncidentStatus",
+    "Description": "Störungsstatus"
+  },
+  {
+    "ID": "41c312eb-76ee-51aa-8157-ef888d202838",
+    "ListName": "IncidentCategory",
+    "Description": "Störungskategorie"
+  },
+  {
+    "ID": "4910f44a-3b54-547f-be18-93a9abd36d4a",
+    "ListName": "ServiceRequestStatus",
+    "Description": "Anfragestatus"
+  },
+  {
+    "ID": "8fa130ff-a7fc-515f-a955-ef5d92520495",
+    "ListName": "ServiceRequestCategory",
+    "Description": "Anfragekategorie"
+  },
+  {
+    "ID": "2dad2b3f-399c-5147-b1b1-5d1e659db0a6",
+    "ListName": "ChangeRequestStatus",
+    "Description": "Änderungsstatus"
+  },
+  {
+    "ID": "6fe919e5-e59a-5106-b8b2-2643d60b6e6e",
+    "ListName": "ChangeType",
+    "Description": "Änderungstyp"
+  },
+  {
+    "ID": "62ff382b-3c5a-5c06-a598-4b199c16b422",
+    "ListName": "RiskLevel",
+    "Description": "Risikostufe"
+  },
+  {
+    "ID": "8444530e-6584-5020-8ca8-1fc2d5c8b1f2",
+    "ListName": "DefectStatus",
+    "Description": "Fehlerstatus"
+  },
+  {
+    "ID": "56706664-e1a7-5427-9d6a-3949b20fb6f2",
+    "ListName": "DefectSeverity",
+    "Description": "Schweregrad"
+  },
+  {
+    "ID": "4299c778-6186-5bbe-8695-5a8fa430ce5f",
+    "ListName": "DefectComponent",
+    "Description": "Komponente"
   }
 ]

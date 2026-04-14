@@ -415,9 +415,9 @@ mod tests {
         fn entity_set(&self) -> String { String::new() }
         fn fields_def(&self) -> Option<&'static [FieldDef]> {
             static FIELDS: &[FieldDef] = &[
-                FieldDef { name: "ID", label: "ID", edm_type: "Edm.String", max_length: Some(10), precision: None, scale: None, immutable: true, computed: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
-                FieldDef { name: "Name", label: "Name", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, computed: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
-                FieldDef { name: "Extra", label: "Extra", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, computed: false, semantic_object: None, value_source: None, value_list: None, text_path: None },
+                FieldDef { name: "ID", label: "ID", edm_type: "Edm.String", max_length: Some(10), precision: None, scale: None, immutable: true, computed: false, references_entity: None, value_source: None, prefer_dialog: false, text_path: None, searchable: false, show_in_list: false, list_sort_order: None, list_importance: None, list_criticality_path: None, form_group: None },
+                FieldDef { name: "Name", label: "Name", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, computed: false, references_entity: None, value_source: None, prefer_dialog: false, text_path: None, searchable: false, show_in_list: false, list_sort_order: None, list_importance: None, list_criticality_path: None, form_group: None },
+                FieldDef { name: "Extra", label: "Extra", edm_type: "Edm.String", max_length: Some(40), precision: None, scale: None, immutable: false, computed: false, references_entity: None, value_source: None, prefer_dialog: false, text_path: None, searchable: false, show_in_list: false, list_sort_order: None, list_importance: None, list_criticality_path: None, form_group: None },
             ];
             Some(FIELDS)
         }

@@ -1,0 +1,67 @@
+[
+  {
+    "ID": "c21182eb-14bd-57c1-a0b7-349bb55dc0d6",
+    "Title": "E-Mail-Server nicht erreichbar",
+    "Description": "Exchange-Server antwortet seit 08:30 nicht mehr auf Anfragen. Alle Benutzer betroffen.",
+    "Priority": "P1",
+    "Status": "INP",
+    "StatusCriticality": 2,
+    "Category": "SW",
+    "ReporterID": "d2c2e63c-c19e-589d-91ba-5622c83adbd8",
+    "AssignedToID": "f046bb00-857d-5985-9b7a-cd9d84e28ed4",
+    "CreatedAt": "2026-04-10T08:35:00Z",
+    "ResolvedAt": null
+  },
+  {
+    "ID": "74f4b51c-7810-5827-ba24-d2a981fbe675",
+    "Title": "Drucker 3. OG druckt nicht",
+    "Description": "HP LaserJet im dritten Obergeschoss zeigt Papierstau, lässt sich nicht beheben.",
+    "Priority": "P3",
+    "Status": "NEW",
+    "StatusCriticality": 2,
+    "Category": "HW",
+    "ReporterID": "cdb2fb76-0666-5752-92e0-15dde2280566",
+    "AssignedToID": null,
+    "CreatedAt": "2026-04-11T14:20:00Z",
+    "ResolvedAt": null
+  },
+  {
+    "ID": "ca5e4a9c-0865-5c9a-86f6-324303c61eb1",
+    "Title": "VPN-Verbindung bricht ab",
+    "Description": "Mehrere Mitarbeiter im Homeoffice melden regelmäßige VPN-Abbrüche seit dem letzten Update.",
+    "Priority": "P2",
+    "Status": "RES",
+    "StatusCriticality": 1,
+    "Category": "NET",
+    "ReporterID": "d8dd023b-8bc7-543b-aa1e-3406a27ffc28",
+    "AssignedToID": "f046bb00-857d-5985-9b7a-cd9d84e28ed4",
+    "CreatedAt": "2026-04-09T09:15:00Z",
+    "ResolvedAt": "2026-04-11T16:45:00Z"
+  },
+  {
+    "ID": "614a5ae7-03ab-550e-b725-ef81fac9e9b5",
+    "Title": "SAP-Anmeldung fehlgeschlagen",
+    "Description": "Benutzer kann sich nach Passwortänderung nicht mehr am SAP-System anmelden.",
+    "Priority": "P2",
+    "Status": "CLS",
+    "StatusCriticality": 0,
+    "Category": "ACC",
+    "ReporterID": "c89b9237-28e3-5bf5-a6f0-3d78157e9fef",
+    "AssignedToID": "de4db8b6-85c7-5c78-a345-ecc6a22ff12a",
+    "CreatedAt": "2026-04-08T11:00:00Z",
+    "ResolvedAt": "2026-04-08T13:30:00Z"
+  },
+  {
+    "ID": "ee4084bd-0bca-50c4-98f5-1453519a5d27",
+    "Title": "Monitor flackert sporadisch",
+    "Description": "Dell-Monitor am Arbeitsplatz B-204 zeigt sporadisches Flackern, möglicherweise defektes Kabel.",
+    "Priority": "P4",
+    "Status": "NEW",
+    "StatusCriticality": 2,
+    "Category": "HW",
+    "ReporterID": "f8840411-27a7-5fde-95eb-cc85e17ec00e",
+    "AssignedToID": null,
+    "CreatedAt": "2026-04-12T09:00:00Z",
+    "ResolvedAt": null
+  }
+]

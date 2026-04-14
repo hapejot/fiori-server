@@ -1,0 +1,50 @@
+[
+  {
+    "ID": "1ab2d244-51ff-54b1-bb00-d2e01f4e9262",
+    "Title": "Neuen Laptop bereitstellen",
+    "Description": "Neuer Mitarbeiter in Abteilung Vertrieb benötigt Laptop mit Standardausstattung ab 01.05.",
+    "Priority": "P3",
+    "Status": "APR",
+    "StatusCriticality": 1,
+    "Category": "EQUIP",
+    "RequesterID": "d2c2e63c-c19e-589d-91ba-5622c83adbd8",
+    "AssignedToID": "de4db8b6-85c7-5c78-a345-ecc6a22ff12a",
+    "RequestedAt": "2026-04-07T10:00:00Z"
+  },
+  {
+    "ID": "47432a43-a724-55e1-b554-f91f14276be5",
+    "Title": "Zugang zu SharePoint-Gruppe",
+    "Description": "Benötige Zugriff auf die SharePoint-Gruppe 'Projektmanagement' für aktuelles Projekt.",
+    "Priority": "P3",
+    "Status": "FUL",
+    "StatusCriticality": 1,
+    "Category": "ACC",
+    "RequesterID": "cdb2fb76-0666-5752-92e0-15dde2280566",
+    "AssignedToID": "de4db8b6-85c7-5c78-a345-ecc6a22ff12a",
+    "RequestedAt": "2026-04-05T08:30:00Z"
+  },
+  {
+    "ID": "5481b709-2edc-5653-ac3b-c43e2dcd76b1",
+    "Title": "Adobe Creative Suite Installation",
+    "Description": "Lizenz für Adobe Creative Suite auf Arbeitsplatz der Marketingabteilung installieren.",
+    "Priority": "P4",
+    "Status": "NEW",
+    "StatusCriticality": 2,
+    "Category": "SW",
+    "RequesterID": "d8dd023b-8bc7-543b-aa1e-3406a27ffc28",
+    "AssignedToID": null,
+    "RequestedAt": "2026-04-11T13:00:00Z"
+  },
+  {
+    "ID": "1cbbc604-e5cd-5827-b699-1c955c5f997a",
+    "Title": "Neues Benutzerkonto einrichten",
+    "Description": "Benutzerkonto für neuen Praktikanten in der IT-Abteilung einrichten. Start: 15.04.",
+    "Priority": "P2",
+    "Status": "INP",
+    "StatusCriticality": 2,
+    "Category": "ACCT",
+    "RequesterID": "f046bb00-857d-5985-9b7a-cd9d84e28ed4",
+    "AssignedToID": "de4db8b6-85c7-5c78-a345-ecc6a22ff12a",
+    "RequestedAt": "2026-04-10T09:00:00Z"
+  }
+]

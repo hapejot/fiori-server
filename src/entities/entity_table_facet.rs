@@ -12,7 +12,7 @@ impl ODataEntity for EntityTableFacetEntity {
         "EntityTableFacets"
     }
     fn key_field(&self) -> &'static str {
-        "TableFacetID"
+        "ID"
     }
     fn type_name(&self) -> &'static str {
         "EntityTableFacet"
@@ -28,12 +28,13 @@ impl ODataEntity for EntityTableFacetEntity {
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
-            FieldDef { name: "TableFacetID",       label: "TableFacet-ID",      edm_type: "Edm.String", max_length: Some(80),  precision: None, scale: None, immutable: true, computed: false,  semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "SetName",            label: "EntitySet",           edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: true, computed: false,  semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "FacetLabel",         label: "Label",              edm_type: "Edm.String", max_length: Some(80),  precision: None, scale: None, immutable: false, computed: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "FacetId",            label: "Facet-ID",           edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, computed: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "NavigationProperty", label: "Navigation Property", edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, computed: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "SortOrder",          label: "Reihenfolge",        edm_type: "Edm.Int32",  max_length: None,      precision: None, scale: None, immutable: false, computed: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "ID",                 label: "ID",                 edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true, computed: true,   references_entity: None, value_source: None , prefer_dialog: false, text_path: None, searchable: false, show_in_list: false, list_sort_order: None, list_importance: None, list_criticality_path: None, form_group: None},
+            FieldDef { name: "ConfigID",           label: "Config-ID",           edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true, computed: true,   references_entity: None, value_source: None , prefer_dialog: false, text_path: None, searchable: false, show_in_list: false, list_sort_order: None, list_importance: None, list_criticality_path: None, form_group: None},
+            FieldDef { name: "SetName",            label: "EntitySet",           edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: true, computed: true,   references_entity: None, value_source: None , prefer_dialog: false, text_path: None, searchable: false, show_in_list: false, list_sort_order: None, list_importance: None, list_criticality_path: None, form_group: Some("TFInfo")},
+            FieldDef { name: "FacetLabel",         label: "Label",              edm_type: "Edm.String", max_length: Some(80),  precision: None, scale: None, immutable: false, computed: false, references_entity: None, value_source: None , prefer_dialog: false, text_path: None, searchable: false, show_in_list: true, list_sort_order: Some(1), list_importance: Some("High"), list_criticality_path: None, form_group: Some("TFInfo")},
+            FieldDef { name: "FacetId",            label: "Facet-ID",           edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, computed: false, references_entity: None, value_source: None , prefer_dialog: false, text_path: None, searchable: false, show_in_list: true, list_sort_order: Some(2), list_importance: None, list_criticality_path: None, form_group: Some("TFInfo")},
+            FieldDef { name: "NavigationProperty", label: "Navigation Property", edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, computed: false, references_entity: None, value_source: None , prefer_dialog: false, text_path: None, searchable: false, show_in_list: true, list_sort_order: Some(3), list_importance: None, list_criticality_path: None, form_group: Some("TFInfo")},
+            FieldDef { name: "SortOrder",          label: "Reihenfolge",        edm_type: "Edm.Int32",  max_length: None,      precision: None, scale: None, immutable: false, computed: false, references_entity: None, value_source: None , prefer_dialog: false, text_path: None, searchable: false, show_in_list: true, list_sort_order: Some(0), list_importance: Some("High"), list_criticality_path: None, form_group: Some("TFInfo")},
         ];
         Some(FIELDS)
     }
@@ -50,13 +51,6 @@ impl ODataEntity for EntityTableFacetEntity {
 
     fn annotations_def(&self) -> Option<&'static AnnotationsDef> {
         static DEF: AnnotationsDef = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[
-                LineItemField { name: "SortOrder",          label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "FacetLabel",         label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "FacetId",            label: None, importance: None,         criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "NavigationProperty", label: None, importance: None,         criticality_path: None, navigation_path: None, semantic_object: None },
-            ],
             header_info: HeaderInfoDef {
                 type_name: "Tabellen-Facette",
                 type_name_plural: "Tabellen-Facetten",
@@ -67,9 +61,6 @@ impl ODataEntity for EntityTableFacetEntity {
             data_points: &[],
             facet_sections: &[
                 FacetSectionDef { label: "Tabellen-Facet-Konfiguration", id: "TFConfig", field_group_qualifier: "TFInfo", field_group_label: "Informationen" },
-            ],
-            field_groups: &[
-                FieldGroupDef { qualifier: "TFInfo", fields: &["TableFacetID", "SetName", "FacetLabel", "FacetId", "NavigationProperty", "SortOrder"] },
             ],
             table_facets: &[],
         };

@@ -1,26 +1,20 @@
 [
   {
+    "ConfigID": "5166f259-7fd7-545d-9fec-de03d99b71e4",
     "FacetId": "ContactsFacet",
     "FacetLabel": "Ansprechpartner",
+    "ID": "c9ca42d4-212a-5ed7-8c47-8877c502ceda",
     "NavigationProperty": "Contacts",
     "SetName": "Customers",
-    "SortOrder": 0,
-    "TableFacetID": "Customers_ContactsFacet"
+    "SortOrder": 0
   },
   {
+    "ConfigID": "15190abb-aa67-5b1b-8afe-1609749612ef",
     "FacetId": "ItemsSection",
     "FacetLabel": "Positionen",
+    "ID": "9fcceeec-adb3-580f-8d3a-b13778f2d193",
     "NavigationProperty": "Items",
     "SetName": "Orders",
-    "SortOrder": 0,
-    "TableFacetID": "Orders_ItemsSection"
-  },
-  {
-    "FacetId": "ItemsSection",
-    "FacetLabel": "Positionen",
-    "NavigationProperty": "Items",
-    "SetName": "Orders",
-    "SortOrder": 0,
-    "TableFacetID": "Orders_ItemsSection"
+    "SortOrder": 0
   }
 ]

@@ -28,9 +28,9 @@ impl ODataEntity for FieldValueListEntity {
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
-            FieldDef { name: "ID",          label: "ID",            edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true, computed: true,  semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "ListName",    label: "Listenname",    edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, computed: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
-            FieldDef { name: "Description", label: "Beschreibung",  edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, computed: false, semantic_object: None, value_source: None , value_list: None, text_path: None},
+            FieldDef { name: "ID",          label: "ID",            edm_type: "Edm.Guid",   max_length: None,      precision: None, scale: None, immutable: true, computed: true,  references_entity: None, value_source: None , prefer_dialog: false, text_path: None, searchable: false, show_in_list: false, list_sort_order: None, list_importance: None, list_criticality_path: None, form_group: None},
+            FieldDef { name: "ListName",    label: "Listenname",    edm_type: "Edm.String", max_length: Some(40),  precision: None, scale: None, immutable: false, computed: false, references_entity: None, value_source: None , prefer_dialog: false, text_path: None, searchable: false, show_in_list: true, list_sort_order: Some(0), list_importance: Some("High"), list_criticality_path: None, form_group: Some("ListInfo")},
+            FieldDef { name: "Description", label: "Beschreibung",  edm_type: "Edm.String", max_length: Some(120), precision: None, scale: None, immutable: false, computed: false, references_entity: None, value_source: None , prefer_dialog: false, text_path: None, searchable: false, show_in_list: true, list_sort_order: Some(1), list_importance: None, list_criticality_path: None, form_group: Some("ListInfo")},
         ];
         Some(FIELDS)
     }
@@ -83,11 +83,6 @@ impl ODataEntity for FieldValueListEntity {
 
     fn annotations_def(&self) -> Option<&'static AnnotationsDef> {
         static DEF: AnnotationsDef = AnnotationsDef {
-            selection_fields: &[],
-            line_item: &[
-                LineItemField { name: "ListName",    label: None, importance: Some("High"), criticality_path: None, navigation_path: None, semantic_object: None },
-                LineItemField { name: "Description", label: None, importance: None,         criticality_path: None, navigation_path: None, semantic_object: None },
-            ],
             header_info: HeaderInfoDef {
                 type_name: "Werteliste",
                 type_name_plural: "Wertelisten",
@@ -99,9 +94,6 @@ impl ODataEntity for FieldValueListEntity {
             facet_sections: &[
                 FacetSectionDef { label: "Listen-Details", id: "ListDetails", field_group_qualifier: "ListInfo", field_group_label: "Informationen" },
                 FacetSectionDef { label: "Eintraege",      id: "ListItems",   field_group_qualifier: "",         field_group_label: ""             },
-            ],
-            field_groups: &[
-                FieldGroupDef { qualifier: "ListInfo", fields: &["ID", "ListName", "Description"] },
             ],
             table_facets: &[
                 TableFacetDef { label: "Eintraege", id: "ListItems", navigation_property: "Items" },
