@@ -4,106 +4,106 @@
 ### ============================================================
 
 ### 1. Metadata prüfen – DraftRoot, IsActiveEntity, DraftAdministrativeData
-GET http://localhost:8000/odata/v4/ProductsService/$metadata HTTP/1.1
+GET http://localhost:8000/odata/v4/Service/$metadata HTTP/1.1
 Accept: application/xml
 
 ### 2. Products abrufen – Draft-Properties (IsActiveEntity, HasActiveEntity, HasDraftEntity)
-GET http://localhost:8000/odata/v4/ProductsService/Products?$top=1 HTTP/1.1
+GET http://localhost:8000/odata/v4/Service/Products?$top=1 HTTP/1.1
 Accept: application/json
 
 ### 3. Composite Key Lookup – Products(ProductID='P001',IsActiveEntity=true)
-GET http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P001',IsActiveEntity=true) HTTP/1.1
+GET http://localhost:8000/odata/v4/Service/Products(ProductID='P001',IsActiveEntity=true) HTTP/1.1
 Accept: application/json
 
 ### 4. Boolean-Filter – $filter=IsActiveEntity eq true
-GET http://localhost:8000/odata/v4/ProductsService/Products?$filter=IsActiveEntity%20eq%20true&$top=2 HTTP/1.1
+GET http://localhost:8000/odata/v4/Service/Products?$filter=IsActiveEntity%20eq%20true&$top=2 HTTP/1.1
 Accept: application/json
 
 ### 5. draftEdit – Draft-Kopie erstellen (IsActiveEntity wird false)
-POST http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P001',IsActiveEntity=true)/ProductsService.draftEdit HTTP/1.1
+POST http://localhost:8000/odata/v4/Service/Products(ProductID='P001',IsActiveEntity=true)/Service.draftEdit HTTP/1.1
 Content-Type: application/json
 Accept: application/json
 
 {"PreserveChanges": true}
 
 ### 6. PATCH auf Draft – Feld im Draft ändern
-PATCH http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P001',IsActiveEntity=false) HTTP/1.1
+PATCH http://localhost:8000/odata/v4/Service/Products(ProductID='P001',IsActiveEntity=false) HTTP/1.1
 Content-Type: application/json
 Accept: application/json
 
 {"ProductName": "Laptop Pro 15 (geändert)"}
 
 ### 7. draftPrepare – Validierung (No-Op, gibt Draft zurück)
-POST http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P001',IsActiveEntity=false)/ProductsService.draftPrepare HTTP/1.1
+POST http://localhost:8000/odata/v4/Service/Products(ProductID='P001',IsActiveEntity=false)/Service.draftPrepare HTTP/1.1
 Content-Type: application/json
 Accept: application/json
 
 {"SideEffectsQualifier": ""}
 
 ### 8. draftActivate – Draft aktivieren (Änderungen in aktives Entity übernehmen)
-POST http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P001',IsActiveEntity=false)/ProductsService.draftActivate HTTP/1.1
+POST http://localhost:8000/odata/v4/Service/Products(ProductID='P001',IsActiveEntity=false)/Service.draftActivate HTTP/1.1
 Content-Type: application/json
 Accept: application/json
 
 {}
 
 ### 9. Prüfen dass P001 wieder aktiv ist und kein Draft existiert
-GET http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P001',IsActiveEntity=true) HTTP/1.1
+GET http://localhost:8000/odata/v4/Service/Products(ProductID='P001',IsActiveEntity=true) HTTP/1.1
 Accept: application/json
 
 ### 10. Zweites Entity testen – Draft für P002 erstellen
-POST http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P002',IsActiveEntity=true)/ProductsService.draftEdit HTTP/1.1
+POST http://localhost:8000/odata/v4/Service/Products(ProductID='P002',IsActiveEntity=true)/Service.draftEdit HTTP/1.1
 Content-Type: application/json
 Accept: application/json
 
 {"PreserveChanges": true}
 
 ### 11. Draft von P002 patchen
-PATCH http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P002',IsActiveEntity=false) HTTP/1.1
+PATCH http://localhost:8000/odata/v4/Service/Products(ProductID='P002',IsActiveEntity=false) HTTP/1.1
 Content-Type: application/json
 Accept: application/json
 
 {"ProductName": "Updated Name"}
 
 ### 12. Draft von P002 aktivieren
-POST http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P002',IsActiveEntity=false)/ProductsService.draftActivate HTTP/1.1
+POST http://localhost:8000/odata/v4/Service/Products(ProductID='P002',IsActiveEntity=false)/Service.draftActivate HTTP/1.1
 Content-Type: application/json
 Accept: application/json
 
 {}
 
 ### 13. Service Document
-GET http://localhost:8000/odata/v4/ProductsService/ HTTP/1.1
+GET http://localhost:8000/odata/v4/Service/ HTTP/1.1
 Accept: application/json
 
 ### 14. Collection mit $count
-GET http://localhost:8000/odata/v4/ProductsService/Products/$count HTTP/1.1
+GET http://localhost:8000/odata/v4/Service/Products/$count HTTP/1.1
 Accept: application/json
 
 ### 15. Simple Key Lookup (altes Format)
-GET http://localhost:8000/odata/v4/ProductsService/Products('P001') HTTP/1.1
+GET http://localhost:8000/odata/v4/Service/Products('P001') HTTP/1.1
 Accept: application/json
 
 ### 16. Orders – Draft-Unterstützung prüfen
-GET http://localhost:8000/odata/v4/ProductsService/Orders?$top=1 HTTP/1.1
+GET http://localhost:8000/odata/v4/Service/Orders?$top=1 HTTP/1.1
 Accept: application/json
 
 ### 17. Orders – draftEdit
-POST http://localhost:8000/odata/v4/ProductsService/Orders(OrderID='O001',IsActiveEntity=true)/ProductsService.draftEdit HTTP/1.1
+POST http://localhost:8000/odata/v4/Service/Orders(OrderID='O001',IsActiveEntity=true)/Service.draftEdit HTTP/1.1
 Content-Type: application/json
 Accept: application/json
 
 {"PreserveChanges": true}
 
 ### 18. Orders – Draft patchen
-PATCH http://localhost:8000/odata/v4/ProductsService/Orders(OrderID='O001',IsActiveEntity=false) HTTP/1.1
+PATCH http://localhost:8000/odata/v4/Service/Orders(OrderID='O001',IsActiveEntity=false) HTTP/1.1
 Content-Type: application/json
 Accept: application/json
 
 {"CustomerName": "Neuer Kunde GmbH"}
 
 ### 19. Orders – draftActivate
-POST http://localhost:8000/odata/v4/ProductsService/Orders(OrderID='O001',IsActiveEntity=false)/ProductsService.draftActivate HTTP/1.1
+POST http://localhost:8000/odata/v4/Service/Orders(OrderID='O001',IsActiveEntity=false)/Service.draftActivate HTTP/1.1
 Content-Type: application/json
 Accept: application/json
 
@@ -114,42 +114,42 @@ Accept: application/json
 ### ============================================================
 
 ### 20. Draft erstellen für P003
-POST http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P003',IsActiveEntity=true)/ProductsService.draftEdit HTTP/1.1
+POST http://localhost:8000/odata/v4/Service/Products(ProductID='P003',IsActiveEntity=true)/Service.draftEdit HTTP/1.1
 Content-Type: application/json
 Accept: application/json
 
 {"PreserveChanges": true}
 
 ### 21. Prüfen: Aktives Entity hat HasDraftEntity=true
-GET http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P003',IsActiveEntity=true) HTTP/1.1
+GET http://localhost:8000/odata/v4/Service/Products(ProductID='P003',IsActiveEntity=true) HTTP/1.1
 Accept: application/json
 
 ### 22. Draft verwerfen (DELETE) – gibt 204 No Content zurück
-DELETE http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P003',IsActiveEntity=false) HTTP/1.1
+DELETE http://localhost:8000/odata/v4/Service/Products(ProductID='P003',IsActiveEntity=false) HTTP/1.1
 Accept: application/json
 
 ### 23. Prüfen: Aktives Entity hat HasDraftEntity=false, Daten unverändert
-GET http://localhost:8000/odata/v4/ProductsService/Products(ProductID='P003',IsActiveEntity=true) HTTP/1.1
+GET http://localhost:8000/odata/v4/Service/Products(ProductID='P003',IsActiveEntity=true) HTTP/1.1
 Accept: application/json
 
 ### 24. Orders – Draft erstellen und verwerfen
-POST http://localhost:8000/odata/v4/ProductsService/Orders(OrderID='O002',IsActiveEntity=true)/ProductsService.draftEdit HTTP/1.1
+POST http://localhost:8000/odata/v4/Service/Orders(OrderID='O002',IsActiveEntity=true)/Service.draftEdit HTTP/1.1
 Content-Type: application/json
 Accept: application/json
 
 {"PreserveChanges": true}
 
 ### 25. Orders – Draft patchen
-PATCH http://localhost:8000/odata/v4/ProductsService/Orders(OrderID='O002',IsActiveEntity=false) HTTP/1.1
+PATCH http://localhost:8000/odata/v4/Service/Orders(OrderID='O002',IsActiveEntity=false) HTTP/1.1
 Content-Type: application/json
 Accept: application/json
 
 {"CustomerName": "Wird verworfen GmbH"}
 
 ### 26. Orders – Draft verwerfen (DELETE)
-DELETE http://localhost:8000/odata/v4/ProductsService/Orders(OrderID='O002',IsActiveEntity=false) HTTP/1.1
+DELETE http://localhost:8000/odata/v4/Service/Orders(OrderID='O002',IsActiveEntity=false) HTTP/1.1
 Accept: application/json
 
 ### 27. Orders – Prüfen dass aktives Entity unverändert ist
-GET http://localhost:8000/odata/v4/ProductsService/Orders(OrderID='O002',IsActiveEntity=true) HTTP/1.1
+GET http://localhost:8000/odata/v4/Service/Orders(OrderID='O002',IsActiveEntity=true) HTTP/1.1
 Accept: application/json

@@ -41,10 +41,6 @@ pub fn build_metadata_xml(entities: &[&dyn ODataEntity]) -> String {
         .collect::<Vec<_>>()
         .join("\n");
 
-    println!("entity types: {}", entity_types.len());
-    println!("entity sets: {}", entity_sets.len());
-    println!("annotations: {}", annotations.len());
-
     format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
 <edmx:Edmx Version="4.0" xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx">
@@ -150,6 +146,7 @@ pub fn build_entity_manifest(
 
     for (idx, entity) in entities.iter().enumerate() {
         // Only include the target entity itself and its composition children.
+        // TODO: Include grand children as well
         let dominated_by_target = entity.parent_set_name() == Some(target_set);
         if idx != entity_idx && !dominated_by_target {
             continue;

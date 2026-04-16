@@ -27,7 +27,7 @@
 ## 2. Opening the Fiori Launchpad (GET /)
 
 1. The browser requests `GET /`. The catch-all handler resolves this as a static file request.
-2. `handle_static_files()` normalizes the path to `flp.html` and returns the pre-generated FLP HTML from `AppState.flp_html`.
+2. `handle_file()` normalizes the path to `flp.html` and returns the pre-generated FLP HTML from `AppState.flp_html`.
 3. The HTML loads the UI5 core from the SAP CDN (version from settings), along with the UShell bootstrap libraries.
 4. The `xx-bootTask` script tag executes `flp-init.js` (served as an embedded file).
 5. `flp-init.js` boots the UShell in CDM platform mode (`Container.init("cdm")`). The `CommonDataModelAdapter` automatically fetches the CDM 3.1 site document from `/cdm/site.json`.
@@ -39,7 +39,7 @@
 
 1. The user clicks a tile (e.g. "Products"). The UShell navigates to `#Products-display`.
 2. The UShell resolves the semantic object and loads the component from `/apps/Products/Component.js`.
-3. `handle_static_files()` detects the `/apps/Products/` prefix, extracts `Products` as the entity hint.
+3. `handle_file()` detects the `/apps/Products/` prefix, extracts `Products` as the entity hint.
 4. `Component.js` is generated dynamically with a unique class name (`products.app.Component`) to avoid UI5 caching conflicts between apps.
 5. The component loads `/apps/Products/manifest.json`. The handler returns the per-entity manifest where `Products` is the default route (initial load target).
 6. SAP Fiori Elements (ListReport/ObjectPage) reads the manifest and requests `$metadata` and the entity data.
@@ -106,7 +106,7 @@
 
 ## 11. Publishing a Configuration (publishConfig Action)
 
-1. A POST to `EntityConfigs('{SetName}')/ProductsService.publishConfig` triggers the publish flow.
+1. A POST to `EntityConfigs('{SetName}')/Service.publishConfig` triggers the publish flow.
 2. `publish_entity_config()` finds the active config record and calls `commit()` to persist all data.
 3. `AppState::activate_config()` runs the full rebuild cycle:
    - Calls `commit()` to ensure data is on disk.
@@ -120,7 +120,7 @@
 
 ## 12. Static File Serving
 
-1. Any request not matching an OData route falls through to `handle_static_files()`.
+1. Any request not matching an OData route falls through to `handle_file()`.
 2. Entity-specific app paths (`/apps/{EntitySet}/...`) are detected and the entity hint is extracted for manifest resolution.
 3. Special files are generated dynamically: `flp.html`, `manifest.json`, `Component.js`, `config/apps.json`.
 4. Embedded files (`flp-init.js`, `i18n/i18n.properties`, `appconfig/fioriSandboxConfig.json`) are served from compile-time constants.

@@ -1,0 +1,8 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:macros="sap.fe.macros">
+  <VBox id="panel1Box" width="100%">
+    <Label text="Panel 1"/>
+  </VBox>
+</core:FragmentDefinition>

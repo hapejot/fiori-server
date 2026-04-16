@@ -11,31 +11,31 @@ pub struct EntityKeyInfo {
 #[derive(Debug)]
 /// Aufgeloester OData-Pfad – alle Varianten, die der Server unterstuetzt.
 pub enum ODataPath<'a> {
-    /// Service-Root: /odata/v4/ProductsService
+    /// Service-Root: /odata/v4/Service
     ServiceRoot,
-    /// Collection: /odata/v4/ProductsService/Products
+    /// Collection: /odata/v4/Service/Products
     Collection { entity: &'a dyn ODataEntity },
-    /// $count:     /odata/v4/ProductsService/Products/$count
+    /// $count:     /odata/v4/Service/Products/$count
     Count { entity: &'a dyn ODataEntity },
-    /// Single Entity: /odata/v4/ProductsService/Products('P001')
+    /// Single Entity: /odata/v4/Service/Products('P001')
     Entity {
         entity: &'a dyn ODataEntity,
         key: EntityKeyInfo,
     },
-    /// Sub-Collection: /odata/v4/ProductsService/Orders('O001')/Items
+    /// Sub-Collection: /odata/v4/Service/Orders('O001')/Items
     SubCollection {
         parent_entity: &'a dyn ODataEntity,
         parent_key: EntityKeyInfo,
         nav_property: String,
         child_entity: &'a dyn ODataEntity,
     },
-    /// Bound Action:  /odata/v4/ProductsService/Products('P001')/Ns.draftEdit
+    /// Bound Action:  /odata/v4/Service/Products('P001')/Ns.draftEdit
     Action {
         entity: &'a dyn ODataEntity,
         key: EntityKeyInfo,
         action: String,
     },
-    /// Property Access: /odata/v4/ProductsService/Orders('O001')/OrderID
+    /// Property Access: /odata/v4/Service/Orders('O001')/OrderID
     PropertyAccess {
         entity: &'a dyn ODataEntity,
         key: EntityKeyInfo,
@@ -60,7 +60,7 @@ pub struct ParsedODataUrl<'a> {
 ///   - `Products/$count`                    → Count
 ///   - `Products('P001')`                   → Entity
 ///   - `Products('P001')/Ns.draftEdit`      → Action { action: "draftEdit" }
-///   - `/odata/v4/ProductsService/Products` → Collection (absolut)
+///   - `/odata/v4/Service/Products` → Collection (absolut)
 ///   - `Products?$filter=...`               → Collection + query_string
 pub fn resolve_odata_path<'a>(
     raw_url: &str,

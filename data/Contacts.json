@@ -60,83 +60,83 @@
     "Position": "Geschäftsführerin"
   },
   {
-    "ID": "d2c2e63c-c19e-589d-91ba-5622c83adbd8",
     "CustomerID": "e526775a-b370-5a20-8350-ee7b596af4f4",
-    "FirstName": "Maria",
-    "LastName": "Schmidt",
-    "Position": "IT-Projektleiterin",
     "Department": "IT-Projekte",
     "Email": "m.schmidt@techcorp.de",
-    "Phone": "+49 89 12345-301"
+    "FirstName": "Maria",
+    "ID": "d2c2e63c-c19e-589d-91ba-5622c83adbd8",
+    "LastName": "Schmidt",
+    "Phone": "+49 89 12345-301",
+    "Position": "IT-Projektleiterin"
   },
   {
-    "ID": "f046bb00-857d-5985-9b7a-cd9d84e28ed4",
     "CustomerID": "e526775a-b370-5a20-8350-ee7b596af4f4",
-    "FirstName": "Thomas",
-    "LastName": "Weber",
-    "Position": "Systemadministrator",
     "Department": "IT-Betrieb",
     "Email": "t.weber@techcorp.de",
-    "Phone": "+49 89 12345-302"
+    "FirstName": "Thomas",
+    "ID": "f046bb00-857d-5985-9b7a-cd9d84e28ed4",
+    "LastName": "Weber",
+    "Phone": "+49 89 12345-302",
+    "Position": "Systemadministrator"
   },
   {
-    "ID": "cdb2fb76-0666-5752-92e0-15dde2280566",
     "CustomerID": "e526775a-b370-5a20-8350-ee7b596af4f4",
-    "FirstName": "Klaus",
-    "LastName": "Meyer",
-    "Position": "Sachbearbeiter",
     "Department": "Vertrieb",
     "Email": "k.meyer@techcorp.de",
-    "Phone": "+49 89 12345-303"
+    "FirstName": "Klaus",
+    "ID": "cdb2fb76-0666-5752-92e0-15dde2280566",
+    "LastName": "Meyer",
+    "Phone": "+49 89 12345-303",
+    "Position": "Sachbearbeiter"
   },
   {
-    "ID": "d8dd023b-8bc7-543b-aa1e-3406a27ffc28",
     "CustomerID": "e526775a-b370-5a20-8350-ee7b596af4f4",
-    "FirstName": "Anna",
-    "LastName": "Fischer",
-    "Position": "Marketing-Managerin",
     "Department": "Marketing",
     "Email": "a.fischer@techcorp.de",
-    "Phone": "+49 89 12345-304"
+    "FirstName": "Anna",
+    "ID": "d8dd023b-8bc7-543b-aa1e-3406a27ffc28",
+    "LastName": "Fischer",
+    "Phone": "+49 89 12345-304",
+    "Position": "Marketing-Managerin"
   },
   {
-    "ID": "c89b9237-28e3-5bf5-a6f0-3d78157e9fef",
     "CustomerID": "e526775a-b370-5a20-8350-ee7b596af4f4",
-    "FirstName": "Peter",
-    "LastName": "Braun",
-    "Position": "Softwareentwickler",
     "Department": "Entwicklung",
     "Email": "p.braun@techcorp.de",
-    "Phone": "+49 89 12345-305"
+    "FirstName": "Peter",
+    "ID": "c89b9237-28e3-5bf5-a6f0-3d78157e9fef",
+    "LastName": "Braun",
+    "Phone": "+49 89 12345-305",
+    "Position": "Softwareentwickler"
   },
   {
-    "ID": "f8840411-27a7-5fde-95eb-cc85e17ec00e",
     "CustomerID": "e526775a-b370-5a20-8350-ee7b596af4f4",
-    "FirstName": "Julia",
-    "LastName": "Hofmann",
-    "Position": "Sachbearbeiterin",
     "Department": "Buchhaltung",
     "Email": "j.hofmann@techcorp.de",
-    "Phone": "+49 89 12345-306"
+    "FirstName": "Julia",
+    "ID": "f8840411-27a7-5fde-95eb-cc85e17ec00e",
+    "LastName": "Hofmann",
+    "Phone": "+49 89 12345-306",
+    "Position": "Sachbearbeiterin"
   },
   {
-    "ID": "de4db8b6-85c7-5c78-a345-ecc6a22ff12a",
     "CustomerID": "e526775a-b370-5a20-8350-ee7b596af4f4",
-    "FirstName": "Lisa",
-    "LastName": "Müller",
-    "Position": "IT-Administratorin",
     "Department": "IT-Betrieb",
     "Email": "l.mueller@techcorp.de",
-    "Phone": "+49 89 12345-307"
+    "FirstName": "Lisa",
+    "ID": "de4db8b6-85c7-5c78-a345-ecc6a22ff12a",
+    "LastName": "Müller",
+    "Phone": "+49 89 12345-307",
+    "Position": "IT-Administratorin"
   },
   {
-    "ID": "2a66bbbb-8f0d-5885-99b6-acc25927e58a",
     "CustomerID": "e526775a-b370-5a20-8350-ee7b596af4f4",
-    "FirstName": "Hans",
-    "LastName": "Wagner",
-    "Position": "IT-Leiter",
     "Department": "IT-Management",
     "Email": "h.wagner@techcorp.de",
-    "Phone": "+49 89 12345-308"
+    "FirstName": "Hans",
+    "ID": "2a66bbbb-8f0d-5885-99b6-acc25927e58a",
+    "LastName": "Wagner",
+    "Phone": "+49 89 12345-308",
+    "Position": "IT-Leiter"
   }
 ]

@@ -30,7 +30,7 @@
           "odataVersion": "4.0"
         },
         "type": "OData",
-        "uri": "/odata/v4/ProductsService/"
+        "uri": "/odata/v4/Service/"
       }
     },
     "description": "Fiori Elements List Report + Object Page",

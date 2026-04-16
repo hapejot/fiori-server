@@ -6,9 +6,9 @@ use axum::{
     response::Response,
 };
 use serde_json::{json, Value};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::app_state::AppState;
 use crate::data_store::{EntityKey, ODataQuery, ParentKey, StoreError};
@@ -547,6 +547,7 @@ fn handle_batch_patch(rel_url: &str, body: &str, state: &AppState) -> (u16, Valu
     if let ODataPath::Entity { entity, key } = parsed.path {
         let patch_data: Value = serde_json::from_str(body).unwrap_or(json!({}));
         let entity_key = entity_key_from_routing(entity, &key);
+        info!("{}", entity.set_name());
         match state
             .data_store
             .patch_entity(entity.set_name(), &entity_key, &patch_data)
@@ -867,51 +868,57 @@ fn serve_embedded_file(relative: &str) -> Option<Response> {
 
 // ── Static file serving ─────────────────────────────────────────────
 #[tracing::instrument(skip(state))]
-fn handle_static_files(path: &str, state: &AppState) -> Response {
+fn handle_file(path: &str, state: &AppState) -> Response {
     let raw_path = urlencoding::decode(path).unwrap_or_default().into_owned();
-    let mut relative = raw_path.trim_start_matches('/').to_string();
+
+    let mut relative = raw_path
+        .trim_start_matches('/')
+        .split('/')
+        .collect::<Vec<_>>();
 
     // Entity-spezifischer App-Pfad: /apps/{EntitySet}/...
     // Jede Entitaet bekommt ein eigenes Manifest mit passender Default-Route.
     let mut entity_hint: Option<String> = None;
-    if relative.starts_with("apps/") {
-        let rest = &relative["apps/".len()..];
-        if let Some(slash_pos) = rest.find('/') {
-            let candidate = rest[..slash_pos].to_string();
+    match relative[0] {
+        "apps" => {
+            let candidate = relative[1];
             if state
                 .entity_manifests
                 .read()
                 .unwrap()
-                .contains_key(&candidate)
+                .contains_key(candidate)
             {
-                entity_hint = Some(candidate.clone());
-                relative = rest[slash_pos + 1..].to_string();
+                entity_hint = Some(String::from(candidate));
+                relative = relative[2..].to_vec();
             }
         }
+        _ => {}
     }
 
-    for prefix in &["products/demo/", "products.demo/"] {
-        if relative.starts_with(prefix) {
-            relative = relative[prefix.len()..].to_string();
-            break;
-        }
-    }
-    if relative.is_empty() || relative == "flp.html" {
-        relative = "flp.html".to_string();
-    }
+    // for prefix in &["products/demo/", "products.demo/"] {
+    //     if relative.starts_with(prefix) {
+    //         relative = relative[prefix.len()..].to_string();
+    //         break;
+    //     }
+    // }
+
+    // if relative.is_empty() || relative == "flp.html" {
+    //     relative = "flp.html".to_string();
+    // }
 
     // manifest.json wird dynamisch aus der Entity-Registry generiert
-    if relative == "manifest.json" {
-        let entity_manifests = state.entity_manifests.read().unwrap();
-        let manifest_json = state.manifest_json.read().unwrap();
-        let manifest_body = entity_hint
-            .as_ref()
-            .and_then(|name| entity_manifests.get(name))
-            .unwrap_or(&manifest_json);
+    if relative[0] == "manifest.json" {
         info!(
             "Serving manifest.json for entity: {}",
             entity_hint.as_deref().unwrap_or("default")
         );
+        let manifest_body = if let Some(ref name) = entity_hint {
+            let entity_manifests = state.entity_manifests.read().unwrap();
+            entity_manifests.get(name).unwrap().clone()
+        } else {
+            let manifest_json = state.manifest_json.read().unwrap();
+            manifest_json.clone()
+        };
         let mut builder = Response::builder()
             .status(StatusCode::OK)
             .header("Content-Type", "application/json;charset=utf-8");
@@ -922,7 +929,7 @@ fn handle_static_files(path: &str, state: &AppState) -> Response {
     }
 
     // apps.json dynamisch ausliefern (statische + generische Entitaeten)
-    if relative == "config/apps.json" {
+    if relative[0] == "config" && relative[1] == "apps.json" {
         let mut builder = Response::builder()
             .status(StatusCode::OK)
             .header("Content-Type", "application/json;charset=utf-8");
@@ -953,7 +960,7 @@ fn handle_static_files(path: &str, state: &AppState) -> Response {
     }
 
     // CDM 3.1 Site-Dokument fuer den UShell CDM-Modus ausliefern
-    if relative == "cdm/site.json" {
+    if relative[0] == "cdm" && relative[1] == "site.json" {
         let mut builder = Response::builder()
             .status(StatusCode::OK)
             .header("Content-Type", "application/json;charset=utf-8");
@@ -968,7 +975,7 @@ fn handle_static_files(path: &str, state: &AppState) -> Response {
     // Component.js wird dynamisch generiert — der Klassenname muss zum
     // sap.app.id im jeweiligen Manifest passen, sonst cached UI5 den
     // falschen Component fuer die zweite App.
-    if relative == "Component.js" {
+    if relative[0] == "Component.js" {
         let app_id = entity_hint
             .as_ref()
             .map(|name| format!("{}.app", name.to_lowercase()))
@@ -994,7 +1001,7 @@ fn handle_static_files(path: &str, state: &AppState) -> Response {
     }
 
     // flp.html wird dynamisch generiert (Settings-gesteuert)
-    if relative == "flp.html" {
+    if relative[0] == "flp.html" {
         let mut builder = Response::builder()
             .status(StatusCode::OK)
             .header("Content-Type", "text/html;charset=utf-8");
@@ -1005,14 +1012,21 @@ fn handle_static_files(path: &str, state: &AppState) -> Response {
     }
 
     // ── Eincompilierte Dateien (kein Dateisystem noetig) ────────────
-    if let Some(resp) = serve_embedded_file(&relative) {
+    if let Some(resp) = serve_embedded_file(&String::from(
+        relative.iter().map(|s| *s).collect::<Vec<_>>().join("/"),
+    )) {
         return resp;
     }
-
-    let wa_dir = crate::webapp_dir();
-    if !wa_dir.exists() {
-        // Kein webapp-Verzeichnis: SPA-Fallback fuer extensionlose Routen
-        if Path::new(&relative).extension().is_none() && !raw_path.starts_with("/sap/") {
+    if relative.last() == Some(&"") {
+        relative.pop();
+        relative.push("index.html");
+    }
+    let path = Path::new("webapp").join(relative.iter().collect::<PathBuf>());
+    if path.exists() && path.is_file() {
+        let res = serve_file(&path);
+        return res;
+    } else {
+        if raw_path == "/" {
             let mut builder = Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "text/html;charset=utf-8");
@@ -1021,59 +1035,10 @@ fn handle_static_files(path: &str, state: &AppState) -> Response {
             }
             return builder.body(Body::from(state.flp_html.clone())).unwrap();
         }
-        return error_response(404, &format!("Resource not found: {}", raw_path));
+        error!("File not found: {:?}", path);
+        error!("                {}", raw_path);
+        error_response(404, &format!("Resource not found: {}", raw_path))
     }
-
-    let candidate = wa_dir.join(&relative);
-    // Path traversal protection
-    let canonical = match candidate.canonicalize() {
-        Ok(p) => p,
-        Err(_) => {
-            // SPA fallback: extensionless routes get the dynamic flp.html
-            // but NOT for /sap/ paths (e.g. /sap/bc/lrep/flex/...)
-            if Path::new(&relative).extension().is_none() && !raw_path.starts_with("/sap/") {
-                let mut builder = Response::builder()
-                    .status(StatusCode::OK)
-                    .header("Content-Type", "text/html;charset=utf-8");
-                for (k, v) in cors_headers() {
-                    builder = builder.header(k, v);
-                }
-                return builder.body(Body::from(state.flp_html.clone())).unwrap();
-            }
-            return error_response(404, &format!("Resource not found: {}", raw_path));
-        }
-    };
-    let wa_canonical = match wa_dir.canonicalize() {
-        Ok(p) => p,
-        Err(_) => return error_response(403, "Access denied."),
-    };
-    if !canonical.starts_with(&wa_canonical) {
-        return error_response(403, "Access denied.");
-    }
-
-    let target = if canonical.is_dir() {
-        canonical.join("index.html")
-    } else {
-        canonical
-    };
-
-    if target.exists() && target.is_file() {
-        info!("serving static file: {}", target.display());
-        return serve_file(&target);
-    }
-
-    // SPA fallback for extensionless routes (skip /sap/ API paths)
-    if Path::new(&relative).extension().is_none() && !raw_path.starts_with("/sap/") {
-        let mut builder = Response::builder()
-            .status(StatusCode::OK)
-            .header("Content-Type", "text/html;charset=utf-8");
-        for (k, v) in cors_headers() {
-            builder = builder.header(k, v);
-        }
-        return builder.body(Body::from(state.flp_html.clone())).unwrap();
-    }
-
-    error_response(404, &format!("Resource not found: {}", raw_path))
 }
 
 fn serve_file(path: &Path) -> Response {
@@ -1246,8 +1211,8 @@ pub async fn catch_all(
                 state.data_store.commit();
                 resp
             }
-            _ => handle_static_files(path, &state),
+            _ => handle_file(path, &state),
         },
-        _ => handle_static_files(path, &state),
+        _ => handle_file(path, &state),
     }
 }

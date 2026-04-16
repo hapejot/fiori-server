@@ -381,7 +381,11 @@ impl GenericEntity {
             } else {
                 // Fallback: singular of target set (strip trailing 's')
                 let s = &ref_entity;
-                if s.ends_with('s') { s[..s.len() - 1].to_string() } else { s.clone() }
+                if s.ends_with('s') {
+                    s[..s.len() - 1].to_string()
+                } else {
+                    s.clone()
+                }
             };
             field.text_path = Some(format!("{}/{}", nav_name, target_title));
         }
@@ -454,7 +458,11 @@ impl GenericEntity {
                 &f.name[..f.name.len() - 2]
             } else {
                 let s = ref_entity;
-                if s.ends_with('s') { &s[..s.len() - 1] } else { s }
+                if s.ends_with('s') {
+                    &s[..s.len() - 1]
+                } else {
+                    s
+                }
             };
             // Derive target type name (singular of entity set)
             let target_type = if ref_entity.ends_with('s') {
@@ -728,6 +736,53 @@ impl ODataEntity for GenericEntity {
             obj_page_settings["navigation"] = Value::Object(nav_entries);
         }
 
+        obj_page_settings["content"] = serde_json::json!(
+{
+                "header": {
+                  "visible": true,
+                  "anchorBarVisible": true,
+                  "actions": {
+                    "action1": {
+                      "press": "products.demo.ext.controller.Handler.action1",
+                    //   "visible": "{= %{status_code} !== 'submitted' && %{IsActiveEntity}}",
+                      "enabled": true,
+                      "text": "Action #1",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "EditAction"
+                      }
+                    },
+                    "action2": {
+                      "press": "products.demo.ext.controller.Handler.action2",
+                      "text": "Action #2",
+                      "visible": true,
+                      "enabled": true
+                    }
+                  }
+                },
+                "body": {
+                  "sections": {
+                    "panel1": {
+                      "template": "products.demo.ext.fragment.Panel1",
+                      "position": {
+                        "placement": "After",
+                        "anchor": "Main"
+                      },
+                      "title": "Panel #1"
+                    },
+                    "panel2": {
+                      "template": "products.demo.ext.fragment.Panel2",
+                      "position": {
+                        "placement": "After",
+                        "anchor": "Main"
+                      },
+                      "title": "Panel #2"
+                    }
+                  }
+                }
+            });
+        /* "content": */
+
         let mut targets = vec![
             (
                 format!("{}List", set),
@@ -801,9 +856,9 @@ pub fn create_generic_entities(configs: Vec<EntityConfig>) -> Vec<&'static dyn O
     let title_paths: HashMap<String, String> = configs
         .iter()
         .filter_map(|c| {
-            c.annotations.as_ref().map(|a| {
-                (c.set_name.clone(), a.header_info.title_path.clone())
-            })
+            c.annotations
+                .as_ref()
+                .map(|a| (c.set_name.clone(), a.header_info.title_path.clone()))
         })
         .collect();
 
@@ -1149,7 +1204,10 @@ mod tests {
         let json = serde_json::to_string_pretty(&config).unwrap();
         let parsed: EntityConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.parent_set_name.as_deref(), Some("Orders"));
-        assert_eq!(parsed.fields[1].references_entity.as_deref(), Some("Orders"));
+        assert_eq!(
+            parsed.fields[1].references_entity.as_deref(),
+            Some("Orders")
+        );
     }
 
     #[test]
@@ -1308,7 +1366,7 @@ mod tests {
         let entity = GenericEntity::from_config(full_config(), &no_titles());
         let xml = entity.entity_set();
         assert!(xml.contains("EntitySet Name=\"Orders\""));
-        assert!(xml.contains("EntityType=\"ProductsService.Order\""));
+        assert!(xml.contains("EntityType=\"Service.Order\""));
         assert!(xml.contains("Path=\"Items\" Target=\"OrderItems\""));
         assert!(xml.contains("SiblingEntity"));
         assert!(xml.contains("DraftAdministrativeData"));
@@ -1376,28 +1434,26 @@ mod tests {
             set_name: "Contacts".to_string(),
             type_name: "Contact".to_string(),
             parent_set_name: None,
-            fields: vec![
-                FieldConfig {
-                    name: "CustomerID".to_string(),
-                    label: "Kunde".to_string(),
-                    edm_type: "Edm.String".to_string(),
-                    max_length: None,
-                    precision: None,
-                    scale: None,
-                    immutable: false,
-                    references_entity: None,
-                    prefer_dialog: false,
-                    value_source: None,
-                    computed: false,
-                    text_path: None,
-                    searchable: false,
-                    show_in_list: false,
-                    list_sort_order: None,
-                    list_importance: None,
-                    list_criticality_path: None,
-                    form_group: None,
-                },
-            ],
+            fields: vec![FieldConfig {
+                name: "CustomerID".to_string(),
+                label: "Kunde".to_string(),
+                edm_type: "Edm.String".to_string(),
+                max_length: None,
+                precision: None,
+                scale: None,
+                immutable: false,
+                references_entity: None,
+                prefer_dialog: false,
+                value_source: None,
+                computed: false,
+                text_path: None,
+                searchable: false,
+                show_in_list: false,
+                list_sort_order: None,
+                list_importance: None,
+                list_criticality_path: None,
+                form_group: None,
+            }],
             navigation_properties: vec![NavPropertyConfig {
                 name: "Customer".to_string(),
                 target_type: "Customer".to_string(),

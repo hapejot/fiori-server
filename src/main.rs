@@ -36,8 +36,8 @@ use entities::{
 use handlers::*;
 use settings::Settings;
 
-pub const BASE_PATH: &str = "/odata/v4/ProductsService";
-pub const NAMESPACE: &str = "ProductsService";
+pub const BASE_PATH: &str = "/odata/v4/Service";
+pub const NAMESPACE: &str = "Service";
 
 // ── Webapp directory (sibling to the executable's working dir) ──────────
 pub fn webapp_dir() -> PathBuf {

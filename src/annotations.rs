@@ -1091,7 +1091,7 @@ mod tests {
     #[test]
     fn annotations_xml_contains_target() {
         let xml = build_annotations_xml("Product", &simple_annotations(), &simple_fields());
-        assert!(xml.contains("Annotations Target=\"ProductsService.Product\""));
+        assert!(xml.contains("Annotations Target=\"Service.Product\""));
     }
 
     #[test]
@@ -1391,7 +1391,7 @@ mod tests {
             table_facets: &[],
         };
         let xml = build_annotations_xml("Contact", &def, &fields);
-        assert!(xml.contains("Annotations Target=\"ProductsService.Contact/CustomerID\""));
+        assert!(xml.contains("Annotations Target=\"Service.Contact/CustomerID\""));
         assert!(xml.contains("Annotation Term=\"Common.SemanticObject\" String=\"Customers\""));
     }
 
@@ -1429,17 +1429,17 @@ mod tests {
             &simple_fields(),
             true,
         );
-        assert!(xml.contains("Annotations Target=\"ProductsService.EntityContainer/Products\""));
+        assert!(xml.contains("Annotations Target=\"Service.EntityContainer/Products\""));
         assert!(xml.contains("Org.OData.Capabilities.V1.UpdateRestrictions"));
         assert!(xml.contains("Property=\"Updatable\" Bool=\"true\""));
         assert!(xml.contains("Annotation Term=\"Common.DraftRoot\""));
         assert!(xml.contains("Record Type=\"Common.DraftRootType\""));
         assert!(
-            xml.contains("Property=\"ActivationAction\" String=\"ProductsService.draftActivate\"")
+            xml.contains("Property=\"ActivationAction\" String=\"Service.draftActivate\"")
         );
-        assert!(xml.contains("Property=\"EditAction\" String=\"ProductsService.draftEdit\""));
+        assert!(xml.contains("Property=\"EditAction\" String=\"Service.draftEdit\""));
         assert!(
-            xml.contains("Property=\"PreparationAction\" String=\"ProductsService.draftPrepare\"")
+            xml.contains("Property=\"PreparationAction\" String=\"Service.draftPrepare\"")
         );
         assert!(!xml.contains("Common.DraftNode"));
     }
@@ -1454,11 +1454,11 @@ mod tests {
             &simple_fields(),
             false,
         );
-        assert!(xml.contains("Annotations Target=\"ProductsService.EntityContainer/OrderItems\""));
+        assert!(xml.contains("Annotations Target=\"Service.EntityContainer/OrderItems\""));
         assert!(xml.contains("Annotation Term=\"Common.DraftNode\""));
         assert!(xml.contains("Record Type=\"Common.DraftNodeType\""));
         assert!(
-            xml.contains("Property=\"PreparationAction\" String=\"ProductsService.draftPrepare\"")
+            xml.contains("Property=\"PreparationAction\" String=\"Service.draftPrepare\"")
         );
         assert!(!xml.contains("Common.DraftRoot"));
         assert!(!xml.contains("EditAction"));
@@ -1475,11 +1475,11 @@ mod tests {
             &simple_fields(),
             true,
         );
-        assert!(xml.contains("Annotations Target=\"ProductsService.Product/ProductID\""));
+        assert!(xml.contains("Annotations Target=\"Service.Product/ProductID\""));
         assert!(xml.contains("Common.Label\" String=\"Product Nr.\""));
-        assert!(xml.contains("Annotations Target=\"ProductsService.Product/ProductName\""));
+        assert!(xml.contains("Annotations Target=\"Service.Product/ProductName\""));
         assert!(xml.contains("Common.Label\" String=\"Product Name\""));
-        assert!(xml.contains("Annotations Target=\"ProductsService.Product/Price\""));
+        assert!(xml.contains("Annotations Target=\"Service.Product/Price\""));
         assert!(xml.contains("Common.Label\" String=\"Price\""));
     }
 
@@ -1582,9 +1582,9 @@ mod tests {
     fn entity_type_xml_draft_navigation_properties() {
         let xml = build_entity_type_xml("Product", "ProductID", &simple_fields());
         assert!(xml.contains(
-            "NavigationProperty Name=\"SiblingEntity\" Type=\"ProductsService.Product\""
+            "NavigationProperty Name=\"SiblingEntity\" Type=\"Service.Product\""
         ));
-        assert!(xml.contains("NavigationProperty Name=\"DraftAdministrativeData\" Type=\"ProductsService.DraftAdministrativeData\""));
+        assert!(xml.contains("NavigationProperty Name=\"DraftAdministrativeData\" Type=\"Service.DraftAdministrativeData\""));
         assert!(xml.contains("ContainsTarget=\"true\""));
     }
 
@@ -1621,9 +1621,9 @@ mod tests {
     fn draft_actions_xml() {
         let xml = build_draft_actions_xml("Product");
         assert!(xml.contains("Action Name=\"draftEdit\" IsBound=\"true\""));
-        assert!(xml.contains("Parameter Name=\"in\" Type=\"ProductsService.Product\""));
+        assert!(xml.contains("Parameter Name=\"in\" Type=\"Service.Product\""));
         assert!(xml.contains("Parameter Name=\"PreserveChanges\" Type=\"Edm.Boolean\""));
-        assert!(xml.contains("ReturnType Type=\"ProductsService.Product\""));
+        assert!(xml.contains("ReturnType Type=\"Service.Product\""));
 
         assert!(xml.contains("Action Name=\"draftActivate\" IsBound=\"true\""));
         assert!(xml.contains("Action Name=\"draftPrepare\" IsBound=\"true\""));
@@ -1643,7 +1643,7 @@ mod tests {
         }];
         append_navigation_properties(&mut xml, &navs);
         assert!(xml.contains(
-            "NavigationProperty Name=\"Items\" Type=\"Collection(ProductsService.OrderItem)\""
+            "NavigationProperty Name=\"Items\" Type=\"Collection(Service.OrderItem)\""
         ));
     }
 
@@ -1658,7 +1658,7 @@ mod tests {
         }];
         append_navigation_properties(&mut xml, &navs);
         assert!(
-            xml.contains("NavigationProperty Name=\"Customer\" Type=\"ProductsService.Customer\"")
+            xml.contains("NavigationProperty Name=\"Customer\" Type=\"Service.Customer\"")
         );
         assert!(!xml.contains("Collection("));
     }
@@ -2061,9 +2061,9 @@ mod tests {
             table_facets: &[],
         };
         let xml = build_annotations_xml("Order", &def, &fields);
-        assert!(xml.contains("Target=\"ProductsService.Order/CustomerID\""));
+        assert!(xml.contains("Target=\"Service.Order/CustomerID\""));
         assert!(xml.contains("Common.SemanticObject\" String=\"Customers\""));
-        assert!(xml.contains("Target=\"ProductsService.Order/ProductID\""));
+        assert!(xml.contains("Target=\"Service.Order/ProductID\""));
         assert!(xml.contains("Common.SemanticObject\" String=\"Products\""));
     }
 
@@ -2100,7 +2100,7 @@ mod tests {
     fn capabilities_empty_fields() {
         let xml = build_capabilities_annotations("Tests", "Test", "ID", None, &[], true);
         // Should still have EntitySet-level annotations
-        assert!(xml.contains("Target=\"ProductsService.EntityContainer/Tests\""));
+        assert!(xml.contains("Target=\"Service.EntityContainer/Tests\""));
         assert!(xml.contains("Common.DraftRoot"));
         // No property-level annotations
         assert!(!xml.contains("Common.Label"));
@@ -2301,8 +2301,8 @@ mod tests {
     #[test]
     fn draft_actions_xml_uses_correct_namespace() {
         let xml = build_draft_actions_xml("Order");
-        assert!(xml.contains("Type=\"ProductsService.Order\""));
-        assert!(!xml.contains("Type=\"ProductsService.Product\""));
+        assert!(xml.contains("Type=\"Service.Order\""));
+        assert!(!xml.contains("Type=\"Service.Product\""));
     }
 
     #[test]
@@ -2383,7 +2383,7 @@ mod tests {
         };
         let xml = build_annotations_xml("Partner", &def, &fields);
         let expected_parts = vec![ "",
-            r#"Annotations Target="ProductsService.Partner">"#,
+            r#"Annotations Target="Service.Partner">"#,
                 r#"Annotation Term="UI.SelectionFields">"#,
                     r#"Collection>"#,
                         r#"PropertyPath>Name"#,
@@ -2578,7 +2578,7 @@ mod tests {
         let xml = build_annotations_xml("Order", &def, &fields);
 
         // Verify all major sections present
-        assert!(xml.contains("Target=\"ProductsService.Order\""));
+        assert!(xml.contains("Target=\"Service.Order\""));
         assert!(xml.contains("UI.SelectionFields"));
         assert!(xml.contains("UI.LineItem"));
         assert!(xml.contains("UI.HeaderInfo"));
@@ -2597,7 +2597,7 @@ mod tests {
         assert!(main_fg_section.contains("SemanticObject\" String=\"Customers\""));
 
         // Property-level semantic object annotation
-        assert!(xml.contains("Target=\"ProductsService.Order/CustomerID\""));
+        assert!(xml.contains("Target=\"Service.Order/CustomerID\""));
         assert!(xml.contains("Common.SemanticObject\" String=\"Customers\""));
     }
 
@@ -2662,7 +2662,7 @@ mod tests {
         assert!(xml.contains(&format!("Constant\" String=\"{}\"", list_uuid)));
 
         // No ValueList on Name (value_source is None)
-        let name_section_start = xml.find("Target=\"ProductsService.Test/Name\"").unwrap();
+        let name_section_start = xml.find("Target=\"Service.Test/Name\"").unwrap();
         let name_section = &xml[name_section_start..];
         let name_section_end = name_section.find("</Annotations>").unwrap();
         let name_section = &name_section[..name_section_end];
