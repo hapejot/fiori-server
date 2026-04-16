@@ -604,6 +604,38 @@ impl ODataEntity for EntityFieldEntity {
         Some(&DEF)
     }
 
+    fn extra_annotations_xml(&self) -> String {
+        let ns = NAMESPACE;
+        let ty = self.type_name();
+        // ValueList for FormGroup: pick from FieldGroupQualifier in EntityFacets,
+        // filtered to the same parent entity via ConfigID.
+        format!(
+            "<Annotations Target=\"{ns}.{ty}/FormGroup\">\
+             <Annotation Term=\"Common.ValueList\">\
+             <Record Type=\"Common.ValueListType\">\
+             <PropertyValue Property=\"CollectionPath\" String=\"EntityFacets\"/>\
+             <PropertyValue Property=\"Parameters\">\
+             <Collection>\
+             <Record Type=\"Common.ValueListParameterOut\">\
+             <PropertyValue Property=\"LocalDataProperty\" PropertyPath=\"FormGroup\"/>\
+             <PropertyValue Property=\"ValueListProperty\" String=\"FieldGroupQualifier\"/>\
+             </Record>\
+             <Record Type=\"Common.ValueListParameterDisplayOnly\">\
+             <PropertyValue Property=\"ValueListProperty\" String=\"FieldGroupLabel\"/>\
+             </Record>\
+             <Record Type=\"Common.ValueListParameterIn\">\
+             <PropertyValue Property=\"LocalDataProperty\" PropertyPath=\"ConfigID\"/>\
+             <PropertyValue Property=\"ValueListProperty\" String=\"ConfigID\"/>\
+             </Record>\
+             </Collection>\
+             </PropertyValue>\
+             </Record>\
+             </Annotation>\
+             <Annotation Term=\"Common.ValueListWithFixedValues\" Bool=\"true\"/>\
+             </Annotations>"
+        )
+    }
+
     fn manifest_inbound(&self) -> (String, serde_json::Value) {
         ("_EntityFields-stub".to_string(), json!(null))
     }
