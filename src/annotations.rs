@@ -121,8 +121,6 @@ pub enum PV {
     Path(String, String),
     /// `AnnotationPath="Y"`
     AnnotationPath(String, String),
-    /// `NavigationPropertyPath="Y"`
-    NavPropPath(String, String),
     /// `PropertyPath="Y"`
     PropPath(String, String),
     /// `EnumMember="Y"`
@@ -156,7 +154,6 @@ pub enum AnnContent {
     Bool(bool),
     EnumMember(String),
     PathWithChildren(String, Vec<Ann>),
-    Empty,
 }
 
 /// An `<Annotation Term="..." ...>` element.
@@ -187,9 +184,6 @@ impl PV {
             )),
             PV::AnnotationPath(p, v) => x.push_str(&format!(
                 r#"<PropertyValue Property="{p}" AnnotationPath="{v}"/>"#
-            )),
-            PV::NavPropPath(p, v) => x.push_str(&format!(
-                r#"<PropertyValue Property="{p}" NavigationPropertyPath="{v}"/>"#
             )),
             PV::PropPath(p, v) => x.push_str(&format!(
                 r#"<PropertyValue Property="{p}" PropertyPath="{v}"/>"#
@@ -305,7 +299,6 @@ impl Ann {
                         }
                         x.push_str("</Collection>");
                     }
-                    AnnContent::Empty => {}
                     _ => unreachable!(),
                 }
                 x.push_str("</Annotation>");
@@ -1411,12 +1404,12 @@ mod tests {
         let xml = build_capabilities_annotations(
             "EntityConfigs",
             "EntityConfig",
-            "EntityID",
+            "ID",
             Some("ProductName"),
             &simple_fields(),
             true,
         );
-        assert!(xml.contains("Annotations Target=\"Products"));
+        assert!(xml.contains("Annotations Target=\"Service.EntityContainer/EntityConfigs\""));
     }
 
     #[test]

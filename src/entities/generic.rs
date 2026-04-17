@@ -544,18 +544,11 @@ impl ODataEntity for GenericEntity {
     fn set_name(&self) -> &'static str {
         self.set_name
     }
-    fn key_field(&self) -> &'static str {
-        "ID"
-    }
     fn type_name(&self) -> &'static str {
         self.type_name
     }
     fn parent_set_name(&self) -> Option<&'static str> {
         self.parent_set_name
-    }
-
-    fn mock_data(&self) -> Vec<Value> {
-        vec![]
     }
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {

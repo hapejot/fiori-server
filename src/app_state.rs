@@ -40,10 +40,6 @@ impl AppState {
         AppStateBuilder::new()
     }
 
-    pub fn find_entity(&self, set_name: &str) -> Option<&'static dyn ODataEntity> {
-        self.entities.read().unwrap().iter().find(|e| e.set_name() == set_name).copied()
-    }
-
     /// Aktiviert eine Entity-Konfiguration zur Laufzeit:
     /// 1. commit() – aktuelle Daten persistieren
     /// 2. Meta-Tabellen aus data/ neu einlesen und GenericEntities neu erzeugen

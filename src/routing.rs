@@ -26,7 +26,6 @@ pub enum ODataPath<'a> {
     SubCollection {
         parent_entity: &'a dyn ODataEntity,
         parent_key: EntityKeyInfo,
-        nav_property: String,
         child_entity: &'a dyn ODataEntity,
     },
     /// Bound Action:  /odata/v4/Service/Products('P001')/Ns.draftEdit
@@ -164,7 +163,6 @@ pub fn resolve_odata_path<'a>(
                                 path: ODataPath::SubCollection {
                                     parent_entity: *entity,
                                     parent_key: key,
-                                    nav_property: first_segment.to_string(),
                                     child_entity: *child,
                                 },
                                 query_string: query_part.to_string(),

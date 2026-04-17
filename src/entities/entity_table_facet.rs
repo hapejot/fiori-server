@@ -11,19 +11,12 @@ impl ODataEntity for EntityTableFacetEntity {
     fn set_name(&self) -> &'static str {
         "EntityTableFacets"
     }
-    fn key_field(&self) -> &'static str {
-        "ID"
-    }
     fn type_name(&self) -> &'static str {
         "EntityTableFacet"
     }
 
     fn parent_set_name(&self) -> Option<&'static str> {
         Some("EntityConfigs")
-    }
-
-    fn mock_data(&self) -> Vec<Value> {
-        vec![]
     }
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {

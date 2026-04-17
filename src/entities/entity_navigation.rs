@@ -11,19 +11,12 @@ impl ODataEntity for EntityNavigationEntity {
     fn set_name(&self) -> &'static str {
         "EntityNavigations"
     }
-    fn key_field(&self) -> &'static str {
-        "ID"
-    }
     fn type_name(&self) -> &'static str {
         "EntityNavigation"
     }
 
     fn parent_set_name(&self) -> Option<&'static str> {
         Some("EntityConfigs")
-    }
-
-    fn mock_data(&self) -> Vec<Value> {
-        vec![]
     }
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {

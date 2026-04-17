@@ -153,3 +153,18 @@ Accept: application/json
 ### 27. Orders – Prüfen dass aktives Entity unverändert ist
 GET http://localhost:8000/odata/v4/Service/Orders(OrderID='O002',IsActiveEntity=true) HTTP/1.1
 Accept: application/json
+
+
+###
+# Facettes
+
+http://localhost:8000/odata/v4/Service/EntityFacets?$select=ConfigID,FieldGroupLabel,FieldGroupQualifier,ID,IsActiveEntity&$count=true&$orderby=FieldGroupQualifier&$filter=ConfigID%20eq%20a4560b1f-b59d-57ee-a7f0-5645abab414a&$skip=0&$top=100 
+
+
+###
+http://localhost:8000/odata/v4/Service/EntityFacets
+        ?$select=ConfigID,FieldGroupLabel,FieldGroupQualifier,ID,IsActiveEntity
+        &$count=true
+        &$orderby=FieldGroupQualifier
+        &$filter=ConfigID eq 4553b09f-ab02-4fc9-9653-0dbf32d4cda4
+        &$skip=0&$top=100 

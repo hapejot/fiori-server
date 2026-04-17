@@ -5,10 +5,10 @@ use std::sync::LazyLock;
 use crate::entity::ODataEntity;
 use crate::BASE_PATH;
 
-/// Inject SiblingEntity into a record.
-/// For a draft with an active sibling → returns the active record.
-/// For an active entity with a draft → returns the draft record.
-/// Otherwise → null.
+/// Inject SiblingEntity into a record using changeset overlay logic.
+/// Records must already have draft flags injected.
+/// For an active entity → sibling is in changeset (if present).
+/// For a draft entity → sibling is in baseline (if present).
 fn inject_sibling_entity(record: &mut Value, key_field: &str, all_records: &[Value]) {
     if let Some(obj) = record.as_object_mut() {
         let is_active = obj
@@ -43,22 +43,6 @@ fn inject_sibling_entity(record: &mut Value, key_field: &str, all_records: &[Val
         };
         obj.insert("SiblingEntity".to_string(), sibling);
     }
-}
-
-pub fn parse_query_string(query: &str) -> HashMap<String, String> {
-    let mut map = HashMap::new();
-    if query.is_empty() {
-        return map;
-    }
-    for pair in query.split('&') {
-        if let Some((k, v)) = pair.split_once('=') {
-            map.insert(
-                urlencoding::decode(k).unwrap_or_default().into_owned(),
-                urlencoding::decode(v).unwrap_or_default().into_owned(),
-            );
-        }
-    }
-    map
 }
 
 pub fn compare_values(a: &Value, b: &Value) -> std::cmp::Ordering {
@@ -226,12 +210,6 @@ pub fn parse_expand_names(expand: &str) -> Vec<String> {
         names.push(name);
     }
     names
-}
-
-/// Fuehrt eine OData-Abfrage auf den Mock-Daten einer Entitaet aus
-/// ($filter, $orderby, $skip, $top, $expand, $select, $count).
-pub fn query_collection(entity: &dyn ODataEntity, qs: &HashMap<String, String>, entities: &[&dyn ODataEntity], data_store: &HashMap<String, Vec<Value>>) -> Value {
-    query_collection_from(entity, &entity.mock_data(), qs, entities, data_store)
 }
 
 /// Fuehrt eine OData-Abfrage auf bereits geladenen Daten aus.
@@ -409,9 +387,7 @@ mod tests {
     struct TestEntity;
     impl ODataEntity for TestEntity {
         fn set_name(&self) -> &'static str { "Tests" }
-        fn key_field(&self) -> &'static str { "ID" }
         fn type_name(&self) -> &'static str { "Test" }
-        fn mock_data(&self) -> Vec<Value> { vec![] }
         fn entity_set(&self) -> String { String::new() }
         fn fields_def(&self) -> Option<&'static [FieldDef]> {
             static FIELDS: &[FieldDef] = &[
@@ -510,20 +486,6 @@ mod tests {
     #[test]
     fn parse_expand_empty() {
         assert!(parse_expand_names("").is_empty());
-    }
-
-    // ── parse_query_string tests ────────────────────────────────
-
-    #[test]
-    fn parse_query_string_basic() {
-        let qs = parse_query_string("$filter=Name eq 'X'&$top=10");
-        assert_eq!(qs.get("$filter").unwrap(), "Name eq 'X'");
-        assert_eq!(qs.get("$top").unwrap(), "10");
-    }
-
-    #[test]
-    fn parse_query_string_empty() {
-        assert!(parse_query_string("").is_empty());
     }
 
     // ── match_filter tests ──────────────────────────────────────

@@ -534,7 +534,7 @@ impl DataStore for PgDataStore {
 
         // Create draft copy
         let mut draft_rec = active;
-        set_draft_flags(&mut draft_rec, false, true, false);
+        inject_draft_flags(&mut draft_rec, false, true, false);
         inject_odata_context(&mut draft_rec, set_name);
         let result = draft_rec.clone();
         self.upsert_record(set_name, key_value, false, &draft_rec);
@@ -551,7 +551,7 @@ impl DataStore for PgDataStore {
                     && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(true)
                 {
                     let mut d = r.clone();
-                    set_draft_flags(&mut d, false, true, false);
+                    inject_draft_flags(&mut d, false, true, false);
                     let child_key = extract_key_value(&d, child.key_field());
                     self.upsert_record(child.set_name(), &child_key, false, &d);
                 }
@@ -595,7 +595,7 @@ impl DataStore for PgDataStore {
         } else {
             // New entity: promote draft to active
             let mut new_active = draft_rec.clone();
-            set_draft_flags(&mut new_active, true, false, false);
+            inject_draft_flags(&mut new_active, true, false, false);
             self.upsert_record(set_name, key_value, true, &new_active);
         }
 
@@ -626,7 +626,7 @@ impl DataStore for PgDataStore {
                     && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(false)
                 {
                     let mut item = r.clone();
-                    set_draft_flags(&mut item, true, false, false);
+                    inject_draft_flags(&mut item, true, false, false);
                     let child_key = extract_key_value(&item, child.key_field());
                     self.upsert_record(child.set_name(), &child_key, true, &item);
                     self.delete_record(child.set_name(), &child_key, false);

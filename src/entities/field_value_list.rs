@@ -13,9 +13,6 @@ impl ODataEntity for FieldValueListEntity {
     fn set_name(&self) -> &'static str {
         "FieldValueLists"
     }
-    fn key_field(&self) -> &'static str {
-        "ID"
-    }
     fn type_name(&self) -> &'static str {
         "FieldValueList"
     }

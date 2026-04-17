@@ -11,9 +11,6 @@ impl ODataEntity for FieldValueListItemEntity {
     fn set_name(&self) -> &'static str {
         "FieldValueListItems"
     }
-    fn key_field(&self) -> &'static str {
-        "ID"
-    }
     fn type_name(&self) -> &'static str {
         "FieldValueListItem"
     }

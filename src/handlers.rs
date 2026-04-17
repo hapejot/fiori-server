@@ -108,12 +108,9 @@ fn store_delete_to_response(result: Result<(), StoreError>) -> Response {
 }
 
 /// Build an EntityKey from the parsed routing info.
-fn entity_key_from_routing(
-    entity: &dyn ODataEntity,
-    key: &crate::routing::EntityKeyInfo,
-) -> EntityKey {
+fn entity_key_from_routing(key: &crate::routing::EntityKeyInfo) -> EntityKey {
     EntityKey::composite(&[
-        (entity.key_field(), &key.key_value),
+        ("ID", &key.key_value),
         (
             "IsActiveEntity",
             if key.is_active { "true" } else { "false" },
@@ -181,7 +178,10 @@ pub async fn collection_handler(State(state): State<Arc<AppState>>, uri: Uri) ->
     let query_str = uri.query().unwrap_or("");
     let entities = state.entities.read().unwrap();
     let parsed = resolve_odata_path(path, &entities);
-    if let ODataPath::Collection { entity: _ } = parsed.path {
+
+    info!("retrieve collection");
+    if let ODataPath::Collection { entity: e } = parsed.path {
+        info!("entity {}", e.set_name());
         let set_name = match &parsed.path {
             ODataPath::Collection { entity } => entity.set_name(),
             _ => return error_response(404, "Entity set not found"),
@@ -217,7 +217,7 @@ fn handle_single_entity(path: &str, query_str: &str, state: &AppState) -> Respon
     let entities = state.entities.read().unwrap();
     let parsed = resolve_odata_path(path, &entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
-        let entity_key = entity_key_from_routing(entity, &key);
+        let entity_key = entity_key_from_routing(&key);
         let query = ODataQuery::parse(query_str);
         return store_result_to_response(state.data_store.read_entity(
             entity.set_name(),
@@ -233,7 +233,7 @@ fn handle_patch_entity(path: &str, body: &Value, state: &AppState) -> Response {
     let entities = state.entities.read().unwrap();
     let parsed = resolve_odata_path(path, &entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
-        let entity_key = entity_key_from_routing(entity, &key);
+        let entity_key = entity_key_from_routing(&key);
         return store_result_to_response(state.data_store.patch_entity(
             entity.set_name(),
             &entity_key,
@@ -249,7 +249,7 @@ fn handle_delete_entity(path: &str, state: &AppState) -> Response {
     let entities = state.entities.read().unwrap();
     let parsed = resolve_odata_path(path, &entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
-        let entity_key = entity_key_from_routing(entity, &key);
+        let entity_key = entity_key_from_routing(&key);
         return store_delete_to_response(
             state
                 .data_store
@@ -272,7 +272,7 @@ fn handle_draft_action(path: &str, state: &AppState) -> Response {
                 key,
                 action,
             } => {
-                let entity_key = entity_key_from_routing(entity, &key);
+                let entity_key = entity_key_from_routing(&key);
                 Some((
                     entity.set_name().to_string(),
                     entity_key,
@@ -458,7 +458,7 @@ pub async fn batch_handler(
                 || l.starts_with("DELETE ")
         });
         if let Some(request_line) = request_line {
-            info!("+-- {}", request_line);
+            // info!("+-- {}", request_line);
             let parts: Vec<&str> = request_line.split_whitespace().collect();
             let method = parts.first().copied().unwrap_or("");
             let rel_url = parts.get(1).copied().unwrap_or("");
@@ -546,7 +546,7 @@ fn handle_batch_patch(rel_url: &str, body: &str, state: &AppState) -> (u16, Valu
     let parsed = resolve_odata_path(rel_url, &entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
         let patch_data: Value = serde_json::from_str(body).unwrap_or(json!({}));
-        let entity_key = entity_key_from_routing(entity, &key);
+        let entity_key = entity_key_from_routing(&key);
         info!("{}", entity.set_name());
         match state
             .data_store
@@ -573,7 +573,7 @@ fn handle_batch_delete(rel_url: &str, state: &AppState) -> (u16, Value) {
     let entities = state.entities.read().unwrap();
     let parsed = resolve_odata_path(rel_url, &entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
-        let entity_key = entity_key_from_routing(entity, &key);
+        let entity_key = entity_key_from_routing(&key);
         match state
             .data_store
             .delete_entity(entity.set_name(), &entity_key)
@@ -624,7 +624,7 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
                 key,
                 action,
             } => {
-                let entity_key = entity_key_from_routing(entity, &key);
+                let entity_key = entity_key_from_routing(&key);
                 PostTarget::Action {
                     set_name: entity.set_name().to_string(),
                     entity_key,
@@ -639,7 +639,7 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
                 ..
             } => PostTarget::SubCollection {
                 parent_set_name: parent_entity.set_name().to_string(),
-                parent_key: entity_key_from_routing(parent_entity, &parent_key),
+                parent_key: entity_key_from_routing(&parent_key),
                 child_set_name: child_entity.set_name().to_string(),
             },
             ODataPath::Collection { entity } => PostTarget::Collection {
@@ -689,7 +689,7 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
                     )
                 }
             };
-            info!("result: {:?}", result);
+            // info!("result: {:?}", result);
             match result {
                 Ok(val) => (200, val),
                 Err(e) => (
@@ -734,7 +734,7 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
 }
 
 /// Generischer Batch-GET – loest Pfade ueber die Entity-Registry auf.
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(state, rel_url))]
 fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
     let entities = state.entities.read().unwrap();
     let parsed = resolve_odata_path(rel_url, &entities);
@@ -765,7 +765,7 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
             json!({"value": count})
         }
         ODataPath::Entity { entity, key } => {
-            let entity_key = entity_key_from_routing(entity, &key);
+            let entity_key = entity_key_from_routing(&key);
             match state
                 .data_store
                 .read_entity(entity.set_name(), &entity_key, &query)
@@ -782,7 +782,7 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
         } => {
             let parent = ParentKey::new(
                 parent_entity.set_name(),
-                entity_key_from_routing(parent_entity, &parent_key),
+                entity_key_from_routing(&parent_key),
             );
             match state
                 .data_store
@@ -797,7 +797,7 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
             key,
             property,
         } => {
-            let entity_key = entity_key_from_routing(entity, &key);
+            let entity_key = entity_key_from_routing(&key);
             if property == "SiblingEntity" {
                 match state
                     .data_store
@@ -832,7 +832,7 @@ fn handle_sub_collection(
 ) -> Response {
     let parent = ParentKey::new(
         parent_entity.set_name(),
-        entity_key_from_routing(parent_entity, parent_key),
+        entity_key_from_routing(parent_key),
     );
     let query = ODataQuery::parse(query_str);
     store_result_to_response(state.data_store.get_collection(
@@ -1163,7 +1163,7 @@ pub async fn catch_all(
                 let data: Value = serde_json::from_str(&body_str).unwrap_or(json!({}));
                 let parent = ParentKey::new(
                     parent_entity.set_name(),
-                    entity_key_from_routing(parent_entity, &parent_key),
+                    entity_key_from_routing(&parent_key),
                 );
                 let resp = store_result_to_response_with_status(
                     state
@@ -1181,7 +1181,7 @@ pub async fn catch_all(
             key,
             property,
         } => {
-            let entity_key = entity_key_from_routing(entity, &key);
+            let entity_key = entity_key_from_routing(&key);
             if property == "SiblingEntity" {
                 store_result_to_response(
                     state

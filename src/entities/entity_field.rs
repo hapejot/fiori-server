@@ -13,19 +13,12 @@ impl ODataEntity for EntityFieldEntity {
     fn set_name(&self) -> &'static str {
         "EntityFields"
     }
-    fn key_field(&self) -> &'static str {
-        "ID"
-    }
     fn type_name(&self) -> &'static str {
         "EntityField"
     }
 
     fn parent_set_name(&self) -> Option<&'static str> {
         Some("EntityConfigs")
-    }
-
-    fn mock_data(&self) -> Vec<Value> {
-        vec![]
     }
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
@@ -507,9 +500,9 @@ impl ODataEntity for EntityFieldEntity {
                     prefer_dialog: false,
                     text_path: None,
                     searchable: false,
-                    show_in_list: false,
+                    show_in_list: true,
                     list_sort_order: None,
-                    list_importance: None,
+                    list_importance: Some("High"),
                     list_criticality_path: None,
                     form_group: Some("FieldProps"),
                 },

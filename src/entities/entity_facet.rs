@@ -11,19 +11,12 @@ impl ODataEntity for EntityFacetEntity {
     fn set_name(&self) -> &'static str {
         "EntityFacets"
     }
-    fn key_field(&self) -> &'static str {
-        "ID"
-    }
     fn type_name(&self) -> &'static str {
         "EntityFacet"
     }
 
     fn parent_set_name(&self) -> Option<&'static str> {
         Some("EntityConfigs")
-    }
-
-    fn mock_data(&self) -> Vec<Value> {
-        vec![]
     }
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
@@ -68,26 +61,6 @@ impl ODataEntity for EntityFacetEntity {
                 list_criticality_path: None,
                 form_group: None,
             },
-            // FieldDef {
-            //     name: "SetName",
-            //     label: "EntitySet",
-            //     edm_type: "Edm.String",
-            //     max_length: Some(40),
-            //     precision: None,
-            //     scale: None,
-            //     immutable: true,
-            //     computed: true,
-            //     references_entity: None,
-            //     value_source: None,
-            //     prefer_dialog: false,
-            //     text_path: None,
-            //     searchable: false,
-            //     show_in_list: false,
-            //     list_sort_order: None,
-            //     list_importance: None,
-            //     list_criticality_path: None,
-            //     form_group: Some("FacetInfo"),
-            // },
             FieldDef {
                 name: "SectionLabel",
                 label: "Abschnitt-Label",

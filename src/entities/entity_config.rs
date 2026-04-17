@@ -14,15 +14,8 @@ impl ODataEntity for EntityConfigEntity {
     fn set_name(&self) -> &'static str {
         "EntityConfigs"
     }
-    fn key_field(&self) -> &'static str {
-        "ID"
-    }
     fn type_name(&self) -> &'static str {
         "EntityConfig"
-    }
-
-    fn mock_data(&self) -> Vec<Value> {
-        vec![]
     }
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
@@ -87,26 +80,6 @@ impl ODataEntity for EntityConfigEntity {
                 list_criticality_path: None,
                 form_group: Some("Basic"),
             },
-            // FieldDef {
-            //     name: "ParentSetName",
-            //     label: "{@i18n>parententityset}",
-            //     edm_type: "Edm.String",
-            //     max_length: Some(40),
-            //     precision: None,
-            //     scale: None,
-            //     immutable: false,
-            //     computed: false,
-            //     references_entity: None,
-            //     value_source: None,
-            //     prefer_dialog: false,
-            //     text_path: None,
-            //     searchable: false,
-            //     show_in_list: false,
-            //     list_sort_order: None,
-            //     list_importance: None,
-            //     list_criticality_path: None,
-            //     form_group: Some("Basic"),
-            // },
             FieldDef {
                 name: "Title",
                 label: "{@i18n>title}",

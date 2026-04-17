@@ -21,7 +21,7 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 
 ### Entity Registration
 1. Create struct implementing `ODataEntity` trait
-2. Implement: `set_name`, `key_field`, `type_name`, `mock_data`, `entity_set`, `fields_def`, `annotations_def`
+2. Implement: `set_name`, `type_name`, `entity_set`, `fields_def`, `annotations_def` (optionally `mock_data`)
 3. Register in `AppStateBuilder` via `.entity()`
 4. Automatically included in EDMX, manifest.json, CDM site document
 5. Optional: JSON file in `data/` for persistence; falls back to `mock_data()`
@@ -49,10 +49,10 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 ### Annotation Architecture
 
 **Structured types** (in `annotations.rs`):
-- `PV` enum — Property value variants: `Str`, `Path`, `AnnotationPath`, `NavPropPath`, `PropPath`, `EnumMember`, `Int`, `Bool`, `Record(Rec)`, `Collection(Vec<Rec>)`, `PropertyPaths(Vec<String>)`
+- `PV` enum — Property value variants: `Str`, `Path`, `AnnotationPath`, `PropPath`, `EnumMember`, `Int`, `Bool`, `Record(Rec)`, `Collection(Vec<Rec>)`, `PropertyPaths(Vec<String>)`
 - `Rec` struct — `<Record Type="...">` with `props: Vec<PV>`
 - `Ann` struct — `<Annotation Term="..." Qualifier="...">` with `AnnContent` payload
-- `AnnContent` enum — `Record`, `Collection`, `PropertyPaths`, `Str`, `Bool`, `EnumMember`, `PathWithChildren`, `Empty`
+- `AnnContent` enum — `Record`, `Collection`, `PropertyPaths`, `Str`, `Bool`, `EnumMember`, `PathWithChildren`
 - `Anns` struct — `<Annotations Target="...">` grouping multiple `Ann` items
 - All types implement `to_xml()` for serialization; `anns_to_xml(&[Anns])` serializes a full block
 
@@ -74,7 +74,8 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 ## Conventions
 
 ### Entity Key Fields
-- All entities use `ID` as key field with type `Edm.Guid`
+- All entities use `ID` as key field with type `Edm.Guid` (trait default, no override needed)
+- `key_field()` has a default implementation returning `"ID"` — only override if needed
 - `create_entity()` auto-generates the key as a random UUID v4 when not provided
 - Mock data uses deterministic UUIDs via `value_list_id()` (UUID v5 from a fixed namespace + name)
 - FK fields (e.g. `OrderItems.OrderID`, `OrderItems.ProductID`) store the UUID of the referenced entity

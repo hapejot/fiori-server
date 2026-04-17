@@ -6,7 +6,6 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::annotations::*;
-use crate::BASE_PATH;
 
 /// Fester Namespace-UUID fuer deterministische Value-List-IDs (UUID v5).
 const VALUE_LIST_NS: Uuid = Uuid::from_bytes([
@@ -29,12 +28,16 @@ pub fn value_list_id(list_name: &str) -> String {
 pub trait ODataEntity: Sync + Debug {
     /// Name des EntitySets (z.B. "Products", "Orders")
     fn set_name(&self) -> &'static str;
-    /// Name des Schluesselfelds (z.B. "ProductID")
-    fn key_field(&self) -> &'static str;
+    /// Name des Schluesselfelds – immer "ID" (Edm.Guid).
+    fn key_field(&self) -> &'static str {
+        "ID"
+    }
     /// Name des Entity-Typs (z.B. "Product", "Order")
     fn type_name(&self) -> &'static str;
     /// Mock-Daten als JSON-Array
-    fn mock_data(&self) -> Vec<Value>;
+    fn mock_data(&self) -> Vec<Value> {
+        vec![]
+    }
     /// Einheitliche Feld-Definitionen – eine Liste fuer EntityType UND Annotations.
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         None
@@ -231,17 +234,5 @@ pub trait ODataEntity: Sync + Debug {
                 }),
             ),
         ]
-    }
-}
-
-/// Extrahiert den EntitySet-Namen aus dem Request-Pfad.
-pub fn extract_set_name(path: &str) -> Option<&str> {
-    let after_base = path.strip_prefix(BASE_PATH)?.trim_start_matches('/');
-    let set_part = after_base.split('/').next().unwrap_or("");
-    let set_name = set_part.split('(').next().unwrap_or(set_part);
-    if set_name.is_empty() {
-        None
-    } else {
-        Some(set_name)
     }
 }
