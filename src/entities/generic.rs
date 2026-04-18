@@ -5,6 +5,9 @@ use std::fmt;
 
 use crate::annotations::*;
 use crate::entity::ODataEntity;
+use crate::spec::{
+    AtomValueList, EntitySpec, FieldSpec, PresentationOverrides, Relationship, Side,
+};
 use crate::NAMESPACE;
 
 // ── Helpers: Owned → &'static (fuer Programm-Lebensdauer) ──────────────
@@ -310,6 +313,164 @@ fn convert_annotations(c: &AnnotationsConfig) -> &'static AnnotationsDef {
     Box::leak(Box::new(def))
 }
 
+// ── EntityConfig → EntitySpec + Relationships ───────────────────────────
+
+/// Build an EntitySpec from EntityConfig fields (excluding FK fields from references_entity).
+fn config_to_entity_spec(
+    set_name: &str,
+    annotations: &Option<AnnotationsConfig>,
+    field_configs: &[FieldConfig],
+) -> EntitySpec {
+    let ann = annotations.as_ref();
+
+    let fields: Vec<FieldSpec> = field_configs
+        .iter()
+        .filter(|f| f.references_entity.as_ref().map_or(true, |s| s.is_empty()))
+        .map(|f| {
+            let value_list = f
+                .value_source
+                .as_ref()
+                .filter(|s| !s.is_empty())
+                .map(|vs| AtomValueList::FieldValueList {
+                    list_id: vs.clone(),
+                    prefer_dialog: f.prefer_dialog,
+                });
+
+            FieldSpec::Atom {
+                name: f.name.clone(),
+                label: f.label.clone(),
+                edm_type: f.edm_type.clone(),
+                package: None,
+                max_length: f.max_length,
+                precision: f.precision,
+                scale: f.scale,
+                computed: f.computed,
+                immutable: f.immutable,
+                value_list,
+                presentation: PresentationOverrides {
+                    searchable: if f.searchable { Some(true) } else { None },
+                    show_in_list: if f.show_in_list { Some(true) } else { None },
+                    list_sort_order: f.list_sort_order,
+                    list_importance: f.list_importance.clone(),
+                    criticality_path: f.list_criticality_path.clone(),
+                    form_group: f.form_group.clone(),
+                },
+            }
+        })
+        .collect();
+
+    let data_points = ann.map_or_else(Vec::new, |a| {
+        a.data_points
+            .iter()
+            .map(|dp| DataPointDef {
+                qualifier: leak_str(&dp.qualifier),
+                value_path: leak_str(&dp.value_path),
+                title: leak_str(&dp.title),
+                max_value: dp.max_value,
+                visualization: dp.visualization.as_deref().map(leak_str),
+            })
+            .collect()
+    });
+
+    let header_facets = ann.map_or_else(Vec::new, |a| {
+        a.header_facets
+            .iter()
+            .map(|hf| HeaderFacetDef {
+                data_point_qualifier: leak_str(&hf.data_point_qualifier),
+                label: leak_str(&hf.label),
+            })
+            .collect()
+    });
+
+    EntitySpec {
+        set_name: set_name.to_string(),
+        package: None,
+        type_name: ann.map(|a| a.header_info.type_name.clone()),
+        type_name_plural: ann.map(|a| a.header_info.type_name_plural.clone()),
+        title_field: ann.map(|a| a.header_info.title_path.clone()),
+        description_field: ann.map(|a| a.header_info.description_path.clone()),
+        fields,
+        data_points,
+        header_facets,
+    }
+}
+
+/// Extract relationships from an EntityConfig.
+///
+/// - 1:N navigation properties → composition (if target has parent_set_name) or association
+/// - Fields with references_entity → 1:1 association
+fn config_to_relationships(
+    config: &EntityConfig,
+    parent_sets: &HashMap<String, String>,
+) -> Vec<Relationship> {
+    let mut rels = vec![];
+
+    // 1:N navigation properties → composition or association
+    for nav in &config.navigation_properties {
+        if !nav.is_collection {
+            continue;
+        }
+
+        let is_composition = parent_sets
+            .get(&nav.target_set)
+            .map_or(false, |parent| parent == &config.set_name);
+
+        // Derive hidden many-side nav name from FK field
+        let many_nav_name = if let Some(ref fk) = nav.foreign_key {
+            if fk.ends_with("ID") && fk.len() > 2 {
+                format!("_{}", &fk[..fk.len() - 2])
+            } else {
+                format!("_{}", config.set_name)
+            }
+        } else {
+            format!("_{}", config.set_name)
+        };
+
+        rels.push(Relationship {
+            name: format!("{}_{}", config.set_name, nav.target_set),
+            one: Side::new(&config.set_name, &nav.name),
+            many: Side::new(&nav.target_set, &many_nav_name),
+            owned: is_composition,
+            fk_field: nav.foreign_key.clone(),
+            fk_label: None,
+            fk_form_group: None,
+            condition: None,
+            package: None,
+        });
+    }
+
+    // Fields with references_entity → association
+    for f in &config.fields {
+        let ref_entity = match &f.references_entity {
+            Some(re) if !re.is_empty() => re,
+            _ => continue,
+        };
+
+        // Derive nav name: "CustomerID" → "Customer"
+        let nav_name = if f.name.ends_with("ID") && f.name.len() > 2 {
+            f.name[..f.name.len() - 2].to_string()
+        } else if ref_entity.ends_with('s') {
+            ref_entity[..ref_entity.len() - 1].to_string()
+        } else {
+            ref_entity.clone()
+        };
+
+        rels.push(Relationship {
+            name: format!("{}_{}", config.set_name, nav_name),
+            one: Side::new(ref_entity, &format!("_{}", config.set_name)),
+            many: Side::new(&config.set_name, &nav_name),
+            owned: false,
+            fk_field: Some(f.name.clone()),
+            fk_label: Some(f.label.clone()),
+            fk_form_group: f.form_group.clone(),
+            condition: None,
+            package: None,
+        });
+    }
+
+    rels
+}
+
 // ── GenericEntity ───────────────────────────────────────────────────────
 
 pub struct GenericEntity {
@@ -323,6 +484,7 @@ pub struct GenericEntity {
     entity_set_xml: String,
     tile: Option<TileConfig>,
     default_vals: Option<Value>,
+    spec: EntitySpec,
 }
 
 impl fmt::Debug for GenericEntity {
@@ -404,6 +566,9 @@ impl GenericEntity {
                 }
             }
         }
+
+        // Build EntitySpec from the (form_group-backfilled) fields, before FK processing.
+        let spec = config_to_entity_spec(&config.set_name, &config.annotations, &field_configs);
 
         // Convention: key is always ID (Edm.Guid, auto-generated, hidden in UI).
         // Ensure the ID field exists at position 0 with the correct type.
@@ -536,6 +701,7 @@ impl GenericEntity {
             entity_set_xml: xml,
             tile: config.tile,
             default_vals: config.default_values,
+            spec,
         }
     }
 }
@@ -565,6 +731,10 @@ impl ODataEntity for GenericEntity {
 
     fn annotations_def(&self) -> Option<&'static AnnotationsDef> {
         self.annotations
+    }
+
+    fn entity_spec(&self) -> Option<EntitySpec> {
+        Some(self.spec.clone())
     }
 
     fn apps_json_entry(&self) -> Option<(String, Value)> {
@@ -844,7 +1014,10 @@ impl ODataEntity for GenericEntity {
 }
 
 /// Wandelt rohe EntityConfigs in registrierbare ODataEntity-Instanzen um.
-pub fn create_generic_entities(configs: Vec<EntityConfig>) -> Vec<&'static dyn ODataEntity> {
+/// Returns the entity instances and any relationships extracted from the configs.
+pub fn create_generic_entities(
+    configs: Vec<EntityConfig>,
+) -> (Vec<&'static dyn ODataEntity>, Vec<Relationship>) {
     // Build lookups for auto-deriving text_path and value_list on FK fields.
     let title_paths: HashMap<String, String> = configs
         .iter()
@@ -855,14 +1028,32 @@ pub fn create_generic_entities(configs: Vec<EntityConfig>) -> Vec<&'static dyn O
         })
         .collect();
 
-    configs
+    // Build parent_set lookup for determining compositions.
+    let parent_sets: HashMap<String, String> = configs
+        .iter()
+        .filter_map(|c| {
+            c.parent_set_name
+                .as_ref()
+                .map(|p| (c.set_name.clone(), p.clone()))
+        })
+        .collect();
+
+    // Extract relationships from all configs before consuming them.
+    let relationships: Vec<Relationship> = configs
+        .iter()
+        .flat_map(|c| config_to_relationships(c, &parent_sets))
+        .collect();
+
+    let entities: Vec<&'static dyn ODataEntity> = configs
         .into_iter()
         .map(|config| {
             let entity = GenericEntity::from_config(config, &title_paths);
             let leaked: &'static GenericEntity = Box::leak(Box::new(entity));
             leaked as &'static dyn ODataEntity
         })
-        .collect()
+        .collect();
+
+    (entities, relationships)
 }
 
 #[cfg(test)]
@@ -1538,9 +1729,236 @@ mod tests {
     #[test]
     fn create_generic_entities_preserves_count() {
         let configs = vec![minimal_config(), full_config()];
-        let entities = create_generic_entities(configs);
+        let (entities, relationships) = create_generic_entities(configs);
         assert_eq!(entities.len(), 2);
         assert_eq!(entities[0].set_name(), "TestItems");
         assert_eq!(entities[1].set_name(), "Orders");
+        // full_config has one 1:N nav (Items) → one composition relationship
+        assert!(
+            relationships
+                .iter()
+                .any(|r| r.name == "Orders_OrderItems"),
+            "missing Orders_OrderItems rel: {relationships:?}"
+        );
+    }
+
+    // ── EntitySpec + Relationship extraction ─────────────────────
+
+    #[test]
+    fn config_to_entity_spec_excludes_fk_fields() {
+        let config = EntityConfig {
+            set_name: "Tickets".into(),
+            type_name: "Ticket".into(),
+            parent_set_name: None,
+            fields: vec![
+                FieldConfig {
+                    name: "Title".into(), label: "Title".into(),
+                    edm_type: "Edm.String".into(), max_length: Some(80),
+                    precision: None, scale: None, immutable: false, computed: false,
+                    references_entity: None, prefer_dialog: false, value_source: None,
+                    text_path: None, searchable: true, show_in_list: true,
+                    list_sort_order: Some(1), list_importance: None,
+                    list_criticality_path: None, form_group: Some("General".into()),
+                },
+                FieldConfig {
+                    name: "CustomerID".into(), label: "Customer".into(),
+                    edm_type: "Edm.Guid".into(), max_length: None,
+                    precision: None, scale: None, immutable: false, computed: false,
+                    references_entity: Some("Customers".into()), prefer_dialog: false,
+                    value_source: None, text_path: None, searchable: false,
+                    show_in_list: false, list_sort_order: None, list_importance: None,
+                    list_criticality_path: None, form_group: Some("General".into()),
+                },
+            ],
+            navigation_properties: vec![],
+            annotations: Some(AnnotationsConfig {
+                selection_fields: vec!["Title".into()],
+                line_item: vec![],
+                header_info: HeaderInfoConfig {
+                    type_name: "Ticket".into(),
+                    type_name_plural: "Tickets".into(),
+                    title_path: "Title".into(),
+                    description_path: "Title".into(),
+                },
+                header_facets: vec![], data_points: vec![],
+                facet_sections: vec![], field_groups: vec![], table_facets: vec![],
+            }),
+            default_values: None, tile: None, value_lists: vec![],
+        };
+
+        let spec = super::config_to_entity_spec(&config.set_name, &config.annotations, &config.fields);
+
+        // CustomerID (FK) should be excluded
+        let field_names: Vec<&str> = spec.fields.iter().map(|f| f.name()).collect();
+        assert!(field_names.contains(&"Title"), "missing Title");
+        assert!(!field_names.contains(&"CustomerID"), "FK field should be excluded");
+        assert_eq!(spec.title_field, Some("Title".into()));
+    }
+
+    #[test]
+    fn config_to_relationships_extracts_all() {
+        let parent_sets = HashMap::from([("OrderItems".into(), "Orders".into())]);
+
+        let config = EntityConfig {
+            set_name: "Orders".into(),
+            type_name: "Order".into(),
+            parent_set_name: None,
+            fields: vec![
+                FieldConfig {
+                    name: "CustomerID".into(), label: "Customer".into(),
+                    edm_type: "Edm.Guid".into(), max_length: None,
+                    precision: None, scale: None, immutable: false, computed: false,
+                    references_entity: Some("Customers".into()), prefer_dialog: false,
+                    value_source: None, text_path: None, searchable: false,
+                    show_in_list: false, list_sort_order: None, list_importance: None,
+                    list_criticality_path: None, form_group: None,
+                },
+            ],
+            navigation_properties: vec![NavPropertyConfig {
+                name: "Items".into(),
+                target_type: "OrderItem".into(),
+                target_set: "OrderItems".into(),
+                is_collection: true,
+                foreign_key: Some("OrderID".into()),
+            }],
+            annotations: None,
+            default_values: None, tile: None, value_lists: vec![],
+        };
+
+        let rels = super::config_to_relationships(&config, &parent_sets);
+        assert_eq!(rels.len(), 2);
+
+        // Composition: Orders → OrderItems
+        let comp = rels.iter().find(|r| r.name == "Orders_OrderItems").unwrap();
+        assert!(comp.owned);
+        assert_eq!(comp.one.entity, "Orders");
+        assert_eq!(comp.one.nav_name, "Items");
+        assert_eq!(comp.many.entity, "OrderItems");
+        assert_eq!(comp.fk_field, Some("OrderID".into()));
+
+        // Association: Orders.CustomerID → Customers
+        let assoc = rels.iter().find(|r| r.name == "Orders_Customer").unwrap();
+        assert!(!assoc.owned);
+        assert_eq!(assoc.one.entity, "Customers");
+        assert_eq!(assoc.many.entity, "Orders");
+        assert_eq!(assoc.many.nav_name, "Customer");
+        assert_eq!(assoc.fk_field, Some("CustomerID".into()));
+    }
+
+    #[test]
+    fn generic_entity_spec_resolves_through_pipeline() {
+        use crate::model;
+
+        let configs = vec![
+            EntityConfig {
+                set_name: "Tasks".into(),
+                type_name: "Task".into(),
+                parent_set_name: None,
+                fields: vec![
+                    FieldConfig {
+                        name: "TaskName".into(), label: "Task Name".into(),
+                        edm_type: "Edm.String".into(), max_length: Some(100),
+                        precision: None, scale: None, immutable: false, computed: false,
+                        references_entity: None, prefer_dialog: false, value_source: None,
+                        text_path: None, searchable: true, show_in_list: true,
+                        list_sort_order: Some(1), list_importance: None,
+                        list_criticality_path: None, form_group: Some("General".into()),
+                    },
+                    FieldConfig {
+                        name: "AssigneeID".into(), label: "Assignee".into(),
+                        edm_type: "Edm.Guid".into(), max_length: None,
+                        precision: None, scale: None, immutable: false, computed: false,
+                        references_entity: Some("Users".into()), prefer_dialog: false,
+                        value_source: None, text_path: None, searchable: false,
+                        show_in_list: false, list_sort_order: None, list_importance: None,
+                        list_criticality_path: None, form_group: Some("General".into()),
+                    },
+                ],
+                navigation_properties: vec![NavPropertyConfig {
+                    name: "SubTasks".into(),
+                    target_type: "SubTask".into(),
+                    target_set: "SubTasks".into(),
+                    is_collection: true,
+                    foreign_key: Some("TaskID".into()),
+                }],
+                annotations: Some(AnnotationsConfig {
+                    selection_fields: vec!["TaskName".into()],
+                    line_item: vec![],
+                    header_info: HeaderInfoConfig {
+                        type_name: "Task".into(),
+                        type_name_plural: "Tasks".into(),
+                        title_path: "TaskName".into(),
+                        description_path: "TaskName".into(),
+                    },
+                    header_facets: vec![], data_points: vec![],
+                    facet_sections: vec![], field_groups: vec![],
+                    table_facets: vec![TableFacetConfig {
+                        label: "Sub Tasks".into(),
+                        id: "SubTasksSection".into(),
+                        navigation_property: "SubTasks".into(),
+                    }],
+                }),
+                default_values: None, tile: None, value_lists: vec![],
+            },
+            EntityConfig {
+                set_name: "SubTasks".into(),
+                type_name: "SubTask".into(),
+                parent_set_name: Some("Tasks".into()),
+                fields: vec![FieldConfig {
+                    name: "SubName".into(), label: "Sub Task Name".into(),
+                    edm_type: "Edm.String".into(), max_length: Some(80),
+                    precision: None, scale: None, immutable: false, computed: false,
+                    references_entity: None, prefer_dialog: false, value_source: None,
+                    text_path: None, searchable: false, show_in_list: true,
+                    list_sort_order: None, list_importance: None,
+                    list_criticality_path: None, form_group: None,
+                }],
+                navigation_properties: vec![],
+                annotations: Some(AnnotationsConfig {
+                    selection_fields: vec![],
+                    line_item: vec![],
+                    header_info: HeaderInfoConfig {
+                        type_name: "Sub Task".into(),
+                        type_name_plural: "Sub Tasks".into(),
+                        title_path: "SubName".into(),
+                        description_path: "SubName".into(),
+                    },
+                    header_facets: vec![], data_points: vec![],
+                    facet_sections: vec![], field_groups: vec![], table_facets: vec![],
+                }),
+                default_values: None, tile: None, value_lists: vec![],
+            },
+        ];
+
+        let (entities, relationships) = create_generic_entities(configs);
+        assert_eq!(entities.len(), 2);
+
+        // Collect specs from entities
+        let specs: Vec<_> = entities.iter().filter_map(|e| e.entity_spec()).collect();
+        assert_eq!(specs.len(), 2);
+
+        // Resolve through the model pipeline
+        let resolved = model::resolve(&specs, &relationships);
+
+        // Tasks: should have TaskName field, SubTasks nav, Assignee nav, and auto-created Users
+        let tasks = resolved.iter().find(|e| e.set_name == "Tasks").unwrap();
+        assert!(tasks.properties.iter().any(|p| p.name == "TaskName"));
+        // FK AssigneeID injected by resolver from the relationship
+        assert!(tasks.properties.iter().any(|p| p.name == "AssigneeID"),
+            "missing AssigneeID FK: {:?}", tasks.properties.iter().map(|p| &p.name).collect::<Vec<_>>());
+        // Composition nav
+        assert!(tasks.nav_properties.iter().any(|n| n.name == "SubTasks" && n.is_collection));
+        // 1:1 nav to Users
+        assert!(tasks.nav_properties.iter().any(|n| n.name == "Assignee" && !n.is_collection));
+
+        // SubTasks: child of Tasks
+        let subtasks = resolved.iter().find(|e| e.set_name == "SubTasks").unwrap();
+        assert_eq!(subtasks.parent_set_name.as_deref(), Some("Tasks"));
+        assert!(subtasks.properties.iter().any(|p| p.name == "TaskID"),
+            "missing TaskID FK: {:?}", subtasks.properties.iter().map(|p| &p.name).collect::<Vec<_>>());
+
+        // Users: auto-created from relationship
+        let users = resolved.iter().find(|e| e.set_name == "Users").unwrap();
+        assert_eq!(users.title_field, "Name");
     }
 }

@@ -15,9 +15,9 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Row};
 use tracing::{error, info};
 
-use crate::data_store::*;
+use crate::runtime::data_store::*;
 use crate::entity::ODataEntity;
-use crate::query::query_collection_from;
+use crate::runtime::query::query_collection_from;
 
 /// PostgreSQL-backed DataStore.
 pub struct PgDataStore {

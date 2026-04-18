@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::annotations::*;
 use crate::entity::ODataEntity;
+use crate::spec::{self, EntitySpec};
 use crate::NAMESPACE;
 
 #[derive(Debug)]
@@ -16,6 +17,10 @@ impl ODataEntity for EntityConfigEntity {
     }
     fn type_name(&self) -> &'static str {
         "EntityConfig"
+    }
+
+    fn entity_spec(&self) -> Option<EntitySpec> {
+        Some(spec::meta_package::entity_configs())
     }
 
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
@@ -189,10 +194,10 @@ impl ODataEntity for EntityConfigEntity {
                 scale: None,
                 immutable: false,
                 computed: false,
-                references_entity: Some("EntityFields"),
+                references_entity: None,
                 value_source: None,
                 prefer_dialog: false,
-                text_path: None,
+                text_path: Some("_HeaderTitleField/FieldName"),
                 searchable: false,
                 show_in_list: false,
                 list_sort_order: None,
@@ -212,7 +217,7 @@ impl ODataEntity for EntityConfigEntity {
                 references_entity: None,
                 value_source: None,
                 prefer_dialog: false,
-                text_path: None,
+                text_path: Some("_HeaderDescField/FieldName"),
                 searchable: false,
                 show_in_list: false,
                 list_sort_order: None,
@@ -330,6 +335,18 @@ impl ODataEntity for EntityConfigEntity {
                 is_collection: true,
                 foreign_key: Some("ConfigID"),
             },
+            NavigationPropertyDef {
+                name: "_HeaderTitleField",
+                target_type: "EntityField",
+                is_collection: false,
+                foreign_key: Some("HeaderTitlePath"),
+            },
+            NavigationPropertyDef {
+                name: "_HeaderDescField",
+                target_type: "EntityField",
+                is_collection: false,
+                foreign_key: Some("HeaderDescriptionPath"),
+            },
         ];
         NAV
     }
@@ -415,6 +432,25 @@ impl ODataEntity for EntityConfigEntity {
                 }
             }
         }
+        // 1:1 navigations: lookup EntityField by ID matching the FK value
+        if let Some(fields) = data_store.get("EntityFields") {
+            for &(nav, fk) in &[
+                ("_HeaderTitleField", "HeaderTitlePath"),
+                ("_HeaderDescField", "HeaderDescriptionPath"),
+            ] {
+                if nav_properties.contains(&nav) {
+                    let fk_value = record.get(fk).and_then(|v| v.as_str()).unwrap_or("");
+                    let target = fields
+                        .iter()
+                        .find(|f| f.get("ID").and_then(|v| v.as_str()) == Some(fk_value))
+                        .cloned()
+                        .unwrap_or(Value::Null);
+                    if let Some(obj) = record.as_object_mut() {
+                        obj.insert(nav.to_string(), target);
+                    }
+                }
+            }
+        }
     }
 
     fn entity_set(&self) -> String {
@@ -424,6 +460,8 @@ impl ODataEntity for EntityConfigEntity {
              <NavigationPropertyBinding Path=\"Facets\" Target=\"EntityFacets\"/>\n\
              <NavigationPropertyBinding Path=\"Navigations\" Target=\"EntityNavigations\"/>\n\
              <NavigationPropertyBinding Path=\"TableFacets\" Target=\"EntityTableFacets\"/>\n\
+             <NavigationPropertyBinding Path=\"_HeaderTitleField\" Target=\"EntityFields\"/>\n\
+             <NavigationPropertyBinding Path=\"_HeaderDescField\" Target=\"EntityFields\"/>\n\
              <NavigationPropertyBinding Path=\"SiblingEntity\" Target=\"EntityConfigs\"/>\n\
              <NavigationPropertyBinding Path=\"DraftAdministrativeData\" Target=\"DraftAdministrativeData\"/>\n\
              </EntitySet>",

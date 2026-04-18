@@ -62,6 +62,7 @@ pub struct NavigationPropertyDef {
 }
 
 /// DataPoint fuer den Object-Page-Header.
+#[derive(Debug, Clone)]
 pub struct DataPointDef {
     pub qualifier: &'static str,
     pub value_path: &'static str,
@@ -71,6 +72,7 @@ pub struct DataPointDef {
 }
 
 /// ReferenceFacet im HeaderFacets-Block – verweist auf einen DataPoint.
+#[derive(Debug, Clone)]
 pub struct HeaderFacetDef {
     pub data_point_qualifier: &'static str,
     pub label: &'static str,

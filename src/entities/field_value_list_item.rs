@@ -2,6 +2,7 @@ use serde_json::{json, Value};
 
 use crate::annotations::*;
 use crate::entity::{value_list_id, ODataEntity};
+use crate::spec::{self, EntitySpec};
 use crate::NAMESPACE;
 
 #[derive(Debug)]
@@ -17,6 +18,10 @@ impl ODataEntity for FieldValueListItemEntity {
 
     fn parent_set_name(&self) -> Option<&'static str> {
         Some("FieldValueLists")
+    }
+
+    fn entity_spec(&self) -> Option<EntitySpec> {
+        Some(spec::meta_package::field_value_list_items())
     }
 
     fn mock_data(&self) -> Vec<Value> {

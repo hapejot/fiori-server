@@ -2,24 +2,58 @@ use serde_json::{json, Value};
 
 use crate::annotations::{build_draft_actions_xml, build_draft_admin_type_xml};
 use crate::entity::ODataEntity;
+use crate::model::ResolvedEntity;
+use crate::odata::{annotations_gen, entity_type, xml_types};
 use crate::settings::Settings;
 use crate::{BASE_PATH, NAMESPACE};
 
 /// Baut das komplette EDMX-Dokument aus allen registrierten Entitaeten.
-pub fn build_metadata_xml(entities: &[&dyn ODataEntity]) -> String {
+///
+/// For entities that have a matching ResolvedEntity, uses the new 3-layer pipeline
+/// (generate_entity_type, generate_entity_set, generate_annotations).
+/// Falls back to the old ODataEntity trait methods for entities without specs.
+pub fn build_metadata_xml(
+    entities: &[&dyn ODataEntity],
+    resolved: &[ResolvedEntity],
+) -> String {
     let entity_types: String = entities
         .iter()
-        .map(|e| e.entity_type())
+        .map(|e| {
+            if let Some(r) = resolved.iter().find(|r| r.set_name == e.set_name()) {
+                entity_type::generate_entity_type(r)
+            } else {
+                e.entity_type()
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n");
     let entity_sets: String = entities
         .iter()
-        .map(|e| e.entity_set())
+        .map(|e| {
+            if let Some(r) = resolved.iter().find(|r| r.set_name == e.set_name()) {
+                entity_type::generate_entity_set(r)
+            } else {
+                e.entity_set()
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n");
     let annotations: String = entities
         .iter()
-        .map(|e| e.annotations())
+        .map(|e| {
+            if let Some(r) = resolved.iter().find(|r| r.set_name == e.set_name()) {
+                let ann_blocks = annotations_gen::generate_annotations(r);
+                let mut xml = xml_types::anns_to_xml(&ann_blocks);
+                // Append entity-specific extra annotations (e.g. UI.Identification)
+                let extra = e.extra_annotations_xml();
+                if !extra.is_empty() {
+                    xml.push_str(&extra);
+                }
+                xml
+            } else {
+                e.annotations()
+            }
+        })
         .filter(|a| !a.is_empty())
         .collect::<Vec<_>>()
         .join("\n");
@@ -31,12 +65,17 @@ pub fn build_metadata_xml(entities: &[&dyn ODataEntity]) -> String {
     let draft_actions: String = entities
         .iter()
         .map(|e| {
-            let mut actions = build_draft_actions_xml(e.type_name());
+            let actions = if let Some(r) = resolved.iter().find(|r| r.set_name == e.set_name()) {
+                entity_type::generate_draft_actions(r)
+            } else {
+                build_draft_actions_xml(e.type_name())
+            };
             let custom = e.custom_actions_xml();
-            if !custom.is_empty() {
-                actions.push_str(&custom);
+            if custom.is_empty() {
+                actions
+            } else {
+                format!("{actions}{custom}")
             }
-            actions
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -50,6 +89,9 @@ pub fn build_metadata_xml(entities: &[&dyn ODataEntity]) -> String {
   </edmx:Reference>
   <edmx:Reference Uri="https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Core.V1.xml">
     <edmx:Include Namespace="Org.OData.Core.V1" Alias="Core"/>
+  </edmx:Reference>
+  <edmx:Reference Uri="https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Measures.V1.xml">
+    <edmx:Include Namespace="Org.OData.Measures.V1" Alias="Measures"/>
   </edmx:Reference>
   <edmx:Reference Uri="https://sap.github.io/odata-vocabularies/vocabularies/UI.xml">
     <edmx:Include Namespace="com.sap.vocabularies.UI.v1" Alias="UI"/>

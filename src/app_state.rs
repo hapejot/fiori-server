@@ -10,7 +10,9 @@ use crate::data_store::{DataStore, InMemoryDataStore};
 use crate::entity::ODataEntity;
 use crate::entities::generic::create_generic_entities;
 use crate::entities::meta::reconstruct_configs_from_data;
+use crate::model::{self, ResolvedEntity};
 use crate::settings::Settings;
+use crate::spec::Relationship;
 
 /// Gesamtzustand der Applikation – haelt vorberechnete Artefakte
 /// (Metadata-XML, manifest.json, FLP-HTML) und die Entity-Registry.
@@ -33,6 +35,10 @@ pub struct AppState {
     pub settings: Settings,
     /// Datenverzeichnis fuer Persistenz und Rekonstruktion
     pub data_dir: PathBuf,
+    /// Layer 2: Resolved entities from the spec→model pipeline.
+    pub resolved_entities: RwLock<Vec<ResolvedEntity>>,
+    /// Layer 1: Relationship declarations.
+    pub relationships: RwLock<Vec<Relationship>>,
 }
 
 impl AppState {
@@ -54,7 +60,7 @@ impl AppState {
 
         // 2. Reconstruct configs from persisted meta tables
         let raw_configs = reconstruct_configs_from_data(&self.data_dir);
-        let generic_entities = create_generic_entities(raw_configs);
+        let (generic_entities, generic_relationships) = create_generic_entities(raw_configs);
 
         // 3. Build new entity list: keep built-in, replace generic.
         //    Built-in entities have known type names that are NOT from EntityConfigs.
@@ -67,8 +73,23 @@ impl AppState {
         let mut new_entities = builtin;
         new_entities.extend(generic_entities);
 
-        // 4. Rebuild all derived artifacts
-        let metadata_xml = builders::build_metadata_xml(&new_entities);
+        // 4. Resolve specs + relationships (builtin + generic) — needed for metadata build
+        let builtin_relationships = self.relationships.read().unwrap().clone();
+        let mut all_relationships = builtin_relationships;
+        all_relationships.extend(generic_relationships);
+        let specs: Vec<_> = new_entities.iter().filter_map(|e| e.entity_spec()).collect();
+        let mut resolved_entities = model::resolve(&specs, &all_relationships);
+        for entity in &new_entities {
+            if let Some(resolved) = resolved_entities
+                .iter_mut()
+                .find(|r| r.set_name == entity.set_name())
+            {
+                entity.tweak_resolved(resolved);
+            }
+        }
+
+        // 5. Rebuild all derived artifacts
+        let metadata_xml = builders::build_metadata_xml(&new_entities, &resolved_entities);
         let manifest_json =
             serde_json::to_string_pretty(&builders::build_manifest_json(&new_entities, &self.settings))
                 .unwrap_or_default();
@@ -89,16 +110,17 @@ impl AppState {
             serde_json::to_string_pretty(&builders::build_cdm_site_json(&new_entities))
                 .unwrap_or_default();
 
-        // 5. Update DataStore entity list
+        // 6. Update DataStore entity list
         self.data_store.update_entities(new_entities.clone());
 
-        // 6. Swap in new values
+        // 7. Swap in new values
         *self.entities.write().unwrap() = new_entities;
         *self.metadata_xml.write().unwrap() = metadata_xml;
         *self.manifest_json.write().unwrap() = manifest_json;
         *self.entity_manifests.write().unwrap() = entity_manifests;
         *self.apps_json.write().unwrap() = apps_json;
         *self.cdm_site_json.write().unwrap() = cdm_site_json;
+        *self.resolved_entities.write().unwrap() = resolved_entities;
 
         info!("  [activate_config] Done – entities rebuilt.");
     }
@@ -141,6 +163,7 @@ fn build_apps_json(entities: &[&'static dyn ODataEntity]) -> String {
 /// Builder fuer schrittweise Konfiguration des AppState.
 pub struct AppStateBuilder {
     pub(crate) entities: Vec<&'static dyn ODataEntity>,
+    relationships: Vec<Relationship>,
     settings: Option<Settings>,
     data_dir: Option<PathBuf>,
     data_store: Option<Box<dyn DataStore>>,
@@ -150,6 +173,7 @@ impl AppStateBuilder {
     fn new() -> Self {
         Self {
             entities: Vec::new(),
+            relationships: Vec::new(),
             settings: None,
             data_dir: None,
             data_store: None,
@@ -171,6 +195,16 @@ impl AppStateBuilder {
         self
     }
 
+    pub fn relationship(mut self, rel: Relationship) -> Self {
+        self.relationships.push(rel);
+        self
+    }
+
+    pub fn relationships(mut self, rels: Vec<Relationship>) -> Self {
+        self.relationships.extend(rels);
+        self
+    }
+
     pub fn data_store(mut self, store: Box<dyn DataStore>) -> Self {
         self.data_store = Some(store);
         self
@@ -178,10 +212,25 @@ impl AppStateBuilder {
 
     pub fn build(self) -> AppState {
         let entities = self.entities;
+        let relationships = self.relationships;
         let settings = self.settings.unwrap_or_else(|| {
             Settings::load(std::path::Path::new("webapp/config/settings.json"))
         });
-        let metadata_xml = builders::build_metadata_xml(&entities);
+
+        // Layer 2: Resolve entity specs + relationships into resolved entities
+        let specs: Vec<_> = entities.iter().filter_map(|e| e.entity_spec()).collect();
+        let mut resolved_entities = model::resolve(&specs, &relationships);
+        // Apply per-entity tweaks
+        for entity in &entities {
+            if let Some(resolved) = resolved_entities
+                .iter_mut()
+                .find(|r| r.set_name == entity.set_name())
+            {
+                entity.tweak_resolved(resolved);
+            }
+        }
+
+        let metadata_xml = builders::build_metadata_xml(&entities, &resolved_entities);
         let manifest_json =
             serde_json::to_string_pretty(&builders::build_manifest_json(&entities, &settings))
                 .unwrap_or_default();
@@ -227,6 +276,8 @@ impl AppStateBuilder {
             data_store,
             settings,
             data_dir,
+            resolved_entities: RwLock::new(resolved_entities),
+            relationships: RwLock::new(relationships),
         }
     }
 }

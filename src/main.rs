@@ -1,15 +1,21 @@
 mod annotations;
 mod app_state;
 mod builders;
-mod data_store;
 mod entities;
 mod entity;
-mod handlers;
-#[cfg(feature = "postgres")]
-mod pg_store;
-mod query;
-mod routing;
+pub mod model;
+pub mod odata;
+pub mod runtime;
 mod settings;
+pub mod spec;
+
+// Legacy shims — re-export from new module locations for backward compatibility
+pub mod data_store { pub use crate::runtime::data_store::*; }
+pub mod handlers { pub use crate::runtime::handlers::*; }
+pub mod query { pub use crate::runtime::query::*; }
+pub mod routing { pub use crate::runtime::routing::*; }
+#[cfg(feature = "postgres")]
+pub mod pg_store { pub use crate::runtime::pg_store::*; }
 
 use axum::{
     body::Body,
@@ -33,7 +39,7 @@ use entities::{
     EntityConfigEntity, EntityFacetEntity, EntityFieldEntity, EntityNavigationEntity,
     EntityTableFacetEntity, FieldValueListEntity, FieldValueListItemEntity,
 };
-use handlers::*;
+use runtime::handlers::*;
 use settings::Settings;
 
 pub const BASE_PATH: &str = "/odata/v4/Service";
@@ -99,11 +105,14 @@ async fn main() {
     // Meta-Tabellen im Data-Verzeichnis sind die einzige Quelle der Wahrheit.
     // EntityConfigs rekonstruieren und daraus generische Entitaeten erzeugen.
     let raw_configs = entities::meta::reconstruct_configs_from_data(&data_dir);
-    let generic_entities = entities::generic::create_generic_entities(raw_configs);
+    let (generic_entities, generic_relationships) =
+        entities::generic::create_generic_entities(raw_configs);
 
     let mut builder = AppState::builder()
         .settings(settings)
         .data_dir(&data_dir)
+        .relationships(spec::meta_package::meta_relationships())
+        .relationships(generic_relationships)
         .entity(&EntityConfigEntity)
         .entity(&EntityFieldEntity)
         .entity(&EntityFacetEntity)

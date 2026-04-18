@@ -11,9 +11,9 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 use crate::app_state::AppState;
-use crate::data_store::{EntityKey, ODataQuery, ParentKey, StoreError};
+use crate::runtime::data_store::{EntityKey, ODataQuery, ParentKey, StoreError};
 use crate::entity::ODataEntity;
-use crate::routing::{resolve_odata_path, ODataPath};
+use crate::runtime::routing::{resolve_odata_path, ODataPath};
 use crate::BASE_PATH;
 
 fn http_reason_phrase(status: u16) -> &'static str {

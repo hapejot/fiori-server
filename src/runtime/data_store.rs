@@ -8,7 +8,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::entity::ODataEntity;
-use crate::query::query_collection_from;
+use crate::runtime::query::query_collection_from;
 use crate::BASE_PATH;
 
 // ── Low-level record helpers ────────────────────────────────────────

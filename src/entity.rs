@@ -6,6 +6,8 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::annotations::*;
+use crate::model::ResolvedEntity;
+use crate::spec::EntitySpec;
 
 /// Fester Namespace-UUID fuer deterministische Value-List-IDs (UUID v5).
 const VALUE_LIST_NS: Uuid = Uuid::from_bytes([
@@ -50,6 +52,21 @@ pub trait ODataEntity: Sync + Debug {
     fn parent_set_name(&self) -> Option<&'static str> {
         None
     }
+
+    // ── Layer 1 spec integration ────────────────────────────────────
+
+    /// Layer 1 entity specification (optional).
+    /// When provided, the resolve→generate pipeline can produce entity_type,
+    /// entity_set, and annotations automatically from specs + relationships.
+    fn entity_spec(&self) -> Option<EntitySpec> {
+        None
+    }
+
+    /// Customize the resolved entity before XML generation.
+    /// Called after the resolver produces a ResolvedEntity from specs + relationships.
+    /// Override to add entity-specific tweaks (e.g., extra nav properties, custom facets).
+    fn tweak_resolved(&self, _resolved: &mut ResolvedEntity) {}
+
     /// Standardwerte fuer neue Entitaeten (z.B. Currency="EUR", Status="A").
     /// Werden beim Erstellen einer neuen Draft-Entitaet vor den Typ-Defaults angewendet.
     fn default_values(&self) -> Option<Value> {
