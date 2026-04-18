@@ -6,7 +6,8 @@ use std::fmt;
 use crate::annotations::*;
 use crate::entity::ODataEntity;
 use crate::spec::{
-    AtomValueList, EntitySpec, FieldSpec, PresentationOverrides, Relationship, Side,
+    AtomValueList, EntitySpec, FacetSectionSpec, FieldSpec, PresentationOverrides, Relationship,
+    Side, TableFacetSpec,
 };
 use crate::NAMESPACE;
 
@@ -349,7 +350,7 @@ fn config_to_entity_spec(
                 value_list,
                 presentation: PresentationOverrides {
                     searchable: if f.searchable { Some(true) } else { None },
-                    show_in_list: if f.show_in_list { Some(true) } else { None },
+                    show_in_list: Some(f.show_in_list),
                     list_sort_order: f.list_sort_order,
                     list_importance: f.list_importance.clone(),
                     criticality_path: f.list_criticality_path.clone(),
@@ -382,6 +383,29 @@ fn config_to_entity_spec(
             .collect()
     });
 
+    let facet_sections = ann.map_or_else(Vec::new, |a| {
+        a.facet_sections
+            .iter()
+            .map(|f| FacetSectionSpec {
+                label: f.label.clone(),
+                id: f.id.clone(),
+                field_group_qualifier: f.field_group_qualifier.clone(),
+                field_group_label: f.field_group_label.clone(),
+            })
+            .collect()
+    });
+
+    let table_facets = ann.map_or_else(Vec::new, |a| {
+        a.table_facets
+            .iter()
+            .map(|t| TableFacetSpec {
+                label: t.label.clone(),
+                id: t.id.clone(),
+                navigation_property: t.navigation_property.clone(),
+            })
+            .collect()
+    });
+
     EntitySpec {
         set_name: set_name.to_string(),
         package: None,
@@ -392,6 +416,8 @@ fn config_to_entity_spec(
         fields,
         data_points,
         header_facets,
+        facet_sections,
+        table_facets,
     }
 }
 

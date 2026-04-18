@@ -182,6 +182,8 @@ pub fn entity_configs() -> EntitySpec {
         ],
         data_points: vec![],
         header_facets: vec![],
+        facet_sections: vec![],
+        table_facets: vec![],
     }
 }
 
@@ -242,6 +244,8 @@ pub fn entity_fields() -> EntitySpec {
         ],
         data_points: vec![],
         header_facets: vec![],
+        facet_sections: vec![],
+        table_facets: vec![],
     }
 }
 
@@ -266,6 +270,8 @@ pub fn entity_facets() -> EntitySpec {
         ],
         data_points: vec![],
         header_facets: vec![],
+        facet_sections: vec![],
+        table_facets: vec![],
     }
 }
 
@@ -290,6 +296,8 @@ pub fn entity_navigations() -> EntitySpec {
         ],
         data_points: vec![],
         header_facets: vec![],
+        facet_sections: vec![],
+        table_facets: vec![],
     }
 }
 
@@ -313,6 +321,8 @@ pub fn entity_table_facets() -> EntitySpec {
         ],
         data_points: vec![],
         header_facets: vec![],
+        facet_sections: vec![],
+        table_facets: vec![],
     }
 }
 
@@ -330,6 +340,8 @@ pub fn field_value_lists() -> EntitySpec {
         ],
         data_points: vec![],
         header_facets: vec![],
+        facet_sections: vec![],
+        table_facets: vec![],
     }
 }
 
@@ -349,6 +361,8 @@ pub fn field_value_list_items() -> EntitySpec {
         ],
         data_points: vec![],
         header_facets: vec![],
+        facet_sections: vec![],
+        table_facets: vec![],
     }
 }
 

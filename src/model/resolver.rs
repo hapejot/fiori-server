@@ -103,6 +103,27 @@ fn base_from_spec(spec: &EntitySpec) -> ResolvedEntity {
         })
         .collect();
 
+    let facet_sections = spec
+        .facet_sections
+        .iter()
+        .map(|f| ResolvedFacetSection {
+            label: f.label.clone(),
+            id: f.id.clone(),
+            field_group_qualifier: f.field_group_qualifier.clone(),
+            field_group_label: f.field_group_label.clone(),
+        })
+        .collect();
+
+    let table_facets = spec
+        .table_facets
+        .iter()
+        .map(|t| ResolvedTableFacet {
+            label: t.label.clone(),
+            id: t.id.clone(),
+            navigation_property: t.navigation_property.clone(),
+        })
+        .collect();
+
     ResolvedEntity {
         set_name: spec.set_name.clone(),
         type_name: spec.resolved_type_name(),
@@ -115,8 +136,8 @@ fn base_from_spec(spec: &EntitySpec) -> ResolvedEntity {
         nav_properties: vec![],
         data_points,
         header_facets,
-        facet_sections: vec![],
-        table_facets: vec![],
+        facet_sections,
+        table_facets,
         selection_fields: vec![],
         package: spec.package.clone(),
     }
@@ -219,7 +240,7 @@ fn resolve_field(field: &FieldSpec) -> ResolvedProperty {
             text_path: None,
             value_list: value_list.as_ref().map(resolve_value_list),
             measure: None,
-            presentation: resolve_presentation(presentation),
+            presentation: resolve_presentation(presentation, *computed, edm_type == "Edm.Guid"),
             package: package.clone(),
         },
         FieldSpec::Measure {
@@ -247,16 +268,17 @@ fn resolve_field(field: &FieldSpec) -> ResolvedProperty {
                 unit_field: unit_field.clone(),
                 kind: kind.clone(),
             }),
-            presentation: resolve_presentation(presentation),
+            presentation: resolve_presentation(presentation, false, false),
             package: package.clone(),
         },
     }
 }
 
-fn resolve_presentation(p: &crate::spec::PresentationOverrides) -> ResolvedPresentation {
+fn resolve_presentation(p: &crate::spec::PresentationOverrides, computed: bool, hidden: bool) -> ResolvedPresentation {
+    let default_show = !computed && !hidden;
     ResolvedPresentation {
         searchable: p.searchable.unwrap_or(false),
-        show_in_list: p.show_in_list.unwrap_or(false),
+        show_in_list: p.show_in_list.unwrap_or(default_show),
         list_sort_order: p.list_sort_order,
         list_importance: p.list_importance.clone(),
         criticality_path: p.criticality_path.clone(),
@@ -433,15 +455,21 @@ fn apply_relationship(
                 is_composition: rel.owned,
             });
 
-            // Auto-generate TableFacet for visible collection navs
+            // Auto-generate TableFacet for visible collection navs (skip if explicit one exists)
             if !rel.one_side_hidden() {
-                let label = rel.one.nav_name.clone();
-                let id = format!("{}Section", rel.one.nav_name);
-                one_entity.table_facets.push(ResolvedTableFacet {
-                    label,
-                    id,
-                    navigation_property: rel.one.nav_name.clone(),
-                });
+                let already_defined = one_entity
+                    .table_facets
+                    .iter()
+                    .any(|t| t.navigation_property == rel.one.nav_name);
+                if !already_defined {
+                    let label = rel.one.nav_name.clone();
+                    let id = format!("{}Section", rel.one.nav_name);
+                    one_entity.table_facets.push(ResolvedTableFacet {
+                        label,
+                        id,
+                        navigation_property: rel.one.nav_name.clone(),
+                    });
+                }
             }
         }
     }
@@ -477,6 +505,8 @@ mod tests {
                 fields: vec![FieldSpec::string("OrderName", "Order Name", 80)],
                 data_points: vec![],
                 header_facets: vec![],
+                facet_sections: vec![],
+                table_facets: vec![],
             },
             EntitySpec {
                 set_name: "OrderItems".into(),
@@ -488,6 +518,8 @@ mod tests {
                 fields: vec![FieldSpec::string("ItemName", "Item Name", 80)],
                 data_points: vec![],
                 header_facets: vec![],
+                facet_sections: vec![],
+                table_facets: vec![],
             },
         ];
         let rels = vec![Relationship {
@@ -534,6 +566,8 @@ mod tests {
                 fields: vec![FieldSpec::string("Name", "Name", 40)],
                 data_points: vec![],
                 header_facets: vec![],
+                facet_sections: vec![],
+                table_facets: vec![],
             },
             EntitySpec {
                 set_name: "Fields".into(),
@@ -545,6 +579,8 @@ mod tests {
                 fields: vec![FieldSpec::string("FieldName", "Field Name", 40)],
                 data_points: vec![],
                 header_facets: vec![],
+                facet_sections: vec![],
+                table_facets: vec![],
             },
         ];
         let rels = vec![

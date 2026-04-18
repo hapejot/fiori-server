@@ -342,6 +342,27 @@ pub struct EntitySpec {
     pub data_points: Vec<DataPointDef>,
     /// Header facets referencing data points.
     pub header_facets: Vec<HeaderFacetDef>,
+    /// Explicit Object Page facet sections. When empty, auto-derived from form_group values.
+    pub facet_sections: Vec<FacetSectionSpec>,
+    /// Explicit table facets (child collection tables). When empty, auto-derived from relationships.
+    pub table_facets: Vec<TableFacetSpec>,
+}
+
+/// An explicit facet section for the Object Page.
+#[derive(Debug, Clone)]
+pub struct FacetSectionSpec {
+    pub label: String,
+    pub id: String,
+    pub field_group_qualifier: String,
+    pub field_group_label: String,
+}
+
+/// An explicit table facet (child collection table on the Object Page).
+#[derive(Debug, Clone)]
+pub struct TableFacetSpec {
+    pub label: String,
+    pub id: String,
+    pub navigation_property: String,
 }
 
 impl EntitySpec {

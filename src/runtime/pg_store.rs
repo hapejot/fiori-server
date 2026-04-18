@@ -784,6 +784,35 @@ impl DataStore for PgDataStore {
         }
         *self.entities.write().unwrap() = new_entities;
     }
+
+    fn seed_records(&self, set_name: &str, records: Vec<Value>) {
+        for mut record in records {
+            let id = record
+                .get("ID")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if id.is_empty() {
+                continue;
+            }
+            // Check if record already exists
+            let exists: bool = self.block_on(async {
+                let row: (i64,) = sqlx::query_as(
+                    "SELECT COUNT(*) FROM entity_records WHERE entity_set = $1 AND key_value = $2",
+                )
+                .bind(set_name)
+                .bind(&id)
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or((0,));
+                row.0 > 0
+            });
+            if !exists {
+                add_draft_defaults(&mut record);
+                self.upsert_record(set_name, &id, true, &record);
+            }
+        }
+    }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────

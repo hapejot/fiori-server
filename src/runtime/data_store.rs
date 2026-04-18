@@ -443,6 +443,10 @@ pub trait DataStore: Send + Sync {
 
     // ── Entity Updates ──
     fn update_entities(&self, entities: Vec<&'static dyn ODataEntity>);
+
+    // ── Seeding ──
+    /// Inject additional records into an entity set (skip duplicates by ID).
+    fn seed_records(&self, set_name: &str, records: Vec<Value>);
 }
 
 // ── InMemoryDataStore ───────────────────────────────────────────────
@@ -1400,6 +1404,20 @@ impl DataStore for InMemoryDataStore {
         }
         drop(store);
         *self.entities.write().unwrap() = new_entities;
+    }
+
+    fn seed_records(&self, set_name: &str, records: Vec<Value>) {
+        let mut store = self.store.write().unwrap();
+        let collection = store.entry(set_name.to_string()).or_insert_with(Vec::new);
+        for record in records {
+            let id = record.get("ID").and_then(|v| v.as_str()).unwrap_or("");
+            let exists = collection
+                .iter()
+                .any(|r| r.get("ID").and_then(|v| v.as_str()) == Some(id));
+            if !exists {
+                collection.push(record);
+            }
+        }
     }
 }
 

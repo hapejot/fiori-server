@@ -852,6 +852,7 @@ mod tests {
         }
         fn commit(&self) {}
         fn update_entities(&self, _: Vec<&'static dyn ODataEntity>) {}
+        fn seed_records(&self, _: &str, _: Vec<Value>) {}
     }
 
     // ── generate_meta_data Tests ────────────────────────────────

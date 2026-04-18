@@ -13,6 +13,7 @@ use crate::entities::meta::reconstruct_configs_from_data;
 use crate::model::{self, ResolvedEntity};
 use crate::settings::Settings;
 use crate::spec::Relationship;
+use crate::spec::synth_records::generate_synth_records;
 
 /// Gesamtzustand der Applikation – haelt vorberechnete Artefakte
 /// (Metadata-XML, manifest.json, FLP-HTML) und die Entity-Registry.
@@ -264,6 +265,31 @@ impl AppStateBuilder {
         let data_store = self.data_store.unwrap_or_else(|| {
             Box::new(InMemoryDataStore::new(data_dir.clone(), entities.clone()))
         });
+
+        // Inject synthetic records for builtin (meta-package) entities
+        let meta_specs: Vec<_> = specs
+            .iter()
+            .filter(|s| s.package.as_deref() == Some("meta"))
+            .cloned()
+            .collect();
+        let meta_rels: Vec<_> = relationships
+            .iter()
+            .filter(|r| r.package.as_deref() == Some("meta"))
+            .cloned()
+            .collect();
+        if !meta_specs.is_empty() {
+            let synth = generate_synth_records(&meta_specs, &meta_rels);
+            for (set_name, records) in synth {
+                if !records.is_empty() {
+                    info!(
+                        "  Seeding {} synthetic {} records",
+                        records.len(),
+                        set_name
+                    );
+                    data_store.seed_records(set_name, records);
+                }
+            }
+        }
 
         AppState {
             entities: RwLock::new(entities),
