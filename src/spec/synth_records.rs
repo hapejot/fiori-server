@@ -266,12 +266,34 @@ pub fn generate_synth_records(
         }
     }
 
+    // ── EntityRelationships ───────────────────────────────────────
+    let mut rel_records = Vec::new();
+    for rel in relationships {
+        rel_records.push(json!({
+            "ID": value_list_id(&format!("rel_{}", rel.name)),
+            "Name": rel.name,
+            "OneEntity": rel.one.entity,
+            "OneNavName": rel.one.nav_name,
+            "ManyEntity": rel.many.entity,
+            "ManyNavName": rel.many.nav_name,
+            "IsComposition": rel.owned,
+            "FkField": rel.fk_field.as_deref().unwrap_or(""),
+            "FkLabel": rel.fk_label.as_deref().unwrap_or(""),
+            "FkFormGroup": rel.fk_form_group.as_deref().unwrap_or(""),
+            "ConditionType": rel.condition.as_ref().map(|c| match c.condition {
+                super::Condition::SubsetOf => "SubsetOf",
+            }).unwrap_or(""),
+            "ConditionReference": rel.condition.as_ref().map(|c| c.reference.as_str()).unwrap_or(""),
+        }));
+    }
+
     vec![
         ("EntityConfigs", config_records),
         ("EntityFields", field_records),
         ("EntityFacets", facet_records),
         ("EntityNavigations", nav_records),
         ("EntityTableFacets", table_facet_records),
+        ("EntityRelationships", rel_records),
     ]
 }
 
@@ -301,11 +323,11 @@ mod tests {
         let (specs, rels) = meta_package();
         let records = generate_synth_records(&specs, &rels);
 
-        // Should have 5 categories
-        assert_eq!(records.len(), 5);
+        // Should have 6 categories
+        assert_eq!(records.len(), 6);
 
         let configs = &records[0].1;
-        assert_eq!(configs.len(), 7, "7 meta entity specs");
+        assert_eq!(configs.len(), 8, "8 meta entity specs");
 
         // EntityConfigs should be a root entity
         let ec = configs
@@ -353,5 +375,25 @@ mod tests {
             .filter(|t| t["SetName"] == "EntityConfigs")
             .collect();
         assert_eq!(ec_tfs.len(), 4, "EntityConfigs has 4 table facets");
+
+        // EntityRelationships records
+        let rels_records = &records[5].1;
+        assert_eq!(rels_records.len(), 8, "8 meta relationships");
+
+        let comp = rels_records
+            .iter()
+            .find(|r| r["Name"] == "EntityConfig_Fields")
+            .unwrap();
+        assert_eq!(comp["OneEntity"], "EntityConfigs");
+        assert_eq!(comp["ManyEntity"], "EntityFields");
+        assert_eq!(comp["IsComposition"], true);
+        assert_eq!(comp["FkField"], "ConfigID");
+
+        let cond = rels_records
+            .iter()
+            .find(|r| r["Name"] == "HeaderTitle")
+            .unwrap();
+        assert_eq!(cond["ConditionType"], "SubsetOf");
+        assert_eq!(cond["ConditionReference"], "EntityConfig_Fields");
     }
 }

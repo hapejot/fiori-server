@@ -16,5 +16,50 @@
     "NavigationProperty": "Items",
     "SetName": "Orders",
     "SortOrder": 0
+  },
+  {
+    "ConfigID": "cfe7de4b-86b9-54b1-8a53-ad3a4461bfea",
+    "FacetId": "FieldsSection",
+    "FacetLabel": "Fields",
+    "ID": "8efe65f0-4ea3-5f73-81fd-c2b8bc105941",
+    "NavigationProperty": "Fields",
+    "SetName": "EntityConfigs",
+    "SortOrder": 0
+  },
+  {
+    "ConfigID": "cfe7de4b-86b9-54b1-8a53-ad3a4461bfea",
+    "FacetId": "FacetsSection",
+    "FacetLabel": "Facets",
+    "ID": "f16879e5-d15a-57b1-9950-d6df3bb27c84",
+    "NavigationProperty": "Facets",
+    "SetName": "EntityConfigs",
+    "SortOrder": 1
+  },
+  {
+    "ConfigID": "cfe7de4b-86b9-54b1-8a53-ad3a4461bfea",
+    "FacetId": "NavigationsSection",
+    "FacetLabel": "Navigations",
+    "ID": "c85a218d-879d-5400-a3e1-77cd3f76782e",
+    "NavigationProperty": "Navigations",
+    "SetName": "EntityConfigs",
+    "SortOrder": 2
+  },
+  {
+    "ConfigID": "cfe7de4b-86b9-54b1-8a53-ad3a4461bfea",
+    "FacetId": "TableFacetsSection",
+    "FacetLabel": "TableFacets",
+    "ID": "ffa7e4ff-4c66-5af7-838e-66a5c00e1807",
+    "NavigationProperty": "TableFacets",
+    "SetName": "EntityConfigs",
+    "SortOrder": 3
+  },
+  {
+    "ConfigID": "c1b6e6c1-7665-5e0a-bd60-78ae50e27145",
+    "FacetId": "ItemsSection",
+    "FacetLabel": "Items",
+    "ID": "d1ca5dff-3df2-549a-8733-6450152f4a02",
+    "NavigationProperty": "Items",
+    "SetName": "FieldValueLists",
+    "SortOrder": 0
   }
 ]

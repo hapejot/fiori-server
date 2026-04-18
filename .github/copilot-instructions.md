@@ -5,27 +5,52 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 
 ## Architecture
 
+### 3-Layer Pipeline
+
+Metadata generation follows a strict 3-layer pipeline:
+
+```
+EntitySpec + Relationship  ──→  resolve()  ──→  ResolvedEntity  ──→  XML generators
+       (Layer 1: spec/)          (Layer 2: model/)                  (Layer 3: odata/)
+```
+
+- **Layer 1 (`src/spec/`)** — Application-level declarations: `EntitySpec` (fields, facets, data points), `Relationship` (links between entities), `synth_records` (generates admin UI config records from specs)
+- **Layer 2 (`src/model/`)** — `resolve(&[EntitySpec], &[Relationship])` → `Vec<ResolvedEntity>` with auto-derived FK fields, nav properties, text paths, value lists, facet sections
+- **Layer 3 (`src/odata/`)** — XML generators consuming `ResolvedEntity` directly: `entity_type` (EntityType/EntitySet), `annotations_gen` (UI/Capability annotations), `xml_types` (PV/Rec/Ann/Anns serialization DSL)
+- **Runtime (`src/runtime/`)** — `data_store`, `handlers`, `query`, `routing`, `pg_store`
+
 ### Key Files
 - `src/main.rs` — Server startup, route registration, graceful shutdown
 - `src/app_state.rs` — Shared state with RwLock-wrapped mutable fields + `activate_config()`
-- `src/data_store.rs` — `DataStore` trait + in-memory implementation with draft support
-- `src/pg_store.rs` — PostgreSQL `DataStore` implementation (feature-gated: `postgres`)
-- `src/handlers.rs` — HTTP handlers (collection, entity, batch, draft actions)
-- `src/annotations.rs` — Structured annotation types (`PV`, `Rec`, `Ann`, `Anns`), builder functions, `FieldDef`, `ValueListDef`
-- `src/entity.rs` — `ODataEntity` trait definition
-- `src/entities/` — Entity implementations (products, orders, meta tables, generic entities)
+- `src/entity.rs` — `ODataEntity` trait definition (legacy trait, delegates to `entity_spec()` for new pipeline)
+- `src/entities/` — Entity implementations (meta tables, generic entities)
+- `src/annotations.rs` — Legacy annotation types (`PV`, `Rec`, `Ann`, `Anns`), `FieldDef`, `ValueListDef`
 - `src/builders.rs` — Build metadata XML, manifests, CDM site document, FLP HTML
-- `src/routing.rs` — OData URL parsing
-- `src/query.rs` — OData query execution ($filter, $orderby, $select, $expand)
+- `src/spec/entity_spec.rs` — `EntitySpec`, `FieldSpec` (Atom/Measure), `PresentationOverrides`, `AtomValueList`, `FacetSectionSpec`, `TableFacetSpec`
+- `src/spec/relationship.rs` — `Relationship`, `Side`, `ConditionalRef`, `Condition`
+- `src/spec/meta_package.rs` — 7 builtin meta entity specs + 8 relationships (self-hosting config layer)
+- `src/spec/synth_records.rs` — `generate_synth_records()` → synthetic JSON records for admin UI visibility
+- `src/model/resolver.rs` — `resolve()` transforms specs + relationships into resolved entities
+- `src/model/resolved.rs` — `ResolvedEntity`, `ResolvedProperty`, `ResolvedNavProperty`, `ResolvedValueList`
+- `src/model/defaults.rs` — Smart defaults: `derive_selection_fields`, `derive_facet_sections`
+- `src/odata/entity_type.rs` — Generates EntityType/EntitySet/DraftActions XML from `ResolvedEntity`
+- `src/odata/annotations_gen.rs` — Generates UI + Capability annotations from `ResolvedEntity`
+- `src/odata/xml_types.rs` — XML serialization DSL (re-exports from `annotations.rs`)
+- `src/runtime/data_store.rs` — `DataStore` trait + in-memory implementation with draft support
+- `src/runtime/pg_store.rs` — PostgreSQL `DataStore` implementation (feature-gated: `postgres`)
+- `src/runtime/handlers.rs` — HTTP handlers (collection, entity, batch, draft actions)
+- `src/runtime/routing.rs` — OData URL parsing
+- `src/runtime/query.rs` — OData query execution ($filter, $orderby, $select, $expand)
 - `migrations/` — SQL schema files for PostgreSQL
 
 ### Entity Registration
 1. Create struct implementing `ODataEntity` trait
-2. Implement: `set_name`, `type_name`, `entity_set`, `fields_def`, `annotations_def` (optionally `mock_data`)
-3. Register in `AppStateBuilder` via `.entity()`
+2. Implement `entity_spec()` returning `Some(EntitySpec)` — the new pipeline auto-generates EDMX, annotations, and all metadata
+3. Register in `AppStateBuilder` via `.entity()` and `.relationships()`
 4. Automatically included in EDMX, manifest.json, CDM site document
 5. Optional: JSON file in `data/` for persistence; falls back to `mock_data()`
-6. Optional: `navigation_properties()` for compositions/references, `parent_set_name()` for child entities
+6. Optional: `tweak_resolved()` for entity-specific adjustments after resolution
+7. Legacy path: `fields_def()`, `annotations_def()`, `navigation_properties()` still work as fallback when `entity_spec()` returns `None`
 
 ### Built-in Entities
 
@@ -48,7 +73,13 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 
 ### Annotation Architecture
 
-**Structured types** (in `annotations.rs`):
+**New pipeline** (Layer 3, `src/odata/`):
+- `annotations_gen::generate_annotations(&ResolvedEntity)` → `Vec<Anns>` — generates all UI + Capability annotations from resolved data
+- `entity_type::generate_entity_type(&ResolvedEntity)` → EntityType XML
+- `entity_type::generate_entity_set(&ResolvedEntity)` → EntitySet XML
+- No dependency on Layer 1 types — only consumes `ResolvedEntity`
+
+**XML serialization DSL** (in `odata/xml_types.rs`, re-exported from `annotations.rs`):
 - `PV` enum — Property value variants: `Str`, `Path`, `AnnotationPath`, `PropPath`, `EnumMember`, `Int`, `Bool`, `Record(Rec)`, `Collection(Vec<Rec>)`, `PropertyPaths(Vec<String>)`
 - `Rec` struct — `<Record Type="...">` with `props: Vec<PV>`
 - `Ann` struct — `<Annotation Term="..." Qualifier="...">` with `AnnContent` payload
@@ -56,20 +87,26 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 - `Anns` struct — `<Annotations Target="...">` grouping multiple `Ann` items
 - All types implement `to_xml()` for serialization; `anns_to_xml(&[Anns])` serializes a full block
 
-**Builder pattern** — Structured builders return `Vec<Anns>`, thin XML wrappers delegate + serialize:
-- `build_annotations()` → `build_annotations_xml()` — UI.SelectionFields, UI.LineItem, UI.HeaderInfo, UI.HeaderFacets, UI.DataPoint, UI.Facets, UI.FieldGroup
-- `build_capabilities()` → `build_capabilities_annotations()` — UpdateRestrictions, InsertRestrictions, Draft annotations, property-level Common.Label, UI.Hidden, Core.Computed, Core.Immutable, Common.Text
-- `build_value_list_anns()` — Common.ValueList parameters (Out, DisplayOnly, Constant for ListID filter)
+**Legacy builders** (still used as fallback for entities without `entity_spec()`):
+- `build_annotations()` / `build_capabilities()` / `build_value_list_anns()` — consume `FieldDef`/`AnnotationsDef`
+- Entity-specific annotations via: `extra_annotations_xml()` (appended to standard), `custom_actions_xml()` (bound OData actions)
 
-**Definition types:**
+**Definition types** (legacy, in `annotations.rs`):
 - `AnnotationsDef` composes: `HeaderInfoDef`, `SelectionFields`, `LineItemField[]`, `DataPointDef[]`, `HeaderFacetDef[]`, `FacetSectionDef[]`, `FieldGroupDef[]`, `TableFacetDef[]`
 - `LineItemField` variants: `UI.DataField` (default), `UI.DataFieldWithIntentBasedNavigation` (semantic_object), `UI.DataFieldWithNavigationPath` (navigation_path)
-- Entity-specific annotations via: `extra_annotations_xml()` (appended to standard), `custom_actions_xml()` (bound OData actions)
 
 ### Data Flow
 - `InMemoryDataStore::new()` loads from `data/<EntitySet>.json`, falls back to `mock_data()`
-- Draft flags (`IsActiveEntity`, `HasActiveEntity`, `HasDraftEntity`) added on load
+- After store creation, `generate_synth_records()` injects synthetic records for all meta-package entities (package="meta") via `seed_records()` — makes code-defined entities visible in the admin UI
+- Draft flags (`IsActiveEntity`, `HasActiveEntity`, `HasDraftEntity`) injected at read time by `prepare_baseline_record()`
 - `commit()` persists active records to `data/` as JSON (strips draft flags)
+
+### Spec → Model Resolution
+- `EntitySpec` declares fields, facets, data points; `Relationship` declares links between entities
+- `resolve()` cross-references both, auto-deriving: FK properties, navigation properties, text paths, value lists, facet sections, table facets
+- `resolve_presentation(p, computed, hidden)` defaults `show_in_list` to `!computed && !hidden` when not explicitly set
+- `key_property()` helper auto-generates the standard ID (Edm.Guid, computed, hidden) property — skipped if spec already declares one
+- `apply_relationship()` skips auto-generating table facets when an explicit one exists for the same nav property
 
 ## Conventions
 
@@ -106,9 +143,10 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 - EntityField.ValueSource dropdown: `key_property: "ID"`, `display_property: "ListName"` — stores UUID, shows name
 
 ### AppState RwLock Pattern
-- Mutable fields wrapped in `RwLock`: `entities`, `metadata_xml`, `manifest_json`, `entity_manifests`, `apps_json`, `cdm_site_json`
+- Mutable fields wrapped in `RwLock`: `entities`, `metadata_xml`, `manifest_json`, `entity_manifests`, `apps_json`, `cdm_site_json`, `resolved_entities`, `relationships`
 - Immutable fields: `flp_html`, `settings`, `data_dir`, `data_store`
 - Handlers acquire `.read().unwrap()` for reads; `activate_config()` acquires `.write().unwrap()`
+- `build()` pipeline: resolve specs → build metadata XML → seed synthetic records → construct AppState
 - **Important**: Extract owned data from `ODataPath` before dropping `RwLock` guard (borrow checker safety)
 
 ### Draft Lifecycle
@@ -121,8 +159,17 @@ Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled C
 ### Generic Entities
 - Configured via meta tables: `EntityConfigs`, `EntityFields`, `EntityFacets`, `EntityNavigations`, `EntityTableFacets`
 - `create_generic_entities()` builds `GenericEntity` instances from config
+- `config_to_entity_spec()` converts config data into `EntitySpec` + `Relationship` for the new pipeline
 - `activate_config()` rebuilds generic entities at runtime after metadata changes (triggered by `publishConfig`)
 - Builtin sets (Products, Orders, etc.) are never replaced during rebuild
+
+### Meta Package (Self-Hosting)
+- `src/spec/meta_package.rs` defines the 7 meta entities + 8 relationships in spec form
+- The config layer is expressed in its own terms — proving the spec model is self-hosting
+- `meta_entities()`: EntityConfigs, EntityFields, EntityFacets, EntityNavigations, EntityTableFacets, FieldValueLists, FieldValueListItems
+- `meta_relationships()`: 5 compositions (Config→Fields/Facets/Navigations/TableFacets, ValueList→Items), 2 conditional refs (HeaderTitlePath/HeaderDescriptionPath pick from Fields), 1 reference (Field→ValueList)
+- At startup, `generate_synth_records()` converts these specs into JSON config records and seeds them into the data store — the 7 meta entities appear alongside the 12+ generic entities in the admin UI
+- Synthetic records use deterministic UUIDs via `value_list_id("config_{SetName}")` and skip duplicates by ID
 
 ### FK Auto-Derivation (Generic Entities)
 - For 1:1 navigation properties, `from_config()` auto-derives `text_path` and `value_list` on the FK field

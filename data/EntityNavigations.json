@@ -20,5 +20,60 @@
     "SortOrder": 0,
     "TargetSet": "OrderItems",
     "TargetType": "OrderItem"
+  },
+  {
+    "ConfigID": "cfe7de4b-86b9-54b1-8a53-ad3a4461bfea",
+    "ForeignKey": "ConfigID",
+    "ID": "d38e277e-5d1d-5b87-b15e-623adc2973d7",
+    "IsCollection": true,
+    "NavName": "Fields",
+    "SetName": "EntityConfigs",
+    "SortOrder": 0,
+    "TargetSet": "EntityFields",
+    "TargetType": "EntityField"
+  },
+  {
+    "ConfigID": "cfe7de4b-86b9-54b1-8a53-ad3a4461bfea",
+    "ForeignKey": "ConfigID",
+    "ID": "183080b8-ed27-566b-8858-b84a918b6f9b",
+    "IsCollection": true,
+    "NavName": "Facets",
+    "SetName": "EntityConfigs",
+    "SortOrder": 1,
+    "TargetSet": "EntityFacets",
+    "TargetType": "EntityFacet"
+  },
+  {
+    "ConfigID": "cfe7de4b-86b9-54b1-8a53-ad3a4461bfea",
+    "ForeignKey": "ConfigID",
+    "ID": "5e58066c-e97f-5f99-b5b2-52956ff95ae2",
+    "IsCollection": true,
+    "NavName": "Navigations",
+    "SetName": "EntityConfigs",
+    "SortOrder": 2,
+    "TargetSet": "EntityNavigations",
+    "TargetType": "EntityNavigation"
+  },
+  {
+    "ConfigID": "cfe7de4b-86b9-54b1-8a53-ad3a4461bfea",
+    "ForeignKey": "ConfigID",
+    "ID": "cd823b8b-ef20-51c9-b5d3-c0365d4470ff",
+    "IsCollection": true,
+    "NavName": "TableFacets",
+    "SetName": "EntityConfigs",
+    "SortOrder": 3,
+    "TargetSet": "EntityTableFacets",
+    "TargetType": "EntityTableFacet"
+  },
+  {
+    "ConfigID": "c1b6e6c1-7665-5e0a-bd60-78ae50e27145",
+    "ForeignKey": "ListID",
+    "ID": "380563ae-64cd-5e54-b996-ced02d6d8814",
+    "IsCollection": true,
+    "NavName": "Items",
+    "SetName": "FieldValueLists",
+    "SortOrder": 0,
+    "TargetSet": "FieldValueListItems",
+    "TargetType": "FieldValueListItem"
   }
 ]

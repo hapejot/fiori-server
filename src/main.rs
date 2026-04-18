@@ -37,7 +37,8 @@ use tower_http::trace::TraceLayer;
 use app_state::AppState;
 use entities::{
     EntityConfigEntity, EntityFacetEntity, EntityFieldEntity, EntityNavigationEntity,
-    EntityTableFacetEntity, FieldValueListEntity, FieldValueListItemEntity,
+    EntityRelationshipEntity, EntityTableFacetEntity, FieldValueListEntity,
+    FieldValueListItemEntity,
 };
 use runtime::handlers::*;
 use settings::Settings;
@@ -117,6 +118,7 @@ async fn main() {
         .entity(&EntityFieldEntity)
         .entity(&EntityFacetEntity)
         .entity(&EntityNavigationEntity)
+        .entity(&EntityRelationshipEntity)
         .entity(&EntityTableFacetEntity)
         .entity(&FieldValueListEntity)
         .entity(&FieldValueListItemEntity);

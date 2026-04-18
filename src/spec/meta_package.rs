@@ -146,6 +146,7 @@ pub fn meta_entities() -> Vec<EntitySpec> {
         entity_facets(),
         entity_navigations(),
         entity_table_facets(),
+        entity_relationships(),
         field_value_lists(),
         field_value_list_items(),
     ]
@@ -345,6 +346,50 @@ pub fn field_value_lists() -> EntitySpec {
     }
 }
 
+pub fn entity_relationships() -> EntitySpec {
+    EntitySpec {
+        set_name: "EntityRelationships".into(),
+        package: pkg(),
+        type_name: Some("EntityRelationship".into()),
+        type_name_plural: None,
+        title_field: Some("Name".into()),
+        description_field: None,
+        fields: vec![
+            FieldSpec::string("Name", "Name", 80)
+                .form_group("Basic")
+                .searchable()
+                .show_in_list(),
+            FieldSpec::string("OneEntity", "One-Side Entity", 40)
+                .form_group("OneSide")
+                .show_in_list(),
+            FieldSpec::string("OneNavName", "One-Side Nav Name", 40)
+                .form_group("OneSide"),
+            FieldSpec::string("ManyEntity", "Many-Side Entity", 40)
+                .form_group("ManySide")
+                .show_in_list(),
+            FieldSpec::string("ManyNavName", "Many-Side Nav Name", 40)
+                .form_group("ManySide"),
+            FieldSpec::bool_field("IsComposition", "Composition")
+                .form_group("Basic")
+                .show_in_list(),
+            FieldSpec::string("FkField", "FK Field", 40)
+                .form_group("ManySide"),
+            FieldSpec::string("FkLabel", "FK Label", 80)
+                .form_group("ManySide"),
+            FieldSpec::string("FkFormGroup", "FK Form Group", 40)
+                .form_group("ManySide"),
+            FieldSpec::string("ConditionType", "Condition Type", 20)
+                .form_group("Condition"),
+            FieldSpec::string("ConditionReference", "Condition Reference", 80)
+                .form_group("Condition"),
+        ],
+        data_points: vec![],
+        header_facets: vec![],
+        facet_sections: vec![],
+        table_facets: vec![],
+    }
+}
+
 pub fn field_value_list_items() -> EntitySpec {
     EntitySpec {
         set_name: "FieldValueListItems".into(),
@@ -374,11 +419,11 @@ mod tests {
     #[test]
     fn test_meta_package_resolves() {
         let (specs, rels) = meta_package();
-        assert_eq!(specs.len(), 7);
+        assert_eq!(specs.len(), 8);
         assert_eq!(rels.len(), 8);
 
         let resolved = model::resolve(&specs, &rels);
-        assert_eq!(resolved.len(), 7);
+        assert_eq!(resolved.len(), 8);
 
         // EntityConfigs: root entity
         let configs = resolved.iter().find(|e| e.set_name == "EntityConfigs").unwrap();
