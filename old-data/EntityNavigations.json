@@ -1,5 +1,27 @@
 [
   {
+    "ConfigID": "5166f259-7fd7-545d-9fec-de03d99b71e4",
+    "ForeignKey": "CustomerID",
+    "ID": "3669c0c9-62fb-5ab3-846c-7c8828ff2129",
+    "IsCollection": true,
+    "NavName": "Contacts",
+    "SetName": "Customers",
+    "SortOrder": 0,
+    "TargetSet": "Contacts",
+    "TargetType": "Contact"
+  },
+  {
+    "ConfigID": "15190abb-aa67-5b1b-8afe-1609749612ef",
+    "ForeignKey": "OrderID",
+    "ID": "9a1c295c-6d42-50b0-93f3-eb2adb7e0e09",
+    "IsCollection": true,
+    "NavName": "Items",
+    "SetName": "Orders",
+    "SortOrder": 0,
+    "TargetSet": "OrderItems",
+    "TargetType": "OrderItem"
+  },
+  {
     "ConfigID": "cfe7de4b-86b9-54b1-8a53-ad3a4461bfea",
     "ForeignKey": "ConfigID",
     "ID": "d38e277e-5d1d-5b87-b15e-623adc2973d7",

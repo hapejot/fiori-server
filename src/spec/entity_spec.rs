@@ -306,6 +306,14 @@ impl FieldSpec {
         }
     }
 
+    /// Returns the EDM type regardless of variant.
+    pub fn edm_type(&self) -> &str {
+        match self {
+            FieldSpec::Atom { edm_type, .. } => edm_type,
+            FieldSpec::Measure { .. } => "Edm.Decimal",
+        }
+    }
+
     /// Returns the presentation overrides regardless of variant.
     pub fn presentation(&self) -> &PresentationOverrides {
         match self {

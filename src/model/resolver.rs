@@ -12,6 +12,8 @@
 
 use std::collections::HashMap;
 
+use tracing::info;
+
 use super::defaults;
 use super::resolved::*;
 use crate::spec::{
@@ -29,18 +31,20 @@ pub fn resolve(
     let rel_map: HashMap<&str, &Relationship> =
         relationships.iter().map(|r| (r.name.as_str(), r)).collect();
 
-    // 1. Collect all entity set names from relationships + specs
+    // 1. Collect all entity set names from specs + relationships
     let mut entity_names: Vec<String> = Vec::new();
+    for s in specs {
+        if !entity_names.contains(&s.set_name) {
+            info!("defining entity {} from spec", s.set_name);
+            entity_names.push(s.set_name.clone());
+        }
+    }
     for r in relationships {
         for name in [&r.one.entity, &r.many.entity] {
             if !entity_names.contains(name) {
+                info!("adding entity {} from relationship {}", name, r.name);
                 entity_names.push(name.clone());
             }
-        }
-    }
-    for s in specs {
-        if !entity_names.contains(&s.set_name) {
-            entity_names.push(s.set_name.clone());
         }
     }
 

@@ -10,26 +10,38 @@ mod settings;
 pub mod spec;
 
 // Legacy shims — re-export from new module locations for backward compatibility
-pub mod data_store { pub use crate::runtime::data_store::*; }
-pub mod handlers { pub use crate::runtime::handlers::*; }
-pub mod query { pub use crate::runtime::query::*; }
-pub mod routing { pub use crate::runtime::routing::*; }
+pub mod data_store {
+    pub use crate::runtime::data_store::*;
+}
+pub mod handlers {
+    pub use crate::runtime::handlers::*;
+}
+pub mod query {
+    pub use crate::runtime::query::*;
+}
+pub mod routing {
+    pub use crate::runtime::routing::*;
+}
 #[cfg(feature = "postgres")]
-pub mod pg_store { pub use crate::runtime::pg_store::*; }
+pub mod pg_store {
+    pub use crate::runtime::pg_store::*;
+}
 
 use axum::{
     body::Body,
-    routing::{get, post},
     response::Response,
+    routing::{get, post},
     Router,
 };
+use tracing::info;
 
 // ── Eincompilierte statische Webapp-Dateien ─────────────────────────────
 pub const EMBEDDED_FLP_INIT_JS: &str = include_str!("../webapp/flp-init.js");
 pub const EMBEDDED_SETTINGS_JSON: &str = include_str!("../webapp/config/settings.json");
 pub const EMBEDDED_APPS_JSON: &str = include_str!("../webapp/config/apps.json");
 pub const EMBEDDED_I18N_PROPERTIES: &str = include_str!("../webapp/i18n/i18n.properties");
-pub const EMBEDDED_SANDBOX_CONFIG: &str = include_str!("../webapp/appconfig/fioriSandboxConfig.json");
+pub const EMBEDDED_SANDBOX_CONFIG: &str =
+    include_str!("../webapp/appconfig/fioriSandboxConfig.json");
 use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
@@ -56,8 +68,7 @@ async fn main() {
     // Logger initialisieren (RUST_LOG=info fuer Standard, =debug fuer mehr)
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
@@ -91,14 +102,6 @@ async fn main() {
         "  manifest     : http://localhost:{}/manifest.json (dynamisch)",
         port
     );
-    println!(
-        "  Products     : http://localhost:{}{}/Products",
-        port, BASE_PATH
-    );
-    println!(
-        "  Single Item  : http://localhost:{}{}/Products('P001')",
-        port, BASE_PATH
-    );
     println!("{}", "=".repeat(60));
 
     let data_dir = std::env::current_dir().unwrap_or_default().join("data");
@@ -106,14 +109,22 @@ async fn main() {
     // Meta-Tabellen im Data-Verzeichnis sind die einzige Quelle der Wahrheit.
     // EntityConfigs rekonstruieren und daraus generische Entitaeten erzeugen.
     let raw_configs = entities::meta::reconstruct_configs_from_data(&data_dir);
+
     let (generic_entities, generic_relationships) =
         entities::generic::create_generic_entities(raw_configs);
+    info!(
+        "Loaded {} generic entities and {} relationships from data directory",
+        generic_entities.len(),
+        generic_relationships.len()
+    );
+    for r in generic_relationships.iter() {
+        info!("  {}: 1:{:?} -> N:{:?}", r.name, r.one, r.many);
+    }
 
     let mut builder = AppState::builder()
         .settings(settings)
         .data_dir(&data_dir)
         .relationships(spec::meta_package::meta_relationships())
-        .relationships(generic_relationships)
         .entity(&EntityConfigEntity)
         .entity(&EntityFieldEntity)
         .entity(&EntityFacetEntity)
@@ -121,7 +132,9 @@ async fn main() {
         .entity(&EntityRelationshipEntity)
         .entity(&EntityTableFacetEntity)
         .entity(&FieldValueListEntity)
-        .entity(&FieldValueListItemEntity);
+        .entity(&FieldValueListItemEntity)
+        .relationships(generic_relationships);
+
     for ge in generic_entities {
         builder = builder.entity(ge);
     }
@@ -162,17 +175,16 @@ async fn main() {
 
     // Routen fuer jedes registrierte EntitySet dynamisch erzeugen
     let mut entity_routes = Router::new();
+
     for entity in app_state.entities.read().unwrap().iter() {
+        info!("Registering EntitySet: {}", entity.set_name());
         let set = entity.set_name();
         entity_routes = entity_routes
             .route(
                 &format!("{}/{}", base, set),
                 get(collection_handler).head(collection_handler),
             )
-            .route(
-                &format!("{}/{}/$count", base, set),
-                get(count_handler),
-            );
+            .route(&format!("{}/{}/$count", base, set), get(count_handler));
     }
 
     let app = Router::new()

@@ -252,6 +252,7 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
             .unwrap_or_default()
     };
 
+    let all_relations = read_json("EntityRelationships");
     let all_configs = read_json("EntityConfigs");
     let all_fields = read_json("EntityFields");
     let all_facets = read_json("EntityFacets");

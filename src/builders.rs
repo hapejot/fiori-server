@@ -1,4 +1,5 @@
 use serde_json::{json, Value};
+use tracing::info;
 
 use crate::annotations::{build_draft_actions_xml, build_draft_admin_type_xml};
 use crate::entity::ODataEntity;
@@ -125,6 +126,7 @@ pub fn build_metadata_xml(
 /// Baut das komplette manifest.json dynamisch aus allen registrierten Entitaeten.
 /// `default_entity_idx` bestimmt, welche Entitaet die Default-Route (leerer Hash) bekommt.
 pub fn build_manifest_json(entities: &[&dyn ODataEntity], settings: &Settings) -> Value {
+    info!("build manifest");
     build_manifest_json_with_default(entities, settings, 0)
 }
 
@@ -302,6 +304,7 @@ fn build_manifest_value(
 /// Baut das CDM 3.1 Site-Dokument aus allen registrierten Entitaeten.
 /// Wird von der UShell im CDM-Modus ueber /cdm/site.json geladen.
 pub fn build_cdm_site_json(entities: &[&dyn ODataEntity]) -> Value {
+    info!("build CDM site.json");
     let mut applications = serde_json::Map::new();
     let mut visualizations = serde_json::Map::new();
     let mut viz_refs = serde_json::Map::new();
@@ -466,6 +469,7 @@ pub fn build_cdm_site_json(entities: &[&dyn ODataEntity]) -> Value {
 /// Verwendet den CDM-Modus der UShell — Anwendungen werden ueber das
 /// CDM Site-Dokument (/cdm/site.json) geladen statt ueber apps.json.
 pub fn build_flp_html(settings: &Settings) -> String {
+    info!("build FLP HTML");
     let libs = settings.libs.join(", ");
     let search_flag = if settings.enable_search { "true" } else { "false" };
 

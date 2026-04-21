@@ -2,18 +2,18 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
-use tracing::info;
 use serde_json::Value;
+use tracing::info;
 
 use crate::builders;
 use crate::data_store::{DataStore, InMemoryDataStore};
-use crate::entity::ODataEntity;
 use crate::entities::generic::create_generic_entities;
 use crate::entities::meta::reconstruct_configs_from_data;
+use crate::entity::ODataEntity;
 use crate::model::{self, ResolvedEntity};
 use crate::settings::Settings;
-use crate::spec::Relationship;
 use crate::spec::synth_records::generate_synth_records;
+use crate::spec::Relationship;
 
 /// Gesamtzustand der Applikation – haelt vorberechnete Artefakte
 /// (Metadata-XML, manifest.json, FLP-HTML) und die Entity-Registry.
@@ -71,6 +71,7 @@ impl AppState {
             .filter(|e| !is_generic_entity(e))
             .copied()
             .collect();
+        info!("starting with {} builtin entities", builtin.len());
         let mut new_entities = builtin;
         new_entities.extend(generic_entities);
 
@@ -78,7 +79,10 @@ impl AppState {
         let builtin_relationships = self.relationships.read().unwrap().clone();
         let mut all_relationships = builtin_relationships;
         all_relationships.extend(generic_relationships);
-        let specs: Vec<_> = new_entities.iter().filter_map(|e| e.entity_spec()).collect();
+        let specs: Vec<_> = new_entities
+            .iter()
+            .filter_map(|e| e.entity_spec())
+            .collect();
         let mut resolved_entities = model::resolve(&specs, &all_relationships);
         for entity in &new_entities {
             if let Some(resolved) = resolved_entities
@@ -91,14 +95,15 @@ impl AppState {
 
         // 5. Rebuild all derived artifacts
         let metadata_xml = builders::build_metadata_xml(&new_entities, &resolved_entities);
-        let manifest_json =
-            serde_json::to_string_pretty(&builders::build_manifest_json(&new_entities, &self.settings))
-                .unwrap_or_default();
+        let manifest_json = serde_json::to_string_pretty(&builders::build_manifest_json(
+            &new_entities,
+            &self.settings,
+        ))
+        .unwrap_or_default();
 
         let mut entity_manifests = HashMap::new();
         for (idx, entity) in new_entities.iter().enumerate() {
-            let manifest_val =
-                builders::build_entity_manifest(&new_entities, &self.settings, idx);
+            let manifest_val = builders::build_entity_manifest(&new_entities, &self.settings, idx);
             entity_manifests.insert(
                 entity.set_name().to_string(),
                 serde_json::to_string_pretty(&manifest_val).unwrap_or_default(),
@@ -107,6 +112,7 @@ impl AppState {
 
         let apps_json = build_apps_json(&new_entities);
 
+        info!("setting CDM site.json with {} new entities", new_entities.len());
         let cdm_site_json =
             serde_json::to_string_pretty(&builders::build_cdm_site_json(&new_entities))
                 .unwrap_or_default();
@@ -131,9 +137,13 @@ impl AppState {
 /// Built-in Entities haben bekannte SetNames.
 fn is_generic_entity(entity: &&'static dyn ODataEntity) -> bool {
     const BUILTIN_SETS: &[&str] = &[
-        "EntityConfigs", "EntityFields", "EntityFacets",
-        "EntityNavigations", "EntityTableFacets",
-        "FieldValueLists", "FieldValueListItems",
+        "EntityConfigs",
+        "EntityFields",
+        "EntityFacets",
+        "EntityNavigations",
+        "EntityTableFacets",
+        "FieldValueLists",
+        "FieldValueListItems",
     ];
     !BUILTIN_SETS.contains(&entity.set_name())
 }
@@ -192,7 +202,19 @@ impl AppStateBuilder {
     }
 
     pub fn entity(mut self, entity: &'static dyn ODataEntity) -> Self {
-        self.entities.push(entity);
+        if self
+            .entities
+            .iter()
+            .any(|e| e.set_name() == entity.set_name())
+        {
+            info!(
+                "  [AppStateBuilder] Skipping duplicate entity: {}",
+                entity.set_name()
+            );
+        } else {
+            info!("  [AppStateBuilder] Adding entity: {}", entity.set_name());
+            self.entities.push(entity);
+        }
         self
     }
 
@@ -213,10 +235,11 @@ impl AppStateBuilder {
 
     pub fn build(self) -> AppState {
         let entities = self.entities;
+        assert!(!entities.is_empty(), "No entities");
         let relationships = self.relationships;
-        let settings = self.settings.unwrap_or_else(|| {
-            Settings::load(std::path::Path::new("webapp/config/settings.json"))
-        });
+        let settings = self
+            .settings
+            .unwrap_or_else(|| Settings::load(std::path::Path::new("webapp/config/settings.json")));
 
         // Layer 2: Resolve entity specs + relationships into resolved entities
         let specs: Vec<_> = entities.iter().filter_map(|e| e.entity_spec()).collect();
@@ -230,6 +253,7 @@ impl AppStateBuilder {
                 entity.tweak_resolved(resolved);
             }
         }
+        info!("Building AppState with {} entities", entities.len());
 
         let metadata_xml = builders::build_metadata_xml(&entities, &resolved_entities);
         let manifest_json =
@@ -240,8 +264,7 @@ impl AppStateBuilder {
         // bei dem sie die Default-Route ist.
         let mut entity_manifests = HashMap::new();
         for (idx, entity) in entities.iter().enumerate() {
-            let manifest_val =
-                builders::build_entity_manifest(&entities, &settings, idx);
+            let manifest_val = builders::build_entity_manifest(&entities, &settings, idx);
             entity_manifests.insert(
                 entity.set_name().to_string(),
                 serde_json::to_string_pretty(&manifest_val).unwrap_or_default(),
@@ -252,9 +275,10 @@ impl AppStateBuilder {
 
         let apps_json = build_apps_json(&entities);
 
-        let cdm_site_json =
-            serde_json::to_string_pretty(&builders::build_cdm_site_json(&entities))
-                .unwrap_or_default();
+                info!("setting CDM site.json with {} entities", entities.len());
+
+        let cdm_site_json = serde_json::to_string_pretty(&builders::build_cdm_site_json(&entities))
+            .unwrap_or_default();
 
         // Data-Verzeichnis
         let data_dir = self
@@ -281,11 +305,7 @@ impl AppStateBuilder {
             let synth = generate_synth_records(&meta_specs, &meta_rels);
             for (set_name, records) in synth {
                 if !records.is_empty() {
-                    info!(
-                        "  Seeding {} synthetic {} records",
-                        records.len(),
-                        set_name
-                    );
+                    info!("  Seeding {} synthetic {} records", records.len(), set_name);
                     data_store.seed_records(set_name, records);
                 }
             }

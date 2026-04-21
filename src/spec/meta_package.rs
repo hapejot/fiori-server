@@ -361,12 +361,14 @@ pub fn entity_relationships() -> EntitySpec {
                 .show_in_list(),
             FieldSpec::string("OneEntity", "One-Side Entity", 40)
                 .form_group("OneSide")
-                .show_in_list(),
+                .show_in_list()
+                .with_value_list(AtomValueList::entity_ref("EntityConfigs", "SetName", None).dialog()),
             FieldSpec::string("OneNavName", "One-Side Nav Name", 40)
                 .form_group("OneSide"),
             FieldSpec::string("ManyEntity", "Many-Side Entity", 40)
                 .form_group("ManySide")
-                .show_in_list(),
+                .show_in_list()
+                .with_value_list(AtomValueList::entity_ref("EntityConfigs", "SetName", None).dialog()),
             FieldSpec::string("ManyNavName", "Many-Side Nav Name", 40)
                 .form_group("ManySide"),
             FieldSpec::bool_field("IsComposition", "Composition")

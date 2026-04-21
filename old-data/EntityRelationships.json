@@ -112,31 +112,6 @@
     "OneNavName": "_ReferencingFields"
   },
   {
-    "ID": "ff60650a-b7d6-4fc8-ae94-5cf2c43d70a4",
-    "IsComposition": true,
-    "ManyEntity": "EntityB",
-    "Name": "TestRel",
-    "OneEntity": "EntityA"
-  },
-  {
-    "ID": "fcca5776-3097-4752-8ec6-4da652ba2a51",
-    "IsComposition": false,
-    "ManyEntity": "OrderItems",
-    "Name": "Test_BatchFlow",
-    "OneEntity": "Products"
-  },
-  {
-    "ConditionReference": "",
-    "ConditionType": "",
-    "FkField": "Inc1",
-    "FkFormGroup": "IncGroup",
-    "FkLabel": "IncLabel",
-    "ID": "02bf40da-205c-4577-a024-073407f4c1a1",
-    "IsComposition": false,
-    "ManyEntity": "Incident",
-    "ManyNavName": "Incidents",
-    "Name": "WasAuchImmer",
-    "OneEntity": "Initiator",
-    "OneNavName": "Initiator"
+    "ID": "a910460e-d48a-4512-9a86-9d7179fbe0c4"
   }
 ]

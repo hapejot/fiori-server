@@ -15,9 +15,9 @@ use crate::BASE_PATH;
 
 /// Find a record by key field value.
 fn find_record<'a>(records: &'a [Value], key_field: &str, key_value: &str) -> Option<&'a Value> {
-    records.iter().find(|r| {
-        r.get(key_field).and_then(|v| v.as_str()) == Some(key_value)
-    })
+    records
+        .iter()
+        .find(|r| r.get(key_field).and_then(|v| v.as_str()) == Some(key_value))
 }
 
 /// Find a record mutably by key field value.
@@ -26,16 +26,14 @@ fn find_record_mut<'a>(
     key_field: &str,
     key_value: &str,
 ) -> Option<&'a mut Value> {
-    records.iter_mut().find(|r| {
-        r.get(key_field).and_then(|v| v.as_str()) == Some(key_value)
-    })
+    records
+        .iter_mut()
+        .find(|r| r.get(key_field).and_then(|v| v.as_str()) == Some(key_value))
 }
 
 /// Remove all records matching key field value.
 fn remove_records(records: &mut Vec<Value>, key_field: &str, key_value: &str) {
-    records.retain(|r| {
-        r.get(key_field).and_then(|v| v.as_str()) != Some(key_value)
-    });
+    records.retain(|r| r.get(key_field).and_then(|v| v.as_str()) != Some(key_value));
 }
 
 // ── ChangeSet ───────────────────────────────────────────────────────
@@ -66,7 +64,12 @@ impl ChangeSet {
 
 /// Inject draft flags into a record based on its location.
 /// Baseline records get IsActiveEntity=true, changeset records get IsActiveEntity=false.
-pub(crate) fn inject_draft_flags(record: &mut Value, is_active: bool, has_active: bool, has_draft: bool) {
+pub(crate) fn inject_draft_flags(
+    record: &mut Value,
+    is_active: bool,
+    has_active: bool,
+    has_draft: bool,
+) {
     if let Some(obj) = record.as_object_mut() {
         obj.insert("IsActiveEntity".to_string(), json!(is_active));
         obj.insert("HasActiveEntity".to_string(), json!(has_active));
@@ -546,9 +549,7 @@ impl InMemoryDataStore {
             for record in &children {
                 // Recurse: copy grandchildren of this child
                 if let Some(child_key) = record.get(child_key_field).and_then(|v| v.as_str()) {
-                    self.copy_children_to_changeset(
-                        store, changeset, child, child_key, entities,
-                    );
+                    self.copy_children_to_changeset(store, changeset, child, child_key, entities);
                 }
             }
             changeset
@@ -703,8 +704,7 @@ impl DataStore for InMemoryDataStore {
                 if let Some(cs) = changeset.as_ref() {
                     if let Some(cs_records) = cs.records.get(set_name) {
                         for r in cs_records {
-                            let key_value =
-                                r.get(key_field).and_then(|v| v.as_str()).unwrap_or("");
+                            let key_value = r.get(key_field).and_then(|v| v.as_str()).unwrap_or("");
                             // Only add records that are NOT in baseline (new creates)
                             let in_baseline = store
                                 .get(set_name)
@@ -723,9 +723,7 @@ impl DataStore for InMemoryDataStore {
                     let mock = entity.mock_data();
                     let mock_with_flags: Vec<Value> = mock
                         .iter()
-                        .map(|r| {
-                            self.prepare_baseline_record(r, set_name, key_field, &changeset)
-                        })
+                        .map(|r| self.prepare_baseline_record(r, set_name, key_field, &changeset))
                         .collect();
                     Ok(query_collection_from(
                         entity,
@@ -842,14 +840,11 @@ impl DataStore for InMemoryDataStore {
             self.prepare_baseline_record(record, set_name, key_field, &changeset)
         } else {
             // Read from changeset
-            let cs = changeset.as_ref().ok_or_else(|| {
-                StoreError::NotFound("No active changeset".to_string())
-            })?;
+            let cs = changeset
+                .as_ref()
+                .ok_or_else(|| StoreError::NotFound("No active changeset".to_string()))?;
             let cs_records = cs.records.get(set_name).ok_or_else(|| {
-                StoreError::NotFound(format!(
-                    "Entity set '{}' not in changeset",
-                    set_name
-                ))
+                StoreError::NotFound(format!("Entity set '{}' not in changeset", set_name))
             })?;
             let record = find_record(cs_records, key_field, key_value).ok_or_else(|| {
                 StoreError::NotFound(format!(
@@ -945,6 +940,16 @@ impl DataStore for InMemoryDataStore {
                             _ => json!(""),
                         });
                 }
+            } else if let Some(spec) = entity.entity_spec() {
+                for field in &spec.fields {
+                    obj.entry(field.name().to_string())
+                        .or_insert_with(|| match field.edm_type() {
+                            "Edm.Int32" | "Edm.Byte" => json!(0),
+                            "Edm.Decimal" => json!("0"),
+                            "Edm.Boolean" => json!(false),
+                            _ => json!(""),
+                        });
+                }
             }
         }
 
@@ -967,10 +972,7 @@ impl DataStore for InMemoryDataStore {
 
         // Push auto-created children to changeset
         for (child_set, child_data) in children {
-            cs.records
-                .entry(child_set)
-                .or_default()
-                .push(child_data);
+            cs.records.entry(child_set).or_default().push(child_data);
         }
 
         Ok(result)
@@ -1025,16 +1027,15 @@ impl DataStore for InMemoryDataStore {
             entity.compute_fields(record);
 
             let changeset = self.changeset.read().unwrap();
-            let mut result =
-                self.prepare_baseline_record(record, set_name, key_field, &changeset);
+            let mut result = self.prepare_baseline_record(record, set_name, key_field, &changeset);
             inject_odata_context(&mut result, set_name);
             Ok(result)
         } else {
             // Patch changeset record
             let mut changeset = self.changeset.write().unwrap();
-            let cs = changeset.as_mut().ok_or_else(|| {
-                StoreError::NotFound("No active changeset".to_string())
-            })?;
+            let cs = changeset
+                .as_mut()
+                .ok_or_else(|| StoreError::NotFound("No active changeset".to_string()))?;
             let cs_records = cs.records.get_mut(set_name).ok_or_else(|| {
                 StoreError::NotFound(format!("Entity set '{}' not in changeset", set_name))
             })?;
@@ -1058,8 +1059,7 @@ impl DataStore for InMemoryDataStore {
             entity.compute_fields(record);
 
             let store = self.store.read().unwrap();
-            let mut result =
-                self.prepare_changeset_record(record, set_name, key_field, &store);
+            let mut result = self.prepare_changeset_record(record, set_name, key_field, &store);
             inject_odata_context(&mut result, set_name);
             Ok(result)
         }
@@ -1137,8 +1137,11 @@ impl DataStore for InMemoryDataStore {
         // Recursively copy all composition children into changeset
         self.copy_children_to_changeset(&store, cs, entity, key_value, &entities_snap);
 
-        info!("changeset records for {}: {}", set_name,
-            cs.records.get(set_name).map(|v| v.len()).unwrap_or(0));
+        info!(
+            "changeset records for {}: {}",
+            set_name,
+            cs.records.get(set_name).map(|v| v.len()).unwrap_or(0)
+        );
 
         // Return record with draft flags
         let mut result = active;
@@ -1148,7 +1151,7 @@ impl DataStore for InMemoryDataStore {
         Ok(result)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, key))]
     fn draft_activate(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError> {
         info!(".");
 
@@ -1164,13 +1167,15 @@ impl DataStore for InMemoryDataStore {
         );
 
         let mut changeset = self.changeset.write().unwrap();
-        let cs = changeset.as_ref().ok_or_else(|| {
-            StoreError::NotFound("No active changeset to activate".to_string())
-        })?;
+        let cs = changeset
+            .as_ref()
+            .ok_or_else(|| StoreError::NotFound("No active changeset to activate".to_string()))?;
 
         // Verify the requested entity is in the changeset
         if !cs.contains(set_name, key_field, key_value) {
-            return Err(StoreError::NotFound("Draft not found in changeset".to_string()));
+            return Err(StoreError::NotFound(
+                "Draft not found in changeset".to_string(),
+            ));
         }
 
         // Take ownership of the changeset
@@ -1184,7 +1189,10 @@ impl DataStore for InMemoryDataStore {
 
             let baseline = store.entry(cs_set_name.clone()).or_default();
             for cs_rec in cs_records {
-                let cs_key = cs_rec.get(cs_key_field).and_then(|v| v.as_str()).unwrap_or("");
+                let cs_key = cs_rec
+                    .get(cs_key_field)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 // Upsert: overwrite existing or insert new
                 if let Some(existing) = find_record_mut(baseline, cs_key_field, cs_key) {
                     *existing = cs_rec.clone();
@@ -1214,7 +1222,7 @@ impl DataStore for InMemoryDataStore {
         }
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, key))]
     fn draft_prepare(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError> {
         info!(".");
         let entity = self
@@ -1243,12 +1251,13 @@ impl DataStore for InMemoryDataStore {
             Ok(result)
         } else {
             let changeset = self.changeset.read().unwrap();
-            let cs = changeset.as_ref().ok_or_else(|| {
-                StoreError::NotFound("No active changeset".to_string())
-            })?;
-            let cs_records = cs.records.get(set_name).ok_or_else(|| {
-                StoreError::NotFound("Entity not found in changeset".to_string())
-            })?;
+            let cs = changeset
+                .as_ref()
+                .ok_or_else(|| StoreError::NotFound("No active changeset".to_string()))?;
+            let cs_records = cs
+                .records
+                .get(set_name)
+                .ok_or_else(|| StoreError::NotFound("Entity not found in changeset".to_string()))?;
             let record = find_record(cs_records, key_field, key_value).ok_or_else(|| {
                 StoreError::NotFound("Entity not found for draftPrepare".to_string())
             })?;
@@ -1272,12 +1281,13 @@ impl DataStore for InMemoryDataStore {
         if is_active {
             // Active entity → sibling is in changeset
             let changeset = self.changeset.read().unwrap();
-            let cs = changeset.as_ref().ok_or_else(|| {
-                StoreError::NotFound("No active changeset".to_string())
-            })?;
-            let cs_records = cs.records.get(set_name).ok_or_else(|| {
-                StoreError::NotFound("No draft sibling found".to_string())
-            })?;
+            let cs = changeset
+                .as_ref()
+                .ok_or_else(|| StoreError::NotFound("No active changeset".to_string()))?;
+            let cs_records = cs
+                .records
+                .get(set_name)
+                .ok_or_else(|| StoreError::NotFound("No draft sibling found".to_string()))?;
             let sibling = find_record(cs_records, key_field, key_value).ok_or_else(|| {
                 StoreError::NotFound(format!(
                     "Sibling entity with {}='{}' not found in changeset",
@@ -1292,9 +1302,9 @@ impl DataStore for InMemoryDataStore {
         } else {
             // Draft entity → sibling is in baseline
             let store = self.store.read().unwrap();
-            let records = store.get(set_name).ok_or_else(|| {
-                StoreError::NotFound("No active sibling found".to_string())
-            })?;
+            let records = store
+                .get(set_name)
+                .ok_or_else(|| StoreError::NotFound("No active sibling found".to_string()))?;
             let sibling = find_record(records, key_field, key_value).ok_or_else(|| {
                 StoreError::NotFound(format!(
                     "Sibling entity with {}='{}' not found",
@@ -1302,8 +1312,7 @@ impl DataStore for InMemoryDataStore {
                 ))
             })?;
             let changeset = self.changeset.read().unwrap();
-            let mut result =
-                self.prepare_baseline_record(sibling, set_name, key_field, &changeset);
+            let mut result = self.prepare_baseline_record(sibling, set_name, key_field, &changeset);
             inject_odata_context(&mut result, set_name);
             info!(".");
             Ok(result)
@@ -1339,9 +1348,9 @@ impl DataStore for InMemoryDataStore {
                 .clone()
         } else {
             let changeset = self.changeset.read().unwrap();
-            let cs = changeset.as_ref().ok_or_else(|| {
-                StoreError::NotFound("No active changeset".to_string())
-            })?;
+            let cs = changeset
+                .as_ref()
+                .ok_or_else(|| StoreError::NotFound("No active changeset".to_string()))?;
             let cs_records = cs.records.get(set_name).ok_or_else(|| {
                 StoreError::NotFound(format!("Entity set '{}' not in changeset", set_name))
             })?;
@@ -1517,8 +1526,7 @@ pub(crate) fn inject_sibling_entity(record: &mut Value, key_field: &str, records
                     .iter()
                     .find(|r| {
                         r.get(key_field).and_then(|v| v.as_str()) == Some(key_value)
-                            && r.get("IsActiveEntity").and_then(|v| v.as_bool())
-                                == Some(!is_active)
+                            && r.get("IsActiveEntity").and_then(|v| v.as_bool()) == Some(!is_active)
                     })
                     .cloned()
                     .unwrap_or(Value::Null)
@@ -2156,7 +2164,10 @@ mod tests {
         let new_key_value = result.get("ID").unwrap().as_str().unwrap();
         let draft_key = EntityKey::composite(&[("ID", new_key_value), ("IsActiveEntity", "false")]);
         let draft = store.read_entity("Products", &draft_key, &q).unwrap();
-        assert_eq!(draft.get("ProductName").unwrap().as_str().unwrap(), "Keyboard");
+        assert_eq!(
+            draft.get("ProductName").unwrap().as_str().unwrap(),
+            "Keyboard"
+        );
     }
 
     #[test]
