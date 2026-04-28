@@ -1,31 +1,13 @@
-mod annotations;
-mod app_state;
-mod builders;
-mod entities;
-mod entity;
-pub mod model;
-pub mod odata;
-pub mod runtime;
-mod settings;
-pub mod spec;
+//! # Fake Fiori Server
+//! 
+//! OData V4 mock server for SAP Fiori Elements...
+//! 
+//! Main modules are
+//! - `spec` high level definition of relationships and entities
+//! - `entities` reconstructs entity configs from data directory and creates generic entities
+//! - `runtime` contains the actual web server and request handlers
+//! - `main` initializes everything and starts the server
 
-// Legacy shims — re-export from new module locations for backward compatibility
-pub mod data_store {
-    pub use crate::runtime::data_store::*;
-}
-pub mod handlers {
-    pub use crate::runtime::handlers::*;
-}
-pub mod query {
-    pub use crate::runtime::query::*;
-}
-pub mod routing {
-    pub use crate::runtime::routing::*;
-}
-#[cfg(feature = "postgres")]
-pub mod pg_store {
-    pub use crate::runtime::pg_store::*;
-}
 
 use axum::{
     body::Body,
@@ -35,28 +17,19 @@ use axum::{
 };
 use tracing::info;
 
-// ── Eincompilierte statische Webapp-Dateien ─────────────────────────────
-pub const EMBEDDED_FLP_INIT_JS: &str = include_str!("../webapp/flp-init.js");
-pub const EMBEDDED_SETTINGS_JSON: &str = include_str!("../webapp/config/settings.json");
-pub const EMBEDDED_APPS_JSON: &str = include_str!("../webapp/config/apps.json");
-pub const EMBEDDED_I18N_PROPERTIES: &str = include_str!("../webapp/i18n/i18n.properties");
-pub const EMBEDDED_SANDBOX_CONFIG: &str =
-    include_str!("../webapp/appconfig/fioriSandboxConfig.json");
 use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 
-use app_state::AppState;
+use fake_fiori_server::{app_state::AppState, *};
 use entities::{
     EntityConfigEntity, EntityFacetEntity, EntityFieldEntity, EntityNavigationEntity,
     EntityRelationshipEntity, EntityTableFacetEntity, FieldValueListEntity,
     FieldValueListItemEntity,
 };
 use runtime::handlers::*;
-use settings::Settings;
+use fake_fiori_server::settings::Settings;
 
-pub const BASE_PATH: &str = "/odata/v4/Service";
-pub const NAMESPACE: &str = "Service";
 
 // ── Webapp directory (sibling to the executable's working dir) ──────────
 pub fn webapp_dir() -> PathBuf {

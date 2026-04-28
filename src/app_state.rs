@@ -6,7 +6,7 @@ use serde_json::Value;
 use tracing::info;
 
 use crate::builders;
-use crate::data_store::{DataStore, InMemoryDataStore};
+use crate::runtime::data_store::{DataStore, InMemoryDataStore};
 use crate::entities::generic::create_generic_entities;
 use crate::entities::meta::reconstruct_configs_from_data;
 use crate::entity::ODataEntity;
@@ -112,7 +112,10 @@ impl AppState {
 
         let apps_json = build_apps_json(&new_entities);
 
-        info!("setting CDM site.json with {} new entities", new_entities.len());
+        info!(
+            "setting CDM site.json with {} new entities",
+            new_entities.len()
+        );
         let cdm_site_json =
             serde_json::to_string_pretty(&builders::build_cdm_site_json(&new_entities))
                 .unwrap_or_default();
@@ -153,8 +156,13 @@ fn build_apps_json(entities: &[&'static dyn ODataEntity]) -> String {
     let webapp_dir = std::env::current_dir().unwrap_or_default().join("webapp");
     let static_path = webapp_dir.join("config/apps.json");
     let base_json = if static_path.is_file() {
+        info!("Loading base apps.json from {}", static_path.display());
         std::fs::read_to_string(&static_path).ok()
     } else {
+        info!(
+            "No static apps.json found at {}, using embedded default",
+            static_path.display()
+        );
         Some(crate::EMBEDDED_APPS_JSON.to_string())
     };
     let mut apps: serde_json::Map<String, Value> = base_json
@@ -275,7 +283,7 @@ impl AppStateBuilder {
 
         let apps_json = build_apps_json(&entities);
 
-                info!("setting CDM site.json with {} entities", entities.len());
+        info!("setting CDM site.json with {} entities", entities.len());
 
         let cdm_site_json = serde_json::to_string_pretty(&builders::build_cdm_site_json(&entities))
             .unwrap_or_default();

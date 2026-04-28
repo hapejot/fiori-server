@@ -109,8 +109,8 @@
                         // do not exist in the CDM platform but are required at
                         // runtime.  These shims delegate to the real services.
                         sap.ui.define("sap/ushell/adapters/cdm/NavTargetResolutionInternalAdapter", [
-                            "sap/ui/thirdparty/jquery",
-                            "sap/ushell/Container"
+                                      "sap/ui/thirdparty/jquery",
+                                      "sap/ushell/Container"
                         ], function (jQ, Ctnr) {
                             function A() {
                                 function c() { return Ctnr.getServiceAsync("ClientSideTargetResolution"); }
@@ -145,7 +145,7 @@
                         });
 
                         sap.ui.define("sap/ushell/adapters/cdm/AppStateAdapter", [
-                            "sap/ushell/adapters/local/AppStateAdapter"
+                                      "sap/ushell/adapters/local/AppStateAdapter"
                         ], function (LocalAdapter) {
                             return LocalAdapter;
                         });

@@ -6,6 +6,7 @@ use crate::entity::ODataEntity;
 use crate::model::ResolvedEntity;
 use crate::odata::{annotations_gen, entity_type, xml_types};
 use crate::settings::Settings;
+use crate::spec::app::App;
 use crate::{BASE_PATH, NAMESPACE};
 
 /// Baut das komplette EDMX-Dokument aus allen registrierten Entitaeten.
@@ -310,11 +311,10 @@ pub fn build_cdm_site_json(entities: &[&dyn ODataEntity]) -> Value {
     let mut viz_refs = serde_json::Map::new();
     let mut viz_order = Vec::new();
 
-    for entity in entities {
-        let entry = match entity.apps_json_entry() {
-            Some((_, v)) => v,
-            None => continue,
-        };
+    let apps: Vec<App> = vec![]; // TODO: get app-specific info from entities, e.g. semantic object, action, title, icon
+
+    for entity in apps {
+        let entry = entity.apps_json_entry();
 
         let set_name = entity.set_name();
         let title = entry.get("title").and_then(|v| v.as_str()).unwrap_or(set_name);
@@ -332,7 +332,12 @@ pub fn build_cdm_site_json(entities: &[&dyn ODataEntity]) -> Value {
         // appId from sap.app.id, and the sap-ui-app-id-hint on the navigation
         // hash must match this key for readApplications.getInboundTarget() to
         // find the application.
-        let (inbound_key, inbound_val) = entity.manifest_inbound();
+         let inbound_val = serde_json::json!({
+            "semanticObject": set_name,
+            "action": "display",
+            "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        });
+        let inbound_key = format!("{}-{}", semantic_object, action);
         let mut inbounds = serde_json::Map::new();
         inbounds.insert(inbound_key.clone(), inbound_val);
 

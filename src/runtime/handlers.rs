@@ -108,7 +108,7 @@ fn store_delete_to_response(result: Result<(), StoreError>) -> Response {
 }
 
 /// Build an EntityKey from the parsed routing info.
-fn entity_key_from_routing(key: &crate::routing::EntityKeyInfo) -> EntityKey {
+fn entity_key_from_routing(key: &super::routing::EntityKeyInfo) -> EntityKey {
     EntityKey::composite(&[
         ("ID", &key.key_value),
         (
@@ -825,7 +825,7 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
 #[tracing::instrument(skip(state))]
 fn handle_sub_collection(
     parent_entity: &dyn ODataEntity,
-    parent_key: &crate::routing::EntityKeyInfo,
+    parent_key: &super::routing::EntityKeyInfo,
     child_entity: &dyn ODataEntity,
     query_str: &str,
     state: &AppState,

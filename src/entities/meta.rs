@@ -546,7 +546,7 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
 /// Gibt den EntityConfigs-Datensatz des publizierten EntitySets zurueck.
 pub fn publish_entity_config(
     key_value: &str,
-    data_store: &dyn crate::data_store::DataStore,
+    data_store: &dyn crate::runtime::data_store::DataStore,
 ) -> Result<Value, String> {
     let config_record = data_store
         .get_records("EntityConfigs")
@@ -574,7 +574,7 @@ pub fn publish_entity_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data_store::*;
+    use crate::runtime::data_store::*;
     use crate::entity::ODataEntity;
     use serde_json::json;
     use std::collections::HashMap;
