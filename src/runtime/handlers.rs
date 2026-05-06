@@ -159,7 +159,7 @@ pub async fn metadata_handler(State(state): State<Arc<AppState>>) -> Response {
         .unwrap()
 }
 
-/// Service-Dokument – wird dynamisch aus der Entity-Registry erzeugt.
+/// Service document – dynamically generated from the entity registry.
 pub async fn service_document(State(state): State<Arc<AppState>>) -> Response {
     let entities = state.entities.read().unwrap();
     let sets: Vec<Value> = entities
@@ -172,7 +172,7 @@ pub async fn service_document(State(state): State<Arc<AppState>>) -> Response {
     }))
 }
 
-/// Generischer Collection-Handler fuer beliebige EntitySets.
+/// Generic collection handler for any EntitySet.
 pub async fn collection_handler(State(state): State<Arc<AppState>>, uri: Uri) -> Response {
     let path = uri.path();
     let query_str = uri.query().unwrap_or("");
@@ -192,7 +192,7 @@ pub async fn collection_handler(State(state): State<Arc<AppState>>, uri: Uri) ->
     error_response(404, "Entity set not found")
 }
 
-/// Generischer $count-Handler fuer beliebige EntitySets.
+/// Generic $count handler for any EntitySet.
 pub async fn count_handler(State(state): State<Arc<AppState>>, uri: Uri) -> Response {
     let path = uri.path();
     let entities = state.entities.read().unwrap();
@@ -228,7 +228,7 @@ fn handle_single_entity(path: &str, query_str: &str, state: &AppState) -> Respon
     error_response(404, "Entity not found.")
 }
 
-/// Generischer PATCH-Handler: /SetName(key) – aktualisiert Felder in-memory.
+/// Generic PATCH handler: /SetName(key) – updates fields in-memory.
 fn handle_patch_entity(path: &str, body: &Value, state: &AppState) -> Response {
     let entities = state.entities.read().unwrap();
     let parsed = resolve_odata_path(path, &entities);
@@ -243,8 +243,8 @@ fn handle_patch_entity(path: &str, body: &Value, state: &AppState) -> Response {
     error_response(404, "Entity not found.")
 }
 
-/// Handler fuer DELETE: Draft verwerfen (Discard).
-/// DELETE /SetName(key) – entfernt Draft und setzt HasDraftEntity=false am aktiven Entity.
+/// Handler for DELETE: discard draft.
+/// DELETE /SetName(key) – removes draft and sets HasDraftEntity=false on the active entity.
 fn handle_delete_entity(path: &str, state: &AppState) -> Response {
     let entities = state.entities.read().unwrap();
     let parsed = resolve_odata_path(path, &entities);
@@ -259,7 +259,7 @@ fn handle_delete_entity(path: &str, state: &AppState) -> Response {
     error_response(404, "Entity not found.")
 }
 
-/// Handler fuer Draft-Actions: draftEdit, draftActivate, draftPrepare.
+/// Handler for draft actions: draftEdit, draftActivate, draftPrepare.
 /// POST /SetName(key)/Namespace.actionName
 fn handle_draft_action(path: &str, state: &AppState) -> Response {
     // Extract action info under read lock, then release it so activate_config can write-lock
@@ -376,7 +376,7 @@ pub async fn batch_handler(
                 })
                 .unwrap_or("");
             if !cs_boundary.is_empty() {
-                // Changeset-Segmente verarbeiten (POST/PATCH innerhalb)
+                // Process changeset segments (POST/PATCH inside)
                 let cs_separator = format!("--{}", cs_boundary);
                 let mut cs_response_parts = Vec::new();
                 for cs_segment in segment.split(&cs_separator) {
@@ -450,7 +450,7 @@ pub async fn batch_handler(
         }
 
         let lines: Vec<&str> = segment.lines().collect();
-        // Finde die Request-Zeile (GET, POST, PATCH, etc.)
+        // Find the request line (GET, POST, PATCH, etc.)
         let request_line = lines.iter().find(|l| {
             l.starts_with("GET ")
                 || l.starts_with("POST ")
@@ -463,7 +463,7 @@ pub async fn batch_handler(
             let method = parts.first().copied().unwrap_or("");
             let rel_url = parts.get(1).copied().unwrap_or("");
 
-            // Body aus dem Segment extrahieren (fuer POST/PATCH)
+            // Extract body from the segment (for POST/PATCH)
             let segment_body = extract_batch_body(segment);
 
             info!("method: {method}");
@@ -518,12 +518,12 @@ pub async fn batch_handler(
     builder.body(Body::from(full_body)).unwrap()
 }
 
-/// Extrahiert den JSON-Body aus einem Batch-Segment (nach der Leerzeile).
+/// Extracts the JSON body from a batch segment (after the blank line).
 fn extract_batch_body(segment: &str) -> String {
-    // Body kommt nach einer Leerzeile (doppelte Newline)
+    // Body comes after a blank line (double newline)
     if let Some(idx) = segment.find("\r\n\r\n") {
         let after_headers = &segment[idx + 4..];
-        // Es koennte nochmal Headers + Leerzeile geben (HTTP request line + headers)
+        // There might be another headers + blank line (HTTP request line + headers)
         if let Some(idx2) = after_headers.find("\r\n\r\n") {
             return after_headers[idx2 + 4..].trim().to_string();
         }
@@ -539,7 +539,7 @@ fn extract_batch_body(segment: &str) -> String {
     String::new()
 }
 
-/// Batch-PATCH: aktualisiert ein einzelnes Entity im data_store.
+/// Batch PATCH: updates a single entity in the data store.
 #[tracing::instrument(skip(state, body))]
 fn handle_batch_patch(rel_url: &str, body: &str, state: &AppState) -> (u16, Value) {
     let entities = state.entities.read().unwrap();
@@ -567,7 +567,7 @@ fn handle_batch_patch(rel_url: &str, body: &str, state: &AppState) -> (u16, Valu
     )
 }
 
-/// Batch-DELETE: Draft verwerfen innerhalb von $batch.
+/// Batch DELETE: discard draft within $batch.
 #[tracing::instrument(skip(state))]
 fn handle_batch_delete(rel_url: &str, state: &AppState) -> (u16, Value) {
     let entities = state.entities.read().unwrap();
@@ -593,7 +593,7 @@ fn handle_batch_delete(rel_url: &str, state: &AppState) -> (u16, Value) {
     )
 }
 
-/// Batch-POST: behandelt Aktionen (draftEdit, draftActivate, draftPrepare) innerhalb von $batch.
+/// Batch POST: handles actions (draftEdit, draftActivate, draftPrepare) within $batch.
 #[tracing::instrument(skip(state, rel_url, body))]
 fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value) {
     // Extract routing info under read lock, then drop it so activate_config can write-lock
@@ -733,7 +733,7 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
     }
 }
 
-/// Generischer Batch-GET – loest Pfade ueber die Entity-Registry auf.
+/// Generic batch GET – resolves paths via the entity registry.
 #[tracing::instrument(skip(state, rel_url))]
 fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
     let entities = state.entities.read().unwrap();
@@ -821,7 +821,7 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
 }
 
 // ── Sub-Collection handler ──────────────────────────────────────────
-/// Liefert die Kind-Eintraege einer Komposition.
+/// Returns the child entries of a composition.
 #[tracing::instrument(skip(state))]
 fn handle_sub_collection(
     parent_entity: &dyn ODataEntity,
@@ -842,7 +842,7 @@ fn handle_sub_collection(
     ))
 }
 
-// ── Eincompilierte statische Dateien ────────────────────────────────
+// ── Embedded static files ───────────────────────────────────────────
 #[tracing::instrument]
 fn serve_embedded_file(relative: &str) -> Option<Response> {
     let (content, content_type) = match relative {
@@ -876,8 +876,8 @@ fn handle_file(path: &str, state: &AppState) -> Response {
         .split('/')
         .collect::<Vec<_>>();
 
-    // Entity-spezifischer App-Pfad: /apps/{EntitySet}/...
-    // Jede Entitaet bekommt ein eigenes Manifest mit passender Default-Route.
+    // Entity-specific app path: /apps/{EntitySet}/...
+    // Each entity gets its own manifest with the appropriate default route.
     let mut entity_hint: Option<String> = None;
     match relative[0] {
         "apps" => {
@@ -906,7 +906,7 @@ fn handle_file(path: &str, state: &AppState) -> Response {
     //     relative = "flp.html".to_string();
     // }
 
-    // manifest.json wird dynamisch aus der Entity-Registry generiert
+    // manifest.json is dynamically generated from the entity registry
     if relative[0] == "manifest.json" {
         info!(
             "Serving manifest.json for entity: {}",
@@ -928,7 +928,7 @@ fn handle_file(path: &str, state: &AppState) -> Response {
         return builder.body(Body::from(manifest_body.clone())).unwrap();
     }
 
-    // apps.json dynamisch ausliefern (statische + generische Entitaeten)
+    // Serve apps.json dynamically (static + generic entities)
     if relative[0] == "config" && relative[1] == "apps.json" {
         let mut builder = Response::builder()
             .status(StatusCode::OK)
@@ -959,7 +959,7 @@ fn handle_file(path: &str, state: &AppState) -> Response {
         return builder.body(Body::from(body)).unwrap();
     }
 
-    // CDM 3.1 Site-Dokument fuer den UShell CDM-Modus ausliefern
+    // CDM 3.1 site document for the UShell CDM mode
     if relative[0] == "cdm" && relative[1] == "site.json" {
         let mut builder = Response::builder()
             .status(StatusCode::OK)
@@ -972,9 +972,9 @@ fn handle_file(path: &str, state: &AppState) -> Response {
             .unwrap();
     }
 
-    // Component.js wird dynamisch generiert — der Klassenname muss zum
-    // sap.app.id im jeweiligen Manifest passen, sonst cached UI5 den
-    // falschen Component fuer die zweite App.
+    // Component.js is dynamically generated — the class name must match
+    // sap.app.id in the respective manifest, otherwise UI5 caches the
+    // wrong component for the second app.
     if relative[0] == "Component.js" {
         let app_id = entity_hint
             .as_ref()
@@ -1000,7 +1000,7 @@ fn handle_file(path: &str, state: &AppState) -> Response {
         return builder.body(Body::from(body)).unwrap();
     }
 
-    // flp.html wird dynamisch generiert (Settings-gesteuert)
+    // flp.html is dynamically generated (settings-driven)
     if relative[0] == "flp.html" {
         let mut builder = Response::builder()
             .status(StatusCode::OK)
@@ -1011,7 +1011,7 @@ fn handle_file(path: &str, state: &AppState) -> Response {
         return builder.body(Body::from(state.flp_html.clone())).unwrap();
     }
 
-    // ── Eincompilierte Dateien (kein Dateisystem noetig) ────────────
+    // ── Embedded files (no file system needed) ──────────────────────
     if let Some(resp) = serve_embedded_file(&String::from(
         relative.iter().map(|s| *s).collect::<Vec<_>>().join("/"),
     )) {
@@ -1053,7 +1053,7 @@ fn serve_file(path: &Path) -> Response {
     }
 }
 
-// ── Favicon: Dänischer Leuchtturm (SVG) ────────────────────────────
+// ── Favicon: Danish lighthouse (SVG) ────────────────────────────────
 fn favicon_svg() -> &'static str {
     r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
@@ -1065,11 +1065,11 @@ fn favicon_svg() -> &'static str {
       <polygon points="26,56 22,22 42,22 38,56"/>
     </clipPath>
   </defs>
-  <!-- Himmel -->
+  <!-- Sky -->
   <rect width="64" height="64" rx="12" fill="url(#sky)"/>
-  <!-- Duene / Sand -->
+  <!-- Dune / Sand -->
   <ellipse cx="32" cy="60" rx="38" ry="10" fill="#d4a84b"/>
-  <!-- Turm: abwechselnd rot/weiss, geclippt auf Turmform -->
+  <!-- Tower: alternating red/white, clipped to tower shape -->
   <g clip-path="url(#tower)">
     <rect x="20" y="22" width="24" height="34" fill="#ffffff"/>
     <rect x="20" y="22" width="24" height="5"  fill="#c0392b"/>
@@ -1077,17 +1077,17 @@ fn favicon_svg() -> &'static str {
     <rect x="20" y="42" width="24" height="5"  fill="#c0392b"/>
     <rect x="20" y="52" width="24" height="4"  fill="#c0392b"/>
   </g>
-  <!-- Galerie (Balkon) -->
+  <!-- Gallery (balcony) -->
   <rect x="19" y="19" width="26" height="4" rx="1" fill="#2c3e50"/>
-  <!-- Laterne (Glashaus) -->
+  <!-- Lantern (glass house) -->
   <rect x="25" y="11" width="14" height="9" rx="2" fill="#f9e784" opacity="0.9"/>
   <rect x="25" y="11" width="14" height="9" rx="2" fill="none" stroke="#2c3e50" stroke-width="1"/>
-  <!-- Dach -->
+  <!-- Roof -->
   <polygon points="24,11 32,5 40,11" fill="#2c3e50"/>
-  <!-- Lichtstrahl -->
+  <!-- Light beam -->
   <polygon points="39,15 58,6 58,12 39,17" fill="#f9e784" opacity="0.35"/>
   <polygon points="25,15 6,6 6,12 25,17" fill="#f9e784" opacity="0.25"/>
-  <!-- Tuer -->
+  <!-- Door -->
   <rect x="29" y="49" width="6" height="7" rx="3" fill="#2c3e50"/>
 </svg>"##
 }
@@ -1119,7 +1119,7 @@ pub async fn catch_all(
         return favicon_response();
     }
 
-    // Entity-bezogene Pfade ueber den zentralen Router aufloesen
+    // Resolve entity-related paths via the central router
     let entities = state.entities.read().unwrap();
     let parsed = resolve_odata_path(path, &entities);
     match parsed.path {

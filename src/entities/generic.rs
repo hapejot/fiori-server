@@ -11,7 +11,7 @@ use crate::spec::{
 };
 use crate::NAMESPACE;
 
-// ── Helpers: Owned → &'static (fuer Programm-Lebensdauer) ──────────────
+// ── Helpers: Owned → &'static (for program lifetime) ───────────────────
 
 fn leak_str(s: &str) -> &'static str {
     Box::leak(s.to_string().into_boxed_str())
@@ -38,13 +38,13 @@ pub struct EntityConfig {
     pub navigation_properties: Vec<NavPropertyConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub annotations: Option<AnnotationsConfig>,
-    /// Standardwerte fuer neue Entitaeten (z.B. {"Currency": "EUR", "Status": "A"}).
+    /// Default values for new entities (e.g. {"Currency": "EUR", "Status": "A"}).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_values: Option<Value>,
-    /// Kachel-Konfiguration fuer das FLP.
+    /// Tile configuration for the FLP.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tile: Option<TileConfig>,
-    /// Benannte Wertelisten fuer Felder mit festen Werten.
+    /// Named value lists for fields with fixed values.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub value_lists: Vec<FieldValueListConfig>,
 }
@@ -74,16 +74,16 @@ pub struct FieldConfig {
     pub immutable: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub computed: bool,
-    /// FK-Referenz auf ein anderes EntitySet (z.B. "Customers").
+    /// FK reference to another EntitySet (e.g. "Customers").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub references_entity: Option<String>,
-    /// Name einer Werteliste (UUID) fuer Fixed-Value-Dropdown.
+    /// Name of a value list (UUID) for fixed-value dropdown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value_source: Option<String>,
-    /// true → Suchdialog statt Dropdown.
+    /// true → search dialog instead of dropdown.
     #[serde(default, skip_serializing_if = "is_false")]
     pub prefer_dialog: bool,
-    /// Expliziter Textpfad fuer Common.Text (z.B. "Product/ProductName").
+    /// Explicit text path for Common.Text (e.g. "Product/ProductName").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_path: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -115,9 +115,9 @@ pub struct NavPropertyConfig {
     pub target_set: String,
     #[serde(default, skip_serializing_if = "is_false")]
     pub is_collection: bool,
-    /// Verknuepfungsfeld fuer $expand.
-    /// 1:1 → Feld auf dieser Entitaet, das den Key der Ziel-Entitaet enthaelt.
-    /// 1:n → Feld auf der Ziel-Entitaet, das den eigenen Key referenziert.
+    /// Join field for $expand.
+    /// 1:1 → field on this entity containing the key of the target entity.
+    /// 1:n → field on the target entity referencing the own key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub foreign_key: Option<String>,
 }
@@ -202,7 +202,7 @@ pub struct TableFacetConfig {
     pub navigation_property: String,
 }
 
-/// Definiert eine benannte Werteliste mit festen Eintraegen.
+/// Defines a named value list with fixed entries.
 #[derive(Deserialize, Serialize, Clone)]
 pub struct FieldValueListConfig {
     pub list_name: String,
@@ -211,14 +211,14 @@ pub struct FieldValueListConfig {
     pub entries: Vec<FieldValueListEntry>,
 }
 
-/// Ein einzelner Eintrag in einer Werteliste (Code + Beschreibung).
+/// A single entry in a value list (code + description).
 #[derive(Deserialize, Serialize, Clone)]
 pub struct FieldValueListEntry {
     pub code: String,
     pub description: String,
 }
 
-// ── Konvertierung Config → static Annotation-Structs ────────────────────
+// ── Conversion Config → static annotation structs ───────────────────────
 
 fn convert_field(f: &FieldConfig) -> FieldDef {
     // Explicit text_path takes priority; fall back to auto-generated _text for value_source fields.
@@ -801,7 +801,7 @@ impl ODataEntity for GenericEntity {
                 .unwrap_or_else(|| target.mock_data());
 
             if nav.is_collection {
-                // 1:n – foreign_key auf dem Kind verweist auf unseren Key
+                // 1:n – foreign_key on the child references our key
                 let fk = nav.foreign_key.as_deref().unwrap_or("ID");
                 let key_val = record
                     .get("ID")
@@ -817,7 +817,7 @@ impl ODataEntity for GenericEntity {
                     }
                 }
             } else {
-                // 1:1 – foreign_key ist das Feld auf diesem Record, das den Ziel-Key enthaelt
+                // 1:1 – foreign_key is the field on this record containing the target key
                 let fk = nav.foreign_key.as_deref().unwrap_or(target.key_field());
                 let fk_val = record
                     .get(fk)
@@ -1149,7 +1149,7 @@ mod tests {
         }
     }
 
-    /// Complex EntityConfig named Orders mit Navigation, Annotations und Tile
+    /// Complex EntityConfig named Orders with navigation, annotations, and tile
     fn full_config() -> EntityConfig {
         EntityConfig {
             set_name: "Orders".to_string(),

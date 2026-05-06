@@ -9,6 +9,7 @@
 //!   Common.Text, Common.ValueList, Measures
 
 use crate::model::resolved::*;
+use crate::odata::vocab::*;
 use crate::odata::xml_types::*;
 use crate::spec::MeasureKind;
 use crate::NAMESPACE;
@@ -32,11 +33,7 @@ pub fn generate_ui_annotations(e: &ResolvedEntity) -> Vec<Anns> {
     let mut anns = Vec::new();
 
     // ── SelectionFields ──
-    anns.push(Ann {
-        term: "UI.SelectionFields".into(),
-        qualifier: None,
-        content: AnnContent::PropertyPaths(e.selection_fields.clone()),
-    });
+    anns.push(SelectionFields(e.selection_fields.clone()).to_ann());
 
     // ── LineItem ──
     let mut line_item_props: Vec<&ResolvedProperty> = e
@@ -46,167 +43,87 @@ pub fn generate_ui_annotations(e: &ResolvedEntity) -> Vec<Anns> {
         .collect();
     line_item_props.sort_by_key(|p| p.presentation.list_sort_order.unwrap_or(u32::MAX));
 
-    let mut records = Vec::new();
-    for p in &line_item_props {
-        let semantic_object = resolve_semantic_object(p, e);
-        let record_type = if semantic_object.is_some() {
-            "UI.DataFieldWithIntentBasedNavigation"
-        } else {
-            "UI.DataField"
-        };
-        let mut props = vec![PV::Path("Value".into(), p.name.clone())];
-        if let Some(so) = &semantic_object {
-            props.push(PV::Str("SemanticObject".into(), so.clone()));
-            props.push(PV::Str("Action".into(), "display".into()));
-            props.push(PV::Collection(
-                "Mapping".into(),
-                vec![Rec {
-                    record_type: Some("Common.SemanticObjectMappingType".into()),
-                    props: vec![
-                        PV::PropPath("LocalProperty".into(), p.name.clone()),
-                        PV::Str("SemanticObjectProperty".into(), "ID".into()),
-                    ],
-                }],
-            ));
-        }
-        if let Some(imp) = &p.presentation.list_importance {
-            props.push(PV::EnumMember(
-                "![@UI.Importance]".into(),
-                format!("UI.ImportanceType/{imp}"),
-            ));
-        }
-        if let Some(crit) = &p.presentation.criticality_path {
-            props.push(PV::Path("Criticality".into(), crit.clone()));
-        }
-        records.push(Rec {
-            record_type: Some(record_type.into()),
-            props,
-        });
-    }
-    anns.push(Ann {
-        term: "UI.LineItem".into(),
-        qualifier: None,
-        content: AnnContent::Collection(records),
-    });
+    let fields: Vec<DataFieldVariant> = line_item_props
+        .iter()
+        .map(|p| build_data_field(p, e))
+        .collect();
+    anns.push(LineItem { fields }.to_ann());
 
     // ── HeaderInfo ──
-    let mut header_props = vec![
-        PV::Str("TypeName".into(), e.type_name.clone()),
-        PV::Str("TypeNamePlural".into(), e.type_name_plural.clone()),
-        PV::Record(
-            "Title".into(),
-            Rec {
-                record_type: Some("UI.DataField".into()),
-                props: vec![PV::Path("Value".into(), e.title_field.clone())],
+    anns.push(
+        HeaderInfo {
+            type_name: e.type_name.clone(),
+            type_name_plural: e.type_name_plural.clone(),
+            title: DataFieldVariant::DataField {
+                value: e.title_field.clone(),
+                criticality: None,
+                importance: None,
             },
-        ),
-    ];
-    if let Some(desc) = &e.description_field {
-        header_props.push(PV::Record(
-            "Description".into(),
-            Rec {
-                record_type: Some("UI.DataField".into()),
-                props: vec![PV::Path("Value".into(), desc.clone())],
-            },
-        ));
-    }
-    anns.push(Ann {
-        term: "UI.HeaderInfo".into(),
-        qualifier: None,
-        content: AnnContent::Record(Rec {
-            record_type: Some("UI.HeaderInfoType".into()),
-            props: header_props,
-        }),
-    });
+            description: e.description_field.as_ref().map(|d| {
+                DataFieldVariant::DataField {
+                    value: d.clone(),
+                    criticality: None,
+                    importance: None,
+                }
+            }),
+        }
+        .to_ann(),
+    );
 
     // ── HeaderFacets ──
-    let hf_records: Vec<Rec> = e
-        .header_facets
-        .iter()
-        .map(|hf| Rec {
-            record_type: Some("UI.ReferenceFacet".into()),
-            props: vec![
-                PV::AnnotationPath(
-                    "Target".into(),
-                    format!("@UI.DataPoint#{}", hf.data_point_qualifier),
-                ),
-                PV::Str("Label".into(), hf.label.clone()),
-            ],
-        })
-        .collect();
-    anns.push(Ann {
-        term: "UI.HeaderFacets".into(),
-        qualifier: None,
-        content: AnnContent::Collection(hf_records),
-    });
+    anns.push(
+        HeaderFacets(
+            e.header_facets
+                .iter()
+                .map(|hf| FacetVariant::ReferenceFacet {
+                    id: hf.data_point_qualifier.clone(),
+                    label: hf.label.clone(),
+                    target: format!("@UI.DataPoint#{}", hf.data_point_qualifier),
+                })
+                .collect(),
+        )
+        .to_ann(),
+    );
 
     // ── DataPoints ──
     for dp in &e.data_points {
-        let mut props = vec![
-            PV::Path("Value".into(), dp.value_path.clone()),
-            PV::Str("Title".into(), dp.title.clone()),
-        ];
-        if let Some(max) = dp.max_value {
-            props.push(PV::Int("MaximumValue".into(), max));
-        }
-        if let Some(vis) = &dp.visualization {
-            props.push(PV::EnumMember(
-                "Visualization".into(),
-                format!("UI.VisualizationType/{vis}"),
-            ));
-        }
-        anns.push(Ann {
-            term: "UI.DataPoint".into(),
-            qualifier: Some(dp.qualifier.clone()),
-            content: AnnContent::Record(Rec {
-                record_type: Some("UI.DataPointType".into()),
-                props,
-            }),
-        });
+        anns.push(
+            DataPoint {
+                qualifier: dp.qualifier.clone(),
+                value: dp.value_path.clone(),
+                title: dp.title.clone(),
+                max_value: dp.max_value,
+                visualization: dp
+                    .visualization
+                    .as_deref()
+                    .and_then(VisualizationType::from_str),
+                criticality: None,
+            }
+            .to_ann(),
+        );
     }
 
     // ── Facets ──
-    let mut facet_records = Vec::new();
+    let mut facet_variants: Vec<FacetVariant> = Vec::new();
     for sec in &e.facet_sections {
-        facet_records.push(Rec {
-            record_type: Some("UI.CollectionFacet".into()),
-            props: vec![
-                PV::Str("Label".into(), sec.label.clone()),
-                PV::Str("ID".into(), sec.id.clone()),
-                PV::Collection(
-                    "Facets".into(),
-                    vec![Rec {
-                        record_type: Some("UI.ReferenceFacet".into()),
-                        props: vec![
-                            PV::AnnotationPath(
-                                "Target".into(),
-                                format!("@UI.FieldGroup#{}", sec.field_group_qualifier),
-                            ),
-                            PV::Str("Label".into(), sec.field_group_label.clone()),
-                        ],
-                    }],
-                ),
-            ],
+        facet_variants.push(FacetVariant::CollectionFacet {
+            id: sec.id.clone(),
+            label: sec.label.clone(),
+            facets: vec![FacetVariant::ReferenceFacet {
+                id: format!("{}Ref", sec.field_group_qualifier),
+                label: sec.field_group_label.clone(),
+                target: format!("@UI.FieldGroup#{}", sec.field_group_qualifier),
+            }],
         });
     }
     for tf in &e.table_facets {
-        facet_records.push(Rec {
-            record_type: Some("UI.ReferenceFacet".into()),
-            props: vec![
-                PV::Str("Label".into(), tf.label.clone()),
-                PV::Str("ID".into(), tf.id.clone()),
-                PV::AnnotationPath(
-                    "Target".into(),
-                    format!("{}/@UI.LineItem", tf.navigation_property),
-                ),
-            ],
+        facet_variants.push(FacetVariant::ReferenceFacet {
+            id: tf.id.clone(),
+            label: tf.label.clone(),
+            target: format!("{}/@UI.LineItem", tf.navigation_property),
         });
     }
-    anns.push(Ann {
-        term: "UI.Facets".into(),
-        qualifier: None,
-        content: AnnContent::Collection(facet_records),
-    });
+    anns.push(Facets(facet_variants).to_ann());
 
     // ── FieldGroups ──
     let mut seen_qualifiers: Vec<String> = Vec::new();
@@ -218,44 +135,16 @@ pub fn generate_ui_annotations(e: &ResolvedEntity) -> Vec<Anns> {
         }
     }
     for qualifier in &seen_qualifiers {
-        let mut fg_records = Vec::new();
-        for p in &e.properties {
-            if p.presentation.form_group.as_deref() == Some(qualifier) {
-                let semantic_object = resolve_semantic_object(p, e);
-                let record_type = if semantic_object.is_some() {
-                    "UI.DataFieldWithIntentBasedNavigation"
-                } else {
-                    "UI.DataField"
-                };
-                let mut props = vec![PV::Path("Value".into(), p.name.clone())];
-                if let Some(so) = &semantic_object {
-                    props.push(PV::Str("SemanticObject".into(), so.clone()));
-                    props.push(PV::Str("Action".into(), "display".into()));
-                    props.push(PV::Collection(
-                        "Mapping".into(),
-                        vec![Rec {
-                            record_type: Some("Common.SemanticObjectMappingType".into()),
-                            props: vec![
-                                PV::PropPath("LocalProperty".into(), p.name.clone()),
-                                PV::Str("SemanticObjectProperty".into(), "ID".into()),
-                            ],
-                        }],
-                    ));
-                }
-                fg_records.push(Rec {
-                    record_type: Some(record_type.into()),
-                    props,
-                });
-            }
-        }
-        anns.push(Ann {
-            term: "UI.FieldGroup".into(),
-            qualifier: Some(qualifier.clone()),
-            content: AnnContent::Record(Rec {
-                record_type: Some("UI.FieldGroupType".into()),
-                props: vec![PV::Collection("Data".into(), fg_records)],
-            }),
-        });
+        let data: Vec<DataFieldVariant> = e
+            .properties
+            .iter()
+            .filter(|p| p.presentation.form_group.as_deref() == Some(qualifier))
+            .map(|p| build_data_field(p, e))
+            .collect();
+        anns.push(FieldGroup {
+            qualifier: qualifier.clone(),
+            data,
+        }.to_ann());
     }
 
     blocks.push(Anns {
@@ -266,26 +155,16 @@ pub fn generate_ui_annotations(e: &ResolvedEntity) -> Vec<Anns> {
     // ── Property-level SemanticObject + SemanticObjectMapping ──
     for p in &e.properties {
         if let Some(so) = resolve_semantic_object(p, e) {
+            let sa = SemanticObjectAnnotation {
+                semantic_object: so,
+                mapping: vec![SemanticObjectMapping {
+                    local_property: p.name.clone(),
+                    semantic_object_property: "ID".into(),
+                }],
+            };
             blocks.push(Anns {
                 target: format!("{NAMESPACE}.{}/{}", e.type_name, p.name),
-                annotations: vec![
-                    Ann {
-                        term: "Common.SemanticObject".into(),
-                        qualifier: None,
-                        content: AnnContent::Str(so),
-                    },
-                    Ann {
-                        term: "Common.SemanticObjectMapping".into(),
-                        qualifier: None,
-                        content: AnnContent::Collection(vec![Rec {
-                            record_type: None,
-                            props: vec![
-                                PV::PropPath("LocalProperty".into(), p.name.clone()),
-                                PV::Str("SemanticObjectProperty".into(), "ID".into()),
-                            ],
-                        }]),
-                    },
-                ],
+                annotations: sa.to_anns(),
             });
         }
     }
@@ -308,14 +187,7 @@ pub fn generate_capability_annotations(e: &ResolvedEntity) -> Vec<Anns> {
     let mut set_anns = Vec::new();
 
     // UpdateRestrictions
-    set_anns.push(Ann {
-        term: "Org.OData.Capabilities.V1.UpdateRestrictions".into(),
-        qualifier: None,
-        content: AnnContent::Record(Rec {
-            record_type: None,
-            props: vec![PV::Bool("Updatable".into(), true)],
-        }),
-    });
+    set_anns.push(UpdateRestrictions { updatable: true }.to_ann());
 
     // InsertRestrictions — non-insertable = computed fields + draft flags
     let mut non_insertable: Vec<String> = e
@@ -329,50 +201,30 @@ pub fn generate_capability_annotations(e: &ResolvedEntity) -> Vec<Anns> {
             .iter()
             .map(|s| (*s).into()),
     );
-    set_anns.push(Ann {
-        term: "Org.OData.Capabilities.V1.InsertRestrictions".into(),
-        qualifier: None,
-        content: AnnContent::Record(Rec {
-            record_type: Some("Capabilities.InsertRestrictionsType".into()),
-            props: vec![PV::PropertyPaths(
-                "NonInsertableProperties".into(),
-                non_insertable,
-            )],
-        }),
-    });
+    set_anns.push(
+        InsertRestrictions {
+            non_insertable_properties: non_insertable,
+        }
+        .to_ann(),
+    );
 
     // DraftRoot or DraftNode
     if is_draft_root {
-        set_anns.push(Ann {
-            term: "Common.DraftRoot".into(),
-            qualifier: None,
-            content: AnnContent::Record(Rec {
-                record_type: Some("Common.DraftRootType".into()),
-                props: vec![
-                    PV::Str(
-                        "ActivationAction".into(),
-                        format!("{NAMESPACE}.draftActivate"),
-                    ),
-                    PV::Str("EditAction".into(), format!("{NAMESPACE}.draftEdit")),
-                    PV::Str(
-                        "PreparationAction".into(),
-                        format!("{NAMESPACE}.draftPrepare"),
-                    ),
-                ],
-            }),
-        });
+        set_anns.push(
+            DraftRoot {
+                activation_action: format!("{NAMESPACE}.draftActivate"),
+                edit_action: format!("{NAMESPACE}.draftEdit"),
+                preparation_action: format!("{NAMESPACE}.draftPrepare"),
+            }
+            .to_ann(),
+        );
     } else {
-        set_anns.push(Ann {
-            term: "Common.DraftNode".into(),
-            qualifier: None,
-            content: AnnContent::Record(Rec {
-                record_type: Some("Common.DraftNodeType".into()),
-                props: vec![PV::Str(
-                    "PreparationAction".into(),
-                    format!("{NAMESPACE}.draftPrepare"),
-                )],
-            }),
-        });
+        set_anns.push(
+            DraftNode {
+                preparation_action: format!("{NAMESPACE}.draftPrepare"),
+            }
+            .to_ann(),
+        );
     }
 
     blocks.push(Anns {
@@ -382,62 +234,54 @@ pub fn generate_capability_annotations(e: &ResolvedEntity) -> Vec<Anns> {
 
     // ── Per-property annotations ──
     for p in &e.properties {
-        let mut prop_anns = vec![Ann {
-            term: "Common.Label".into(),
-            qualifier: None,
-            content: AnnContent::Str(p.label.clone()),
-        }];
+        let mut prop_anns = vec![ScalarAnnotation::label(&p.label).to_ann()];
 
         // UI.Hidden
         if p.hidden {
-            prop_anns.push(Ann {
-                term: "UI.Hidden".into(),
-                qualifier: None,
-                content: AnnContent::Bool(true),
-            });
+            prop_anns.push(ScalarAnnotation::hidden().to_ann());
         }
 
         // Core.Computed / Core.Immutable
         if p.computed {
-            prop_anns.push(Ann {
-                term: "Org.OData.Core.V1.Computed".into(),
-                qualifier: None,
-                content: AnnContent::Bool(true),
-            });
+            prop_anns.push(ScalarAnnotation::computed().to_ann());
         } else if p.immutable {
-            prop_anns.push(Ann {
-                term: "Org.OData.Core.V1.Immutable".into(),
-                qualifier: None,
-                content: AnnContent::Bool(true),
-            });
+            prop_anns.push(ScalarAnnotation::immutable().to_ann());
         }
 
         // Common.Text on key field
         if p.name == e.key_field && e.title_field != e.key_field {
-            prop_anns.push(text_arrangement_ann(&e.title_field));
+            prop_anns.push(
+                TextAnnotation {
+                    path: e.title_field.clone(),
+                    arrangement: TextArrangementType::TextOnly,
+                }
+                .to_ann(),
+            );
         }
 
         // Common.Text from text_path
         if let Some(tp) = &p.text_path {
-            prop_anns.push(text_arrangement_ann(tp));
+            prop_anns.push(
+                TextAnnotation {
+                    path: tp.clone(),
+                    arrangement: TextArrangementType::TextOnly,
+                }
+                .to_ann(),
+            );
         }
 
         // Measures
         if let Some(m) = &p.measure {
-            let term = match m.kind {
-                MeasureKind::Currency => "Org.OData.Measures.V1.ISOCurrency",
-                MeasureKind::Unit => "Org.OData.Measures.V1.Unit",
+            let ma = match m.kind {
+                MeasureKind::Currency => MeasureAnnotation::ISOCurrency(m.unit_field.clone()),
+                MeasureKind::Unit => MeasureAnnotation::Unit(m.unit_field.clone()),
             };
-            prop_anns.push(Ann {
-                term: term.into(),
-                qualifier: None,
-                content: AnnContent::PathWithChildren(m.unit_field.clone(), vec![]),
-            });
+            prop_anns.push(ma.to_ann());
         }
 
         // Common.ValueList
         if let Some(vl) = &p.value_list {
-            prop_anns.extend(build_value_list_anns(&p.name, vl));
+            prop_anns.extend(resolved_value_list_to_vocab(vl).to_anns(&p.name));
         }
 
         blocks.push(Anns {
@@ -450,11 +294,7 @@ pub fn generate_capability_annotations(e: &ResolvedEntity) -> Vec<Anns> {
     for draft_prop in ["IsActiveEntity", "HasActiveEntity", "HasDraftEntity"] {
         blocks.push(Anns {
             target: format!("{NAMESPACE}.{}/{draft_prop}", e.type_name),
-            annotations: vec![Ann {
-                term: "Org.OData.Core.V1.Computed".into(),
-                qualifier: None,
-                content: AnnContent::Bool(true),
-            }],
+            annotations: vec![ScalarAnnotation::computed().to_ann()],
         });
     }
 
@@ -463,125 +303,77 @@ pub fn generate_capability_annotations(e: &ResolvedEntity) -> Vec<Anns> {
 
 // ── Helpers ────────────────────────────────────────────────────
 
-/// Build Common.Text + UI.TextArrangement/TextOnly annotation.
-fn text_arrangement_ann(path: &str) -> Ann {
-    Ann {
-        term: "Common.Text".into(),
-        qualifier: None,
-        content: AnnContent::PathWithChildren(
-            path.into(),
-            vec![Ann {
-                term: "UI.TextArrangement".into(),
-                qualifier: None,
-                content: AnnContent::EnumMember("UI.TextArrangementType/TextOnly".into()),
+/// Build a `DataFieldVariant` from a resolved property.
+///
+/// If the property has an EntityRef value list → DataFieldWithIntentBasedNavigation,
+/// otherwise → DataField (with optional criticality + importance).
+fn build_data_field(p: &ResolvedProperty, e: &ResolvedEntity) -> DataFieldVariant {
+    let semantic_object = resolve_semantic_object(p, e);
+    if let Some(so) = semantic_object {
+        DataFieldVariant::DataFieldWithIntentBasedNavigation {
+            value: p.name.clone(),
+            semantic_object: so,
+            action: "display".into(),
+            mapping: vec![SemanticObjectMapping {
+                local_property: p.name.clone(),
+                semantic_object_property: "ID".into(),
             }],
-        ),
+            importance: p
+                .presentation
+                .list_importance
+                .as_deref()
+                .and_then(ImportanceType::from_str),
+        }
+    } else {
+        DataFieldVariant::DataField {
+            value: p.name.clone(),
+            criticality: p
+                .presentation
+                .criticality_path
+                .as_ref()
+                .map(|c| CriticalitySource::Path(c.clone())),
+            importance: p
+                .presentation
+                .list_importance
+                .as_deref()
+                .and_then(ImportanceType::from_str),
+        }
     }
 }
 
-/// Build Common.ValueList (+ optional Common.ValueListWithFixedValues) annotations.
-fn build_value_list_anns(local_property: &str, vl: &ResolvedValueList) -> Vec<Ann> {
+/// Convert a `ResolvedValueList` (model layer) to a `ValueListAnnotation` (vocab layer).
+fn resolved_value_list_to_vocab(vl: &ResolvedValueList) -> ValueListAnnotation {
     match vl {
         ResolvedValueList::CodeList {
             list_id,
             fixed_values,
-        } => {
-            let params = vec![
-                Rec {
-                    record_type: Some("Common.ValueListParameterOut".into()),
-                    props: vec![
-                        PV::PropPath("LocalDataProperty".into(), local_property.into()),
-                        PV::Str("ValueListProperty".into(), "Code".into()),
-                    ],
-                },
-                Rec {
-                    record_type: Some("Common.ValueListParameterDisplayOnly".into()),
-                    props: vec![PV::Str("ValueListProperty".into(), "Description".into())],
-                },
-                Rec {
-                    record_type: Some("Common.ValueListParameterConstant".into()),
-                    props: vec![
-                        PV::Str("ValueListProperty".into(), "ListID".into()),
-                        PV::Str("Constant".into(), list_id.clone()),
-                    ],
-                },
-            ];
-            let mut anns = vec![Ann {
-                term: "Common.ValueList".into(),
-                qualifier: None,
-                content: AnnContent::Record(Rec {
-                    record_type: Some("Common.ValueListType".into()),
-                    props: vec![
-                        PV::Str("CollectionPath".into(), "FieldValueListItems".into()),
-                        PV::Collection("Parameters".into(), params),
-                    ],
-                }),
-            }];
-            if *fixed_values {
-                anns.push(Ann {
-                    term: "Common.ValueListWithFixedValues".into(),
-                    qualifier: None,
-                    content: AnnContent::Bool(true),
-                });
-            }
-            anns
-        }
+        } => ValueListAnnotation::CodeList {
+            list_id: list_id.clone(),
+            fixed_values: *fixed_values,
+        },
         ResolvedValueList::EntityRef {
             collection_path,
             key_property,
             display_property,
             filters,
             fixed_values,
-        } => {
-            let mut params = vec![Rec {
-                record_type: Some("Common.ValueListParameterOut".into()),
-                props: vec![
-                    PV::PropPath("LocalDataProperty".into(), local_property.into()),
-                    PV::Str("ValueListProperty".into(), key_property.clone()),
-                ],
-            }];
-            if let Some(dp) = display_property {
-                params.push(Rec {
-                    record_type: Some("Common.ValueListParameterDisplayOnly".into()),
-                    props: vec![PV::Str("ValueListProperty".into(), dp.clone())],
-                });
-            }
-            for f in filters {
-                params.push(Rec {
-                    record_type: Some("Common.ValueListParameterIn".into()),
-                    props: vec![
-                        PV::PropPath("LocalDataProperty".into(), f.local_property.clone()),
-                        PV::Str("ValueListProperty".into(), f.target_property.clone()),
-                    ],
-                });
-            }
-            let mut anns = vec![Ann {
-                term: "Common.ValueList".into(),
-                qualifier: None,
-                content: AnnContent::Record(Rec {
-                    record_type: Some("Common.ValueListType".into()),
-                    props: vec![
-                        PV::Str("CollectionPath".into(), collection_path.clone()),
-                        PV::Collection("Parameters".into(), params),
-                    ],
-                }),
-            }];
-            if *fixed_values {
-                anns.push(Ann {
-                    term: "Common.ValueListWithFixedValues".into(),
-                    qualifier: None,
-                    content: AnnContent::Bool(true),
-                });
-            }
-            anns
-        }
+        } => ValueListAnnotation::EntityRef {
+            collection_path: collection_path.clone(),
+            key_property: key_property.clone(),
+            display_property: display_property.clone(),
+            filters: filters
+                .iter()
+                .map(|f| crate::odata::vocab::ValueListFilter {
+                    local_property: f.local_property.clone(),
+                    target_property: f.target_property.clone(),
+                })
+                .collect(),
+            fixed_values: *fixed_values,
+        },
     }
 }
 
 /// Determine the semantic object for a property (FK referencing another entity).
-///
-/// If the property has an EntityRef value list, the collection_path is the semantic object.
-/// This enables Intent-Based Navigation in LineItem and FieldGroup.
 fn resolve_semantic_object(p: &ResolvedProperty, _e: &ResolvedEntity) -> Option<String> {
     match &p.value_list {
         Some(ResolvedValueList::EntityRef {
@@ -594,7 +386,6 @@ fn resolve_semantic_object(p: &ResolvedProperty, _e: &ResolvedEntity) -> Option<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spec::ValueListFilter;
 
     fn sample_entity() -> ResolvedEntity {
         ResolvedEntity {
@@ -746,6 +537,8 @@ mod tests {
             table_facets: vec![],
             selection_fields: vec!["OrderName".into()],
             package: None,
+            extra_annotations_xml: String::new(),
+            custom_actions_xml: String::new(),
         }
     }
 
@@ -905,18 +698,18 @@ mod tests {
 
     #[test]
     fn test_value_list_with_filters() {
-        // Test ValueListParameterIn generation
-        let vl = ResolvedValueList::EntityRef {
+        // Test ValueListParameterIn generation via vocab type
+        let vl = ValueListAnnotation::EntityRef {
             collection_path: "EntityFields".into(),
             key_property: "ID".into(),
             display_property: Some("FieldName".into()),
-            filters: vec![ValueListFilter {
+            filters: vec![crate::odata::vocab::ValueListFilter {
                 local_property: "ID".into(),
                 target_property: "ConfigID".into(),
             }],
             fixed_values: false,
         };
-        let anns = build_value_list_anns("TitlePath", &vl);
+        let anns = vl.to_anns("TitlePath");
         let xml = anns_to_xml(&[Anns {
             target: "test".into(),
             annotations: anns,

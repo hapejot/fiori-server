@@ -129,6 +129,26 @@ pub fn generate_draft_actions(e: &ResolvedEntity) -> String {
     x
 }
 
+/// Generate the DraftAdministrativeData EntityType XML (static, emitted once).
+pub fn generate_draft_admin_type() -> String {
+    let mut x = String::from("<EntityType Name=\"DraftAdministrativeData\">");
+    x.push_str("<Key><PropertyRef Name=\"DraftUUID\"/></Key>");
+    x.push_str("<Property Name=\"DraftUUID\"              Type=\"Edm.Guid\" Nullable=\"false\"/>");
+    x.push_str(
+        "<Property Name=\"CreationDateTime\"       Type=\"Edm.DateTimeOffset\" Precision=\"7\"/>",
+    );
+    x.push_str("<Property Name=\"CreatedByUser\"          Type=\"Edm.String\" MaxLength=\"256\"/>");
+    x.push_str("<Property Name=\"DraftIsCreatedByMe\"     Type=\"Edm.Boolean\"/>");
+    x.push_str(
+        "<Property Name=\"LastChangeDateTime\"     Type=\"Edm.DateTimeOffset\" Precision=\"7\"/>",
+    );
+    x.push_str("<Property Name=\"LastChangedByUser\"      Type=\"Edm.String\" MaxLength=\"256\"/>");
+    x.push_str("<Property Name=\"InProcessByUser\"        Type=\"Edm.String\" MaxLength=\"256\"/>");
+    x.push_str("<Property Name=\"DraftIsProcessedByMe\"   Type=\"Edm.Boolean\"/>");
+    x.push_str("</EntityType>");
+    x
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,6 +213,8 @@ mod tests {
             table_facets: vec![],
             selection_fields: vec![],
             package: None,
+            extra_annotations_xml: String::new(),
+            custom_actions_xml: String::new(),
         }
     }
 

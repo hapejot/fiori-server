@@ -1,7 +1,7 @@
 use crate::entity::ODataEntity;
 use crate::BASE_PATH;
 
-/// Geparste Entity-Key-Informationen (Schluesselwert + IsActiveEntity).
+/// Parsed entity key information (key value + IsActiveEntity).
 #[derive(Debug)]
 pub struct EntityKeyInfo {
     pub key_value: String,
@@ -9,7 +9,7 @@ pub struct EntityKeyInfo {
 }
 
 #[derive(Debug)]
-/// Aufgeloester OData-Pfad – alle Varianten, die der Server unterstuetzt.
+/// Resolved OData path – all variants supported by the server.
 pub enum ODataPath<'a> {
     /// Service-Root: /odata/v4/Service
     ServiceRoot,
@@ -40,21 +40,21 @@ pub enum ODataPath<'a> {
         key: EntityKeyInfo,
         property: String,
     },
-    /// Nicht erkannter Pfad
+    /// Unrecognized path
     Unknown,
 }
 
 #[derive(Debug)]
-/// Ergebnis von resolve_odata_path: aufgeloester Pfad + abgetrennter Query-String.
+/// Result of resolve_odata_path: resolved path + separated query string.
 pub struct ParsedODataUrl<'a> {
     pub path: ODataPath<'a>,
     pub query_string: String,
 }
 
-/// Loest eine rohe URL (relativ oder absolut, mit oder ohne Query-String)
-/// in einen strukturierten ODataPath auf.
+/// Resolves a raw URL (relative or absolute, with or without query string)
+/// into a structured ODataPath.
 ///
-/// Beispiele:
+/// Examples:
 ///   - `Products`                           → Collection
 ///   - `Products/$count`                    → Count
 ///   - `Products('P001')`                   → Entity
@@ -65,18 +65,18 @@ pub fn resolve_odata_path<'a>(
     raw_url: &str,
     entities: &'a [&dyn ODataEntity],
 ) -> ParsedODataUrl<'a> {
-    // URL-Dekodierung (z.B. %27 → ')
+    // URL decoding (e.g. %27 → ')
     let decoded_url = urlencoding::decode(raw_url).unwrap_or_default();
     let raw_url = decoded_url.as_ref();
 
-    // Relativ → absolut normalisieren
+    // Normalize relative → absolute
     let full = if raw_url.starts_with('/') {
         raw_url.to_string()
     } else {
         format!("{}/{}", BASE_PATH, raw_url)
     };
 
-    // Query-String abtrennen
+    // Separate query string
     let (path_part, query_part) = full.split_once('?').unwrap_or((&full, ""));
     let path = path_part.trim_end_matches('/');
 
@@ -108,15 +108,15 @@ pub fn resolve_odata_path<'a>(
             };
         }
 
-        // Entity oder Action:  /SetPath(key...) oder /SetPath(key...)/Ns.action
+        // Entity or action:  /SetPath(key...) or /SetPath(key...)/Ns.action
         let set_prefix = format!("{}(", set_path);
         if let Some(rest) = path.strip_prefix(&set_prefix) {
-            // Action or SubCollection: suche ")/" als Trenner
+            // Action or SubCollection: search for ")/" as separator
             if let Some(paren_end) = rest.find(")/") {
                 let key_str = &rest[..paren_end];
                 let after_paren = &rest[paren_end + 2..];
                 if let Some(key) = parse_key_content(key_str, entity.key_field()) {
-                    // Erst pruefen ob after_paren mit einem NavigationProperty beginnt
+                    // First check if after_paren starts with a NavigationProperty
                     let first_segment = after_paren
                         .split(|c: char| c == '(' || c == '/')
                         .next()
@@ -124,10 +124,10 @@ pub fn resolve_odata_path<'a>(
                     let nav_props = entity.navigation_properties();
                     if let Some(nav_def) = nav_props.iter().find(|np| np.name == first_segment) {
                         if let Some(child) = entities.iter().find(|e| e.type_name() == nav_def.target_type) {
-                            // Kind-Entity mit Key: Items(ItemID='I002',IsActiveEntity=true)
+                            // Child entity with key: Items(ItemID='I002',IsActiveEntity=true)
                             if let Some(child_key_start) = after_paren.find('(') {
                                 let child_rest = &after_paren[child_key_start + 1..];
-                                // Kind-Entity mit Action: Items(key)/Ns.action
+                                // Child entity with action: Items(key)/Ns.action
                                 if let Some(cp_end) = child_rest.find(")/") {
                                     let child_key_str = &child_rest[..cp_end];
                                     let child_after = &child_rest[cp_end + 2..];
@@ -145,7 +145,7 @@ pub fn resolve_odata_path<'a>(
                                         }
                                     }
                                 }
-                                // Kind-Entity ohne Action: Items(key)
+                                // Child entity without action: Items(key)
                                 if let Some(child_key_str) = child_rest.strip_suffix(')') {
                                     if let Some(child_key) = parse_key_content(child_key_str, child.key_field()) {
                                         return ParsedODataUrl {
@@ -158,7 +158,7 @@ pub fn resolve_odata_path<'a>(
                                     }
                                 }
                             }
-                            // Einfache Sub-Collection ohne Kind-Key: Items
+                            // Simple sub-collection without child key: Items
                             return ParsedODataUrl {
                                 path: ODataPath::SubCollection {
                                     parent_entity: *entity,
@@ -169,7 +169,7 @@ pub fn resolve_odata_path<'a>(
                             };
                         }
                     }
-                    // Bound Action am Parent: Ns.actionName (enthaelt '.')
+                    // Bound action on parent: Ns.actionName (contains '.')
                     if after_paren.contains('.') {
                         let action = after_paren
                             .rsplit('.')
@@ -197,7 +197,7 @@ pub fn resolve_odata_path<'a>(
                 }
             }
 
-            // Single Entity: abschliessendes ')' abschneiden
+            // Single entity: strip trailing ')'
             if let Some(key_str) = rest.strip_suffix(')') {
                 if let Some(key) = parse_key_content(key_str, entity.key_field()) {
                     return ParsedODataUrl {
@@ -218,9 +218,9 @@ pub fn resolve_odata_path<'a>(
     }
 }
 
-/// Parst den Inhalt ZWISCHEN den Klammern eines OData-Keys.
+/// Parses the content BETWEEN the parentheses of an OData key.
 ///
-/// Akzeptiert:
+/// Accepts:
 ///   - `'P001'`                                 → simple key
 ///   - `ProductID='P001',IsActiveEntity=true`   → composite key
 fn parse_key_content(key_str: &str, key_field: &str) -> Option<EntityKeyInfo> {

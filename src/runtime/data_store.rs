@@ -1,3 +1,20 @@
+// ── ParentKey ───────────────────────────────────────────────────────
+
+/// Parent context for sub-collection / deep navigation.
+#[derive(Debug, Clone)]
+pub struct ParentKey {
+    pub set_name: String,
+    pub key: EntityKey,
+}
+
+impl ParentKey {
+    pub fn new(set_name: &str, key: EntityKey) -> Self {
+        Self {
+            set_name: set_name.to_string(),
+            key,
+        }
+    }
+}
 use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -97,6 +114,40 @@ pub struct EntityKey {
 }
 
 impl EntityKey {
+    /// Parse from OData URL key segment: "OrderID='O001',IsActiveEntity=true"
+    /// Also handles simple keys: "'P001'"
+    pub fn parse(segment: &str) -> Self {
+        let segment = segment.trim();
+        if segment.starts_with('\'') && segment.ends_with('\'') {
+            let value = segment[1..segment.len() - 1].to_string();
+            return Self {
+                pairs: vec![("_key".to_string(), value)],
+            };
+        }
+        let mut pairs = Vec::new();
+        for part in segment.split(',') {
+            let part = part.trim();
+            if let Some((k, v)) = part.split_once('=') {
+                let k = k.trim().to_string();
+                let v = v.trim().trim_matches('\'').to_string();
+                pairs.push((k, v));
+            }
+        }
+        Self { pairs }
+    }
+
+    /// All key-value pairs.
+    pub fn pairs(&self) -> &[(String, String)] {
+        &self.pairs
+    }
+
+    /// Single key: Products('P001')
+    pub fn single(field: &str, value: &str) -> Self {
+        Self {
+            pairs: vec![(field.to_string(), value.to_string())],
+        }
+    }
+
     /// Composite key from slice: &[("OrderID", "O001"), ("IsActiveEntity", "true")]
     pub fn composite(pairs: &[(&str, &str)]) -> Self {
         Self {
@@ -126,61 +177,6 @@ impl EntityKey {
         self.get("IsActiveEntity")
             .map(|v| v.eq_ignore_ascii_case("true"))
             .unwrap_or(true)
-    }
-}
-
-#[cfg(test)]
-impl EntityKey {
-    /// Single key: Products('P001')
-    pub fn single(field: &str, value: &str) -> Self {
-        Self {
-            pairs: vec![(field.to_string(), value.to_string())],
-        }
-    }
-
-    /// Parse from OData URL key segment: "OrderID='O001',IsActiveEntity=true"
-    /// Also handles simple keys: "'P001'"
-    pub fn parse(segment: &str) -> Self {
-        let segment = segment.trim();
-        if segment.starts_with('\'') && segment.ends_with('\'') {
-            let value = segment[1..segment.len() - 1].to_string();
-            return Self {
-                pairs: vec![("_key".to_string(), value)],
-            };
-        }
-        let mut pairs = Vec::new();
-        for part in segment.split(',') {
-            let part = part.trim();
-            if let Some((k, v)) = part.split_once('=') {
-                let k = k.trim().to_string();
-                let v = v.trim().trim_matches('\'').to_string();
-                pairs.push((k, v));
-            }
-        }
-        Self { pairs }
-    }
-
-    /// All key-value pairs.
-    pub fn pairs(&self) -> &[(String, String)] {
-        &self.pairs
-    }
-}
-
-// ── ParentKey ───────────────────────────────────────────────────────
-
-/// Parent context for sub-collection / deep navigation.
-#[derive(Debug, Clone)]
-pub struct ParentKey {
-    pub set_name: String,
-    pub key: EntityKey,
-}
-
-impl ParentKey {
-    pub fn new(set_name: &str, key: EntityKey) -> Self {
-        Self {
-            set_name: set_name.to_string(),
-            key,
-        }
     }
 }
 
@@ -597,6 +593,20 @@ impl InMemoryDataStore {
         inject_draft_flags(&mut result, false, has_active, false);
         result
     }
+
+    pub fn record_count(&self, arg: &str) -> usize {
+        self.store
+            .read()
+            .unwrap()
+            .get(arg)
+            .map(|v| v.len())
+            .unwrap_or(0)
+    }
+    
+    pub fn entities(&self) -> Vec<&'static dyn ODataEntity> {
+        self.entities.try_read().unwrap().clone()
+    }
+    
 }
 
 impl DataStore for InMemoryDataStore {
@@ -1635,4 +1645,3 @@ fn load_entity_data(set_name: &str, data_dir: &Path, entity: &dyn ODataEntity) -
     }
     entity.mock_data()
 }
-

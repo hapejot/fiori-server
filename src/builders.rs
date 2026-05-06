@@ -1,82 +1,50 @@
 use serde_json::{json, Value};
 use tracing::info;
 
-use crate::annotations::{build_draft_actions_xml, build_draft_admin_type_xml};
 use crate::entity::ODataEntity;
 use crate::model::ResolvedEntity;
 use crate::odata::{annotations_gen, entity_type, xml_types};
 use crate::settings::Settings;
-use crate::spec::app::App;
 use crate::{BASE_PATH, NAMESPACE};
 
-/// Baut das komplette EDMX-Dokument aus allen registrierten Entitaeten.
-///
-/// For entities that have a matching ResolvedEntity, uses the new 3-layer pipeline
-/// (generate_entity_type, generate_entity_set, generate_annotations).
-/// Falls back to the old ODataEntity trait methods for entities without specs.
-pub fn build_metadata_xml(
-    entities: &[&dyn ODataEntity],
-    resolved: &[ResolvedEntity],
-) -> String {
-    let entity_types: String = entities
+/// Builds the complete EDMX document from all resolved entities.
+pub fn build_metadata_xml(resolved: &[ResolvedEntity]) -> String {
+    let entity_types: String = resolved
         .iter()
-        .map(|e| {
-            if let Some(r) = resolved.iter().find(|r| r.set_name == e.set_name()) {
-                entity_type::generate_entity_type(r)
-            } else {
-                e.entity_type()
-            }
-        })
+        .map(|r| entity_type::generate_entity_type(r))
         .collect::<Vec<_>>()
         .join("\n");
-    let entity_sets: String = entities
+
+    let entity_sets: String = resolved
         .iter()
-        .map(|e| {
-            if let Some(r) = resolved.iter().find(|r| r.set_name == e.set_name()) {
-                entity_type::generate_entity_set(r)
-            } else {
-                e.entity_set()
-            }
-        })
+        .map(|r| entity_type::generate_entity_set(r))
         .collect::<Vec<_>>()
         .join("\n");
-    let annotations: String = entities
+
+    let annotations: String = resolved
         .iter()
-        .map(|e| {
-            if let Some(r) = resolved.iter().find(|r| r.set_name == e.set_name()) {
-                let ann_blocks = annotations_gen::generate_annotations(r);
-                let mut xml = xml_types::anns_to_xml(&ann_blocks);
-                // Append entity-specific extra annotations (e.g. UI.Identification)
-                let extra = e.extra_annotations_xml();
-                if !extra.is_empty() {
-                    xml.push_str(&extra);
-                }
-                xml
-            } else {
-                e.annotations()
+        .map(|r| {
+            let ann_blocks = annotations_gen::generate_annotations(r);
+            let mut xml = xml_types::anns_to_xml(&ann_blocks);
+            if !r.extra_annotations_xml.is_empty() {
+                xml.push_str(&r.extra_annotations_xml);
             }
+            xml
         })
         .filter(|a| !a.is_empty())
         .collect::<Vec<_>>()
         .join("\n");
 
-    // DraftAdministrativeData EntityType
-    let draft_admin_type = build_draft_admin_type_xml();
+    let draft_admin_type = entity_type::generate_draft_admin_type();
 
-    // Bound draft actions fuer jede Entitaet
-    let draft_actions: String = entities
+    let draft_actions: String = resolved
         .iter()
-        .map(|e| {
-            let actions = if let Some(r) = resolved.iter().find(|r| r.set_name == e.set_name()) {
-                entity_type::generate_draft_actions(r)
-            } else {
-                build_draft_actions_xml(e.type_name())
-            };
-            let custom = e.custom_actions_xml();
-            if custom.is_empty() {
+        .map(|r| {
+            let actions = entity_type::generate_draft_actions(r);
+            if r.custom_actions_xml.is_empty() {
                 actions
             } else {
-                format!("{actions}{custom}")
+                format!("{actions}{}", r.custom_actions_xml)
             }
         })
         .collect::<Vec<_>>()
@@ -124,14 +92,14 @@ pub fn build_metadata_xml(
     )
 }
 
-/// Baut das komplette manifest.json dynamisch aus allen registrierten Entitaeten.
-/// `default_entity_idx` bestimmt, welche Entitaet die Default-Route (leerer Hash) bekommt.
+/// Builds the complete manifest.json dynamically from all registered entities.
+/// `default_entity_idx` determines which entity gets the default route (empty hash).
 pub fn build_manifest_json(entities: &[&dyn ODataEntity], settings: &Settings) -> Value {
     info!("build manifest");
     build_manifest_json_with_default(entities, settings, 0)
 }
 
-/// Wie `build_manifest_json`, aber mit waehlbarer Default-Entitaet.
+/// Like `build_manifest_json`, but with a selectable default entity.
 pub fn build_manifest_json_with_default(
     entities: &[&dyn ODataEntity],
     settings: &Settings,
@@ -164,7 +132,7 @@ pub fn build_manifest_json_with_default(
         inbounds.insert(inbound_key, inbound_val);
     }
 
-    // Entitaet-spezifische App-ID: z.B. "products.app", "orders.app"
+    // Entity-specific App-ID: e.g. "products.app", "orders.app"
     let default_entity = entities[default_entity_idx];
     let app_id = format!("{}.app", default_entity.set_name().to_lowercase());
     let app_title = default_entity.tile_title();
@@ -172,9 +140,9 @@ pub fn build_manifest_json_with_default(
     build_manifest_value(&app_id, &app_title, routes, targets, inbounds, settings)
 }
 
-/// Baut ein manifest.json fuer eine einzelne Entitaet (CDM-Modus).
-/// Nur Routen/Targets/Inbounds der Entitaet und ihrer Kompositions-Kinder
-/// werden aufgenommen — so erkennt die UShell Cross-App-Navigation korrekt.
+/// Builds a manifest.json for a single entity (CDM mode).
+/// Only routes/targets/inbounds of the entity and its composition children
+/// are included — so the UShell recognizes cross-app navigation correctly.
 pub fn build_entity_manifest(
     entities: &[&dyn ODataEntity],
     settings: &Settings,
@@ -302,42 +270,40 @@ fn build_manifest_value(
     })
 }
 
-/// Baut das CDM 3.1 Site-Dokument aus allen registrierten Entitaeten.
-/// Wird von der UShell im CDM-Modus ueber /cdm/site.json geladen.
-pub fn build_cdm_site_json(entities: &[&dyn ODataEntity]) -> Value {
+/// Builds the CDM 3.1 site document from all resolved entities.
+/// Loaded by the UShell in CDM mode via /cdm/site.json.
+///
+/// Each entity without a parent (i.e. a root entity, not a composition child)
+/// gets an application, visualization, and tile on the home page.
+pub fn build_cdm_site_json(resolved: &[ResolvedEntity]) -> Value {
     info!("build CDM site.json");
     let mut applications = serde_json::Map::new();
     let mut visualizations = serde_json::Map::new();
     let mut viz_refs = serde_json::Map::new();
     let mut viz_order = Vec::new();
 
-    let apps: Vec<App> = vec![]; // TODO: get app-specific info from entities, e.g. semantic object, action, title, icon
+    // Only root entities get tiles — child entities (with parent_set_name)
+    // are accessed through their parent's ObjectPage.
+    for entity in resolved.iter().filter(|e| e.parent_set_name.is_none()) {
+        let set_name = &entity.set_name;
+        let title = &entity.type_name_plural;
+        let semantic_object = set_name;
+        let action = "display";
 
-    for entity in apps {
-        let entry = entity.apps_json_entry();
-
-        let set_name = entity.set_name();
-        let title = entry.get("title").and_then(|v| v.as_str()).unwrap_or(set_name);
-        let description = entry.get("description").and_then(|v| v.as_str()).unwrap_or("");
-        let icon = entry.get("icon").and_then(|v| v.as_str()).unwrap_or("sap-icon://sys-help");
-        let semantic_object = entry.get("semanticObject").and_then(|v| v.as_str()).unwrap_or(set_name);
-        let action = entry.get("action").and_then(|v| v.as_str()).unwrap_or("display");
-
-        let app_key = format!("{}-{}", semantic_object, action);
         let app_id = format!("{}.app", set_name.to_lowercase());
-        let viz_key = format!("{}-viz", app_key);
+        let inbound_key = format!("{}-{}", semantic_object, action);
+        let viz_key = format!("{}-viz", inbound_key);
 
         // Application entry (CDM format)
         // The CDM applications map key MUST equal sap.app.id — CSTR resolves
         // appId from sap.app.id, and the sap-ui-app-id-hint on the navigation
         // hash must match this key for readApplications.getInboundTarget() to
         // find the application.
-         let inbound_val = serde_json::json!({
+        let inbound_val = serde_json::json!({
             "semanticObject": set_name,
-            "action": "display",
+            "action": action,
             "signature": { "parameters": {}, "additionalParameters": "allowed" }
         });
-        let inbound_key = format!("{}-{}", semantic_object, action);
         let mut inbounds = serde_json::Map::new();
         inbounds.insert(inbound_key.clone(), inbound_val);
 
@@ -345,7 +311,7 @@ pub fn build_cdm_site_json(entities: &[&dyn ODataEntity]) -> Value {
             "sap.app": {
                 "id": app_id,
                 "title": title,
-                "subTitle": description,
+                "subTitle": "",
                 "crossNavigation": {
                     "inbounds": inbounds
                 }
@@ -388,8 +354,8 @@ pub fn build_cdm_site_json(entities: &[&dyn ODataEntity]) -> Value {
                 },
                 "sap.app": {
                     "title": title,
-                    "subTitle": description,
-                    "icon": icon,
+                    "subTitle": "",
+                    "icon": "sap-icon://sys-help",
                     "info": ""
                 }
             }
@@ -470,9 +436,9 @@ pub fn build_cdm_site_json(entities: &[&dyn ODataEntity]) -> Value {
     })
 }
 
-/// Baut die flp.html dynamisch aus den Settings (UI5-Version, Theme, Sprache etc.).
-/// Verwendet den CDM-Modus der UShell — Anwendungen werden ueber das
-/// CDM Site-Dokument (/cdm/site.json) geladen statt ueber apps.json.
+/// Builds the flp.html dynamically from the settings (UI5 version, theme, language, etc.).
+/// Uses the CDM mode of the UShell — applications are loaded via the
+/// CDM site document (/cdm/site.json) instead of apps.json.
 pub fn build_flp_html(settings: &Settings) -> String {
     info!("build FLP HTML");
     let libs = settings.libs.join(", ");

@@ -38,7 +38,7 @@ pub fn webapp_dir() -> PathBuf {
 
 #[tokio::main]
 async fn main() {
-    // Logger initialisieren (RUST_LOG=info fuer Standard, =debug fuer mehr)
+    // Initialize logger (RUST_LOG=info for standard, =debug for more)
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
@@ -72,15 +72,15 @@ async fn main() {
         port, BASE_PATH
     );
     println!(
-        "  manifest     : http://localhost:{}/manifest.json (dynamisch)",
+        "  manifest     : http://localhost:{}/manifest.json (dynamic)",
         port
     );
     println!("{}", "=".repeat(60));
 
     let data_dir = std::env::current_dir().unwrap_or_default().join("data");
 
-    // Meta-Tabellen im Data-Verzeichnis sind die einzige Quelle der Wahrheit.
-    // EntityConfigs rekonstruieren und daraus generische Entitaeten erzeugen.
+    // Meta tables in the data directory are the single source of truth.
+    // Reconstruct EntityConfigs and create generic entities from them.
     let raw_configs = entities::meta::reconstruct_configs_from_data(&data_dir);
 
     let (generic_entities, generic_relationships) =
@@ -140,13 +140,13 @@ async fn main() {
         println!("  Storage      : In-Memory");
     }
     println!("{}", "=".repeat(60));
-    println!("  Druecke Ctrl+C zum Beenden\n");
+    println!("  Press Ctrl+C to stop\n");
 
     let app_state = Arc::new(builder.build());
 
     let base = BASE_PATH;
 
-    // Routen fuer jedes registrierte EntitySet dynamisch erzeugen
+    // Dynamically create routes for each registered EntitySet
     let mut entity_routes = Router::new();
 
     for entity in app_state.entities.read().unwrap().iter() {

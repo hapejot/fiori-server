@@ -144,6 +144,8 @@ fn base_from_spec(spec: &EntitySpec) -> ResolvedEntity {
         table_facets,
         selection_fields: vec![],
         package: spec.package.clone(),
+        extra_annotations_xml: String::new(),
+        custom_actions_xml: String::new(),
     }
 }
 
@@ -193,6 +195,8 @@ fn auto_entity(set_name: &str) -> ResolvedEntity {
         table_facets: vec![],
         selection_fields: vec![],
         package: None,
+        extra_annotations_xml: String::new(),
+        custom_actions_xml: String::new(),
     }
 }
 

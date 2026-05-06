@@ -1,17 +1,5 @@
-use fake_fiori_server::runtime::data_store::*;
-use serde_json::json;
-
-impl InMemoryDataStore {
-    fn record_count(&self, set_name: &str) -> usize {
-        self.store
-            .read()
-            .unwrap()
-            .get(set_name)
-            .map(|v| v.len())
-            .unwrap_or(0)
-    }
-}
-
+use fake_fiori_server::{entities::EntityFacetEntity, entity::ODataEntity, runtime::data_store::*, spec::{FieldDef, NavigationPropertyDef}};
+use serde_json::{json, Value};
 
 // ── EntityKey tests ─────────────────────────────────────────────
 
@@ -207,7 +195,6 @@ fn store_error_display() {
 }
 
 // ── InMemoryDataStore tests ─────────────────────────────────────
-
 
 /// Minimal test entity for unit tests.
 #[derive(Debug)]
@@ -1595,7 +1582,7 @@ fn vl_full_lifecycle_create_list_add_items_activate() {
 #[test]
 fn retrieve_facettes_without_duplicates() {
     let store = create_test_store();
-    for x in store.entities.try_read().unwrap().iter() {
+    for x in store.entities() {
         println!("Entity: {}", x.set_name());
     }
 

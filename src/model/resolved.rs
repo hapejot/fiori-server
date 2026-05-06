@@ -171,4 +171,8 @@ pub struct ResolvedEntity {
     pub selection_fields: Vec<String>,
     /// Package this entity belongs to.
     pub package: Option<String>,
+    /// Extra annotation XML appended after generated annotations (e.g. UI.Identification).
+    pub extra_annotations_xml: String,
+    /// Custom bound OData action XML (e.g. publishConfig).
+    pub custom_actions_xml: String,
 }

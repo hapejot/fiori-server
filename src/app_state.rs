@@ -15,26 +15,26 @@ use crate::settings::Settings;
 use crate::spec::synth_records::generate_synth_records;
 use crate::spec::Relationship;
 
-/// Gesamtzustand der Applikation – haelt vorberechnete Artefakte
-/// (Metadata-XML, manifest.json, FLP-HTML) und die Entity-Registry.
-/// Felder, die sich zur Laufzeit aendern koennen (z.B. nach activate_config),
-/// sind hinter RwLock geschuetzt.
+/// Application-wide state – holds precomputed artifacts
+/// (metadata XML, manifest.json, FLP HTML) and the entity registry.
+/// Fields that can change at runtime (e.g. after activate_config)
+/// are protected behind RwLock.
 pub struct AppState {
     pub entities: RwLock<Vec<&'static dyn ODataEntity>>,
     pub metadata_xml: RwLock<String>,
     pub manifest_json: RwLock<String>,
-    /// Per-Entity manifest.json: EntitySet-Name -> JSON-String.
+    /// Per-entity manifest.json: EntitySet name -> JSON string.
     pub entity_manifests: RwLock<HashMap<String, String>>,
     pub flp_html: String,
-    /// Dynamisch generierte apps.json (statische + generische Entitaeten zusammengefuehrt).
+    /// Dynamically generated apps.json (static + generic entities merged).
     pub apps_json: RwLock<String>,
-    /// CDM 3.1 Site-Dokument fuer den CDM-Modus der UShell.
+    /// CDM 3.1 site document for the UShell CDM mode.
     pub cdm_site_json: RwLock<String>,
     /// Mutable Data-Store (abstracted behind DataStore trait)
     pub data_store: Box<dyn DataStore>,
     /// Settings (UI5-Version, Theme etc.)
     pub settings: Settings,
-    /// Datenverzeichnis fuer Persistenz und Rekonstruktion
+    /// Data directory for persistence and reconstruction
     pub data_dir: PathBuf,
     /// Layer 2: Resolved entities from the spec→model pipeline.
     pub resolved_entities: RwLock<Vec<ResolvedEntity>>,
@@ -47,12 +47,12 @@ impl AppState {
         AppStateBuilder::new()
     }
 
-    /// Aktiviert eine Entity-Konfiguration zur Laufzeit:
-    /// 1. commit() – aktuelle Daten persistieren
-    /// 2. Meta-Tabellen aus data/ neu einlesen und GenericEntities neu erzeugen
-    /// 3. Builtin-Entities beibehalten, generische ersetzen
-    /// 4. metadata_xml, manifest_json, entity_manifests, apps_json neu aufbauen
-    /// 5. DataStore-Entities aktualisieren
+    /// Activates an entity configuration at runtime:
+    /// 1. commit() – persist current data
+    /// 2. Re-read meta tables from data/ and recreate GenericEntities
+    /// 3. Keep built-in entities, replace generic ones
+    /// 4. Rebuild metadata_xml, manifest_json, entity_manifests, apps_json
+    /// 5. Update DataStore entities
     pub fn activate_config(&self) {
         info!("  [activate_config] Rebuilding generic entities from meta tables...");
 
@@ -94,7 +94,7 @@ impl AppState {
         }
 
         // 5. Rebuild all derived artifacts
-        let metadata_xml = builders::build_metadata_xml(&new_entities, &resolved_entities);
+        let metadata_xml = builders::build_metadata_xml(&resolved_entities);
         let manifest_json = serde_json::to_string_pretty(&builders::build_manifest_json(
             &new_entities,
             &self.settings,
@@ -113,11 +113,11 @@ impl AppState {
         let apps_json = build_apps_json(&new_entities);
 
         info!(
-            "setting CDM site.json with {} new entities",
-            new_entities.len()
+            "setting CDM site.json with {} resolved entities",
+            resolved_entities.len()
         );
         let cdm_site_json =
-            serde_json::to_string_pretty(&builders::build_cdm_site_json(&new_entities))
+            serde_json::to_string_pretty(&builders::build_cdm_site_json(&resolved_entities))
                 .unwrap_or_default();
 
         // 6. Update DataStore entity list
@@ -136,8 +136,8 @@ impl AppState {
     }
 }
 
-/// Prueft, ob eine Entity eine generische (aus EntityConfig) ist.
-/// Built-in Entities haben bekannte SetNames.
+/// Checks whether an entity is a generic one (from EntityConfig).
+/// Built-in entities have known SetNames.
 fn is_generic_entity(entity: &&'static dyn ODataEntity) -> bool {
     const BUILTIN_SETS: &[&str] = &[
         "EntityConfigs",
@@ -151,7 +151,7 @@ fn is_generic_entity(entity: &&'static dyn ODataEntity) -> bool {
     !BUILTIN_SETS.contains(&entity.set_name())
 }
 
-/// Baut die apps.json aus statischer Datei und Entity-Apps-Eintraegen zusammen.
+/// Builds the apps.json from static file and entity app entries.
 fn build_apps_json(entities: &[&'static dyn ODataEntity]) -> String {
     let webapp_dir = std::env::current_dir().unwrap_or_default().join("webapp");
     let static_path = webapp_dir.join("config/apps.json");
@@ -179,7 +179,7 @@ fn build_apps_json(entities: &[&'static dyn ODataEntity]) -> String {
     serde_json::to_string_pretty(&wrapper).unwrap_or_default()
 }
 
-/// Builder fuer schrittweise Konfiguration des AppState.
+/// Builder for step-by-step configuration of the AppState.
 pub struct AppStateBuilder {
     pub(crate) entities: Vec<&'static dyn ODataEntity>,
     relationships: Vec<Relationship>,
@@ -263,13 +263,13 @@ impl AppStateBuilder {
         }
         info!("Building AppState with {} entities", entities.len());
 
-        let metadata_xml = builders::build_metadata_xml(&entities, &resolved_entities);
+        let metadata_xml = builders::build_metadata_xml(&resolved_entities);
         let manifest_json =
             serde_json::to_string_pretty(&builders::build_manifest_json(&entities, &settings))
                 .unwrap_or_default();
 
-        // Per-Entity Manifeste: jede Entitaet bekommt ein Manifest,
-        // bei dem sie die Default-Route ist.
+        // Per-entity manifests: each entity gets a manifest
+        // where it is the default route.
         let mut entity_manifests = HashMap::new();
         for (idx, entity) in entities.iter().enumerate() {
             let manifest_val = builders::build_entity_manifest(&entities, &settings, idx);
@@ -283,12 +283,12 @@ impl AppStateBuilder {
 
         let apps_json = build_apps_json(&entities);
 
-        info!("setting CDM site.json with {} entities", entities.len());
+        info!("setting CDM site.json with {} resolved entities", resolved_entities.len());
 
-        let cdm_site_json = serde_json::to_string_pretty(&builders::build_cdm_site_json(&entities))
+        let cdm_site_json = serde_json::to_string_pretty(&builders::build_cdm_site_json(&resolved_entities))
             .unwrap_or_default();
 
-        // Data-Verzeichnis
+        // Data directory
         let data_dir = self
             .data_dir
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().join("data"));

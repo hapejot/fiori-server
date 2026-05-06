@@ -178,8 +178,8 @@ pub fn match_filter(record: &Value, expr: &str) -> bool {
     true
 }
 
-/// Parst $expand-Werte und extrahiert Nav-Property-Namen,
-/// ignoriert geklammerte Sub-Optionen wie ($select=DraftUUID,InProcessByUser).
+/// Parses $expand values and extracts nav property names,
+/// ignoring parenthesized sub-options like ($select=DraftUUID,InProcessByUser).
 pub fn parse_expand_names(expand: &str) -> Vec<String> {
     let mut names = Vec::new();
     let mut depth = 0;
@@ -212,7 +212,7 @@ pub fn parse_expand_names(expand: &str) -> Vec<String> {
     names
 }
 
-/// Fuehrt eine OData-Abfrage auf bereits geladenen Daten aus.
+/// Executes an OData query on already loaded data.
 pub fn query_collection_from(entity: &dyn ODataEntity, data: &[Value], qs: &HashMap<String, String>, entities: &[&dyn ODataEntity], data_store: &HashMap<String, Vec<Value>>) -> Value {
     let mut results: Vec<Value> = data.to_vec();
 

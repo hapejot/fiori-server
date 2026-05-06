@@ -15,7 +15,7 @@ pub mod pg_store {
 }
 pub const BASE_PATH: &str = "/odata/v4/Service";
 pub const NAMESPACE: &str = "Service";
-// ── Eincompilierte statische Webapp-Dateien ─────────────────────────────
+// ── Embedded static webapp files ────────────────────────────────────────
 pub const EMBEDDED_FLP_INIT_JS: &str = include_str!("../webapp/flp-init.js");
 pub const EMBEDDED_SETTINGS_JSON: &str = include_str!("../webapp/config/settings.json");
 pub const EMBEDDED_APPS_JSON: &str = include_str!("../webapp/config/apps.json");

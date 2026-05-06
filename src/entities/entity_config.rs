@@ -23,6 +23,64 @@ impl ODataEntity for EntityConfigEntity {
         Some(spec::meta_package::entity_configs())
     }
 
+    fn tweak_resolved(&self, resolved: &mut crate::model::ResolvedEntity) {
+        let ns = NAMESPACE;
+        let ty = &resolved.type_name;
+        let fqn = format!("{ns}.{ty}");
+
+        // publishConfig bound action
+        resolved.custom_actions_xml = format!(
+            "<Action Name=\"publishConfig\" IsBound=\"true\" EntitySetPath=\"in\">\
+             <Parameter Name=\"in\" Type=\"{fqn}\"/>\
+             <ReturnType Type=\"{fqn}\"/>\
+             </Action>"
+        );
+
+        // UI.Identification + ValueList annotations for HeaderTitlePath / HeaderDescriptionPath
+        let vl_ann = |prop: &str| {
+            format!(
+                "<Annotations Target=\"{ns}.{ty}/{prop}\">\
+                 <Annotation Term=\"Common.ValueList\">\
+                 <Record Type=\"Common.ValueListType\">\
+                 <PropertyValue Property=\"CollectionPath\" String=\"EntityFields\"/>\
+                 <PropertyValue Property=\"Parameters\">\
+                 <Collection>\
+                 <Record Type=\"Common.ValueListParameterOut\">\
+                 <PropertyValue Property=\"LocalDataProperty\" PropertyPath=\"{prop}\"/>\
+                 <PropertyValue Property=\"ValueListProperty\" String=\"ID\"/>\
+                 </Record>\
+                 <Record Type=\"Common.ValueListParameterDisplayOnly\">\
+                 <PropertyValue Property=\"ValueListProperty\" String=\"FieldName\"/>\
+                 </Record>\
+                 <Record Type=\"Common.ValueListParameterIn\">\
+                 <PropertyValue Property=\"LocalDataProperty\" PropertyPath=\"ID\"/>\
+                 <PropertyValue Property=\"ValueListProperty\" String=\"ConfigID\"/>\
+                 </Record>\
+                 </Collection>\
+                 </PropertyValue>\
+                 </Record>\
+                 </Annotation>\
+                 </Annotations>"
+            )
+        };
+        resolved.extra_annotations_xml = format!(
+            "<Annotations Target=\"{ns}.{ty}\">\
+             <Annotation Term=\"UI.Identification\">\
+             <Collection>\
+             <Record Type=\"UI.DataFieldForAction\">\
+             <PropertyValue Property=\"Action\" String=\"{ns}.publishConfig\"/>\
+             <PropertyValue Property=\"Label\" String=\"Publish Configuration\"/>\
+             </Record>\
+             </Collection>\
+             </Annotation>\
+             </Annotations>\
+             {}\
+             {}",
+            vl_ann("HeaderTitlePath"),
+            vl_ann("HeaderDescriptionPath"),
+        );
+    }
+
     fn fields_def(&self) -> Option<&'static [FieldDef]> {
         static FIELDS: &[FieldDef] = &[
             FieldDef {
@@ -624,70 +682,12 @@ impl ODataEntity for EntityConfigEntity {
         Some((
             "EntityConfigs-display".to_string(),
             json!({
-                "title": "Entity-Konfigurationen",
-                "description": "Generische Entitaeten verwalten",
+                "title": "Entity Configurations",
+                "description": "Manage generic entities",
                 "icon": "sap-icon://settings",
                 "semanticObject": "EntityConfigs",
                 "action": "display"
             }),
         ))
-    }
-
-    fn custom_actions_xml(&self) -> String {
-        let fqn = format!("{}.{}", NAMESPACE, self.type_name());
-        format!(
-            "<Action Name=\"publishConfig\" IsBound=\"true\" EntitySetPath=\"in\">\
-             <Parameter Name=\"in\" Type=\"{fqn}\"/>\
-             <ReturnType Type=\"{fqn}\"/>\
-             </Action>"
-        )
-    }
-
-    fn extra_annotations_xml(&self) -> String {
-        let ns = NAMESPACE;
-        let ty = self.type_name();
-        // ValueList annotation template for HeaderTitlePath / HeaderDescriptionPath
-        let vl_ann = |prop: &str| {
-            format!(
-                "<Annotations Target=\"{ns}.{ty}/{prop}\">\
-                 <Annotation Term=\"Common.ValueList\">\
-                 <Record Type=\"Common.ValueListType\">\
-                 <PropertyValue Property=\"CollectionPath\" String=\"EntityFields\"/>\
-                 <PropertyValue Property=\"Parameters\">\
-                 <Collection>\
-                 <Record Type=\"Common.ValueListParameterOut\">\
-                 <PropertyValue Property=\"LocalDataProperty\" PropertyPath=\"{prop}\"/>\
-                 <PropertyValue Property=\"ValueListProperty\" String=\"ID\"/>\
-                 </Record>\
-                 <Record Type=\"Common.ValueListParameterDisplayOnly\">\
-                 <PropertyValue Property=\"ValueListProperty\" String=\"FieldName\"/>\
-                 </Record>\
-                 <Record Type=\"Common.ValueListParameterIn\">\
-                 <PropertyValue Property=\"LocalDataProperty\" PropertyPath=\"ID\"/>\
-                 <PropertyValue Property=\"ValueListProperty\" String=\"ConfigID\"/>\
-                 </Record>\
-                 </Collection>\
-                 </PropertyValue>\
-                 </Record>\
-                 </Annotation>\
-                 </Annotations>"
-            )
-        };
-        format!(
-            "<Annotations Target=\"{ns}.{ty}\">\
-             <Annotation Term=\"UI.Identification\">\
-             <Collection>\
-             <Record Type=\"UI.DataFieldForAction\">\
-             <PropertyValue Property=\"Action\" String=\"{ns}.publishConfig\"/>\
-             <PropertyValue Property=\"Label\" String=\"Konfiguration publizieren\"/>\
-             </Record>\
-             </Collection>\
-             </Annotation>\
-             </Annotations>\
-             {}\
-             {}",
-            vl_ann("HeaderTitlePath"),
-            vl_ann("HeaderDescriptionPath"),
-        )
     }
 }

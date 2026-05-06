@@ -1,0 +1,1744 @@
+<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="4.0" xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx">
+  <edmx:Reference Uri="https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Capabilities.V1.xml">
+    <edmx:Include Alias="Capabilities" Namespace="Org.OData.Capabilities.V1"/>
+  </edmx:Reference>
+  <edmx:Reference Uri="https://sap.github.io/odata-vocabularies/vocabularies/Common.xml">
+    <edmx:Include Alias="Common" Namespace="com.sap.vocabularies.Common.v1"/>
+  </edmx:Reference>
+  <edmx:Reference Uri="https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Core.V1.xml">
+    <edmx:Include Alias="Core" Namespace="Org.OData.Core.V1"/>
+  </edmx:Reference>
+  <edmx:Reference Uri="https://sap.github.io/odata-vocabularies/vocabularies/HTML5.xml">
+    <edmx:Include Alias="HTML5" Namespace="com.sap.vocabularies.HTML5.v1"/>
+  </edmx:Reference>
+  <edmx:Reference Uri="https://sap.github.io/odata-vocabularies/vocabularies/UI.xml">
+    <edmx:Include Alias="UI" Namespace="com.sap.vocabularies.UI.v1"/>
+  </edmx:Reference>
+  <edmx:Reference Uri="https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Validation.V1.xml">
+    <edmx:Include Alias="Validation" Namespace="Org.OData.Validation.V1"/>
+  </edmx:Reference>
+  <edmx:DataServices>
+    <Schema Namespace="BuyerService" xmlns="http://docs.oasis-open.org/odata/ns/edm">
+      <Annotation Term="Core.Links">
+        <Collection>
+          <Record>
+            <PropertyValue Property="rel" String="author"/>
+            <PropertyValue Property="href" String="https://cap.cloud.sap"/>
+          </Record>
+        </Collection>
+      </Annotation>
+      <EntityContainer Name="EntityContainer">
+        <EntitySet Name="Requests" EntityType="BuyerService.Requests">
+          <NavigationPropertyBinding Path="items" Target="RequestItems"/>
+          <NavigationPropertyBinding Path="quotations" Target="Quotations"/>
+          <NavigationPropertyBinding Path="attachments" Target="Requests_attachments"/>
+          <NavigationPropertyBinding Path="SiblingEntity" Target="Requests"/>
+        </EntitySet>
+        <EntitySet Name="RequestItems" EntityType="BuyerService.RequestItems">
+          <NavigationPropertyBinding Path="request" Target="Requests"/>
+          <NavigationPropertyBinding Path="SiblingEntity" Target="RequestItems"/>
+        </EntitySet>
+        <EntitySet Name="Quotations" EntityType="BuyerService.Quotations">
+          <NavigationPropertyBinding Path="request" Target="Requests"/>
+          <NavigationPropertyBinding Path="status" Target="Status"/>
+          <NavigationPropertyBinding Path="items" Target="QuotationItems"/>
+          <NavigationPropertyBinding Path="attachments" Target="Quotations_attachments"/>
+          <NavigationPropertyBinding Path="SiblingEntity" Target="Quotations"/>
+        </EntitySet>
+        <EntitySet Name="QuotationItems" EntityType="BuyerService.QuotationItems">
+          <NavigationPropertyBinding Path="quotation" Target="Quotations"/>
+          <NavigationPropertyBinding Path="requestItem" Target="RequestItems"/>
+          <NavigationPropertyBinding Path="SiblingEntity" Target="QuotationItems"/>
+        </EntitySet>
+        <EntitySet Name="Status" EntityType="BuyerService.Status">
+          <NavigationPropertyBinding Path="texts" Target="Status_texts"/>
+          <NavigationPropertyBinding Path="localized" Target="Status_texts"/>
+        </EntitySet>
+        <EntitySet Name="ScanStates" EntityType="BuyerService.ScanStates">
+          <NavigationPropertyBinding Path="texts" Target="ScanStates_texts"/>
+          <NavigationPropertyBinding Path="localized" Target="ScanStates_texts"/>
+        </EntitySet>
+        <EntitySet Name="Requests_attachments" EntityType="BuyerService.Requests_attachments">
+          <NavigationPropertyBinding Path="up_" Target="Requests"/>
+          <NavigationPropertyBinding Path="statusNav" Target="ScanStates"/>
+          <NavigationPropertyBinding Path="SiblingEntity" Target="Requests_attachments"/>
+        </EntitySet>
+        <EntitySet Name="Quotations_attachments" EntityType="BuyerService.Quotations_attachments">
+          <NavigationPropertyBinding Path="up_" Target="Quotations"/>
+          <NavigationPropertyBinding Path="statusNav" Target="ScanStates"/>
+          <NavigationPropertyBinding Path="SiblingEntity" Target="Quotations_attachments"/>
+        </EntitySet>
+        <EntitySet Name="Status_texts" EntityType="BuyerService.Status_texts"/>
+        <EntitySet Name="ScanStates_texts" EntityType="BuyerService.ScanStates_texts"/>
+        <ActionImport Name="createAttachmentMetadata" Action="BuyerService.createAttachmentMetadata"/>
+      </EntityContainer>
+      <EntityType Name="Requests">
+        <Key>
+          <PropertyRef Name="ID"/>
+          <PropertyRef Name="IsActiveEntity"/>
+        </Key>
+        <Property Name="ID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="createdAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="createdBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="modifiedAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="modifiedBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="requestID" Type="Edm.String" MaxLength="20"/>
+        <Property Name="description" Type="Edm.String" MaxLength="255"/>
+        <Property Name="supplier" Type="Edm.String" MaxLength="100"/>
+        <Property Name="quotationDate" Type="Edm.Date"/>
+        <Property Name="quotationDeadline" Type="Edm.Date"/>
+        <Property Name="paymentTerms" Type="Edm.String" MaxLength="100"/>
+        <Property Name="incoterms1" Type="Edm.String" MaxLength="3"/>
+        <Property Name="incoterms2" Type="Edm.String" MaxLength="40"/>
+        <Property Name="invoiceAddress" Type="Edm.String" MaxLength="255"/>
+        <Property Name="headerText" Type="Edm.String"/>
+        <Property Name="notes" Type="Edm.String"/>
+        <NavigationProperty Name="items" Type="Collection(BuyerService.RequestItems)" Partner="request">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <NavigationProperty Name="quotations" Type="Collection(BuyerService.Quotations)" Partner="request"/>
+        <NavigationProperty Name="attachments" Type="Collection(BuyerService.Requests_attachments)" Partner="up_">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <Property Name="IsActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="true"/>
+        <Property Name="HasActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <Property Name="HasDraftEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <NavigationProperty Name="DraftAdministrativeData" Type="BuyerService.DraftAdministrativeData" ContainsTarget="true"/>
+        <NavigationProperty Name="SiblingEntity" Type="BuyerService.Requests"/>
+        <Property Name="DraftMessages" Type="Collection(BuyerService.DRAFT_DraftAdministrativeData_DraftMessage)" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="RequestItems">
+        <Key>
+          <PropertyRef Name="ID"/>
+          <PropertyRef Name="IsActiveEntity"/>
+        </Key>
+        <Property Name="ID" Type="Edm.Guid" Nullable="false"/>
+        <NavigationProperty Name="request" Type="BuyerService.Requests" Partner="items">
+          <ReferentialConstraint Property="request_ID" ReferencedProperty="ID"/>
+        </NavigationProperty>
+        <Property Name="request_ID" Type="Edm.Guid"/>
+        <Property Name="itemNumber" Type="Edm.String" MaxLength="10"/>
+        <Property Name="material" Type="Edm.String" MaxLength="18"/>
+        <Property Name="description" Type="Edm.String" MaxLength="255"/>
+        <Property Name="longText" Type="Edm.String"/>
+        <Property Name="quantity" Type="Edm.Decimal" Precision="15" Scale="3"/>
+        <Property Name="unit" Type="Edm.String" MaxLength="3"/>
+        <Property Name="deliveryAddress" Type="Edm.String" MaxLength="255"/>
+        <Property Name="requiredByDate" Type="Edm.Date"/>
+        <Property Name="remarks" Type="Edm.String" MaxLength="255"/>
+        <Property Name="IsActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="true"/>
+        <Property Name="HasActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <Property Name="HasDraftEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <NavigationProperty Name="DraftAdministrativeData" Type="BuyerService.DraftAdministrativeData" ContainsTarget="true"/>
+        <NavigationProperty Name="SiblingEntity" Type="BuyerService.RequestItems"/>
+        <Property Name="DraftMessages" Type="Collection(BuyerService.DRAFT_DraftAdministrativeData_DraftMessage)" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="Quotations">
+        <Key>
+          <PropertyRef Name="ID"/>
+          <PropertyRef Name="IsActiveEntity"/>
+        </Key>
+        <Property Name="ID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="createdAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="createdBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="modifiedAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="modifiedBy" Type="Edm.String" MaxLength="255"/>
+        <NavigationProperty Name="request" Type="BuyerService.Requests" Partner="quotations">
+          <ReferentialConstraint Property="request_ID" ReferencedProperty="ID"/>
+        </NavigationProperty>
+        <Property Name="request_ID" Type="Edm.Guid"/>
+        <Property Name="supplierQuotationId" Type="Edm.String" MaxLength="35"/>
+        <Property Name="validUntil" Type="Edm.Date"/>
+        <NavigationProperty Name="status" Type="BuyerService.Status">
+          <ReferentialConstraint Property="status_code" ReferencedProperty="code"/>
+        </NavigationProperty>
+        <Property Name="status_code" Type="Edm.String" DefaultValue="open"/>
+        <Property Name="totalValue" Type="Edm.Decimal" Precision="15" Scale="2"/>
+        <Property Name="currency" Type="Edm.String" MaxLength="3" DefaultValue="EUR"/>
+        <Property Name="vendorRemarks" Type="Edm.String"/>
+        <NavigationProperty Name="items" Type="Collection(BuyerService.QuotationItems)" Partner="quotation">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <NavigationProperty Name="attachments" Type="Collection(BuyerService.Quotations_attachments)" Partner="up_">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <Property Name="IsActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="true"/>
+        <Property Name="HasActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <Property Name="HasDraftEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <NavigationProperty Name="DraftAdministrativeData" Type="BuyerService.DraftAdministrativeData" ContainsTarget="true"/>
+        <NavigationProperty Name="SiblingEntity" Type="BuyerService.Quotations"/>
+        <Property Name="DraftMessages" Type="Collection(BuyerService.DRAFT_DraftAdministrativeData_DraftMessage)" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="QuotationItems">
+        <Key>
+          <PropertyRef Name="ID"/>
+          <PropertyRef Name="IsActiveEntity"/>
+        </Key>
+        <Property Name="ID" Type="Edm.Guid" Nullable="false"/>
+        <NavigationProperty Name="quotation" Type="BuyerService.Quotations" Partner="items">
+          <ReferentialConstraint Property="quotation_ID" ReferencedProperty="ID"/>
+        </NavigationProperty>
+        <Property Name="quotation_ID" Type="Edm.Guid"/>
+        <NavigationProperty Name="requestItem" Type="BuyerService.RequestItems">
+          <ReferentialConstraint Property="requestItem_ID" ReferencedProperty="ID"/>
+        </NavigationProperty>
+        <Property Name="requestItem_ID" Type="Edm.Guid"/>
+        <Property Name="supplierCatalogNumber" Type="Edm.String" MaxLength="40"/>
+        <Property Name="manufacturerPartNumber" Type="Edm.String" MaxLength="40"/>
+        <Property Name="deliveryDate" Type="Edm.Date"/>
+        <Property Name="netPrice" Type="Edm.Decimal" Precision="15" Scale="2"/>
+        <Property Name="priceUnit" Type="Edm.Int32" DefaultValue="1"/>
+        <Property Name="totalPrice" Type="Edm.Decimal" Precision="15" Scale="2"/>
+        <Property Name="currency" Type="Edm.String" MaxLength="3" DefaultValue="EUR"/>
+        <Property Name="remarks" Type="Edm.String" MaxLength="500"/>
+        <Property Name="finalQuantity" Type="Edm.Decimal" Precision="15" Scale="3"/>
+        <Property Name="formattedQuantity" Type="Edm.String" MaxLength="50"/>
+        <Property Name="IsActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="true"/>
+        <Property Name="HasActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <Property Name="HasDraftEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <NavigationProperty Name="DraftAdministrativeData" Type="BuyerService.DraftAdministrativeData" ContainsTarget="true"/>
+        <NavigationProperty Name="SiblingEntity" Type="BuyerService.QuotationItems"/>
+        <Property Name="DraftMessages" Type="Collection(BuyerService.DRAFT_DraftAdministrativeData_DraftMessage)" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="Status">
+        <Key>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="name" Type="Edm.String" MaxLength="255"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" Nullable="false"/>
+        <NavigationProperty Name="texts" Type="Collection(BuyerService.Status_texts)">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <NavigationProperty Name="localized" Type="BuyerService.Status_texts">
+          <ReferentialConstraint Property="code" ReferencedProperty="code"/>
+        </NavigationProperty>
+      </EntityType>
+      <EntityType Name="ScanStates">
+        <Key>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="name" Type="Edm.String" MaxLength="64"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" MaxLength="32" Nullable="false"/>
+        <Property Name="criticality" Type="Edm.Int32"/>
+        <NavigationProperty Name="texts" Type="Collection(BuyerService.ScanStates_texts)">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <NavigationProperty Name="localized" Type="BuyerService.ScanStates_texts">
+          <ReferentialConstraint Property="code" ReferencedProperty="code"/>
+        </NavigationProperty>
+      </EntityType>
+      <EntityType Name="DraftAdministrativeData">
+        <Key>
+          <PropertyRef Name="DraftUUID"/>
+        </Key>
+        <Property Name="DraftUUID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="CreationDateTime" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="CreatedByUser" Type="Edm.String" MaxLength="256"/>
+        <Property Name="DraftIsCreatedByMe" Type="Edm.Boolean"/>
+        <Property Name="LastChangeDateTime" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="LastChangedByUser" Type="Edm.String" MaxLength="256"/>
+        <Property Name="InProcessByUser" Type="Edm.String" MaxLength="256"/>
+        <Property Name="DraftIsProcessedByMe" Type="Edm.Boolean"/>
+      </EntityType>
+      <EntityType Name="Requests_attachments">
+        <Key>
+          <PropertyRef Name="up__ID"/>
+          <PropertyRef Name="ID"/>
+          <PropertyRef Name="IsActiveEntity"/>
+        </Key>
+        <NavigationProperty Name="up_" Type="BuyerService.Requests" Nullable="false" Partner="attachments">
+          <ReferentialConstraint Property="up__ID" ReferencedProperty="ID"/>
+        </NavigationProperty>
+        <Property Name="up__ID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="ID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="createdAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="createdBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="modifiedAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="modifiedBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="url" Type="Edm.String"/>
+        <Property Name="content" Type="Edm.Stream"/>
+        <Property Name="mimeType" Type="Edm.String" DefaultValue="application/octet-stream"/>
+        <Property Name="filename" Type="Edm.String"/>
+        <Property Name="hash" Type="Edm.String"/>
+        <Property Name="status" Type="Edm.String" DefaultValue="Unscanned"/>
+        <NavigationProperty Name="statusNav" Type="BuyerService.ScanStates">
+          <ReferentialConstraint Property="status" ReferencedProperty="code"/>
+        </NavigationProperty>
+        <Property Name="lastScan" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="note" Type="Edm.String"/>
+        <Property Name="IsActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="true"/>
+        <Property Name="HasActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <Property Name="HasDraftEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <NavigationProperty Name="DraftAdministrativeData" Type="BuyerService.DraftAdministrativeData" ContainsTarget="true"/>
+        <NavigationProperty Name="SiblingEntity" Type="BuyerService.Requests_attachments"/>
+        <Property Name="DraftMessages" Type="Collection(BuyerService.DRAFT_DraftAdministrativeData_DraftMessage)" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="Quotations_attachments">
+        <Key>
+          <PropertyRef Name="up__ID"/>
+          <PropertyRef Name="ID"/>
+          <PropertyRef Name="IsActiveEntity"/>
+        </Key>
+        <NavigationProperty Name="up_" Type="BuyerService.Quotations" Nullable="false" Partner="attachments">
+          <ReferentialConstraint Property="up__ID" ReferencedProperty="ID"/>
+        </NavigationProperty>
+        <Property Name="up__ID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="ID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="createdAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="createdBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="modifiedAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="modifiedBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="url" Type="Edm.String"/>
+        <Property Name="content" Type="Edm.Stream"/>
+        <Property Name="mimeType" Type="Edm.String" DefaultValue="application/octet-stream"/>
+        <Property Name="filename" Type="Edm.String"/>
+        <Property Name="hash" Type="Edm.String"/>
+        <Property Name="status" Type="Edm.String" DefaultValue="Unscanned"/>
+        <NavigationProperty Name="statusNav" Type="BuyerService.ScanStates">
+          <ReferentialConstraint Property="status" ReferencedProperty="code"/>
+        </NavigationProperty>
+        <Property Name="lastScan" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="note" Type="Edm.String"/>
+        <Property Name="IsActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="true"/>
+        <Property Name="HasActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <Property Name="HasDraftEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <NavigationProperty Name="DraftAdministrativeData" Type="BuyerService.DraftAdministrativeData" ContainsTarget="true"/>
+        <NavigationProperty Name="SiblingEntity" Type="BuyerService.Quotations_attachments"/>
+        <Property Name="DraftMessages" Type="Collection(BuyerService.DRAFT_DraftAdministrativeData_DraftMessage)" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="Status_texts">
+        <Key>
+          <PropertyRef Name="locale"/>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="locale" Type="Edm.String" MaxLength="14" Nullable="false"/>
+        <Property Name="name" Type="Edm.String" MaxLength="255"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" Nullable="false"/>
+      </EntityType>
+      <EntityType Name="ScanStates_texts">
+        <Key>
+          <PropertyRef Name="locale"/>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="locale" Type="Edm.String" MaxLength="14" Nullable="false"/>
+        <Property Name="name" Type="Edm.String" MaxLength="64"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" MaxLength="32" Nullable="false"/>
+      </EntityType>
+      <ComplexType Name="DRAFT_DraftAdministrativeData_DraftMessage">
+        <Property Name="code" Type="Edm.String"/>
+        <Property Name="message" Type="Edm.String"/>
+        <Property Name="target" Type="Edm.String"/>
+        <Property Name="additionalTargets" Type="Collection(Edm.String)" Nullable="true"/>
+        <Property Name="transition" Type="Edm.Boolean"/>
+        <Property Name="numericSeverity" Type="Edm.Byte"/>
+        <Property Name="longtextUrl" Type="Edm.String"/>
+      </ComplexType>
+      <Action Name="draftPrepare" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="BuyerService.Requests"/>
+        <Parameter Name="SideEffectsQualifier" Type="Edm.String"/>
+        <ReturnType Type="BuyerService.Requests"/>
+      </Action>
+      <Action Name="draftPrepare" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="BuyerService.RequestItems"/>
+        <Parameter Name="SideEffectsQualifier" Type="Edm.String"/>
+        <ReturnType Type="BuyerService.RequestItems"/>
+      </Action>
+      <Action Name="draftPrepare" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="BuyerService.Quotations"/>
+        <Parameter Name="SideEffectsQualifier" Type="Edm.String"/>
+        <ReturnType Type="BuyerService.Quotations"/>
+      </Action>
+      <Action Name="draftPrepare" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="BuyerService.QuotationItems"/>
+        <Parameter Name="SideEffectsQualifier" Type="Edm.String"/>
+        <ReturnType Type="BuyerService.QuotationItems"/>
+      </Action>
+      <Action Name="draftPrepare" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="BuyerService.Requests_attachments"/>
+        <Parameter Name="SideEffectsQualifier" Type="Edm.String"/>
+        <ReturnType Type="BuyerService.Requests_attachments"/>
+      </Action>
+      <Action Name="draftPrepare" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="BuyerService.Quotations_attachments"/>
+        <Parameter Name="SideEffectsQualifier" Type="Edm.String"/>
+        <ReturnType Type="BuyerService.Quotations_attachments"/>
+      </Action>
+      <Action Name="draftActivate" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="BuyerService.Requests"/>
+        <ReturnType Type="BuyerService.Requests"/>
+      </Action>
+      <Action Name="draftActivate" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="BuyerService.Quotations"/>
+        <ReturnType Type="BuyerService.Quotations"/>
+      </Action>
+      <Action Name="draftEdit" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="BuyerService.Requests"/>
+        <Parameter Name="PreserveChanges" Type="Edm.Boolean"/>
+        <ReturnType Type="BuyerService.Requests"/>
+      </Action>
+      <Action Name="draftEdit" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="BuyerService.Quotations"/>
+        <Parameter Name="PreserveChanges" Type="Edm.Boolean"/>
+        <ReturnType Type="BuyerService.Quotations"/>
+      </Action>
+      <Action Name="createAttachmentMetadata" IsBound="false">
+        <Parameter Name="requestID" Type="Edm.Guid"/>
+        <Parameter Name="filename" Type="Edm.String"/>
+        <Parameter Name="mimeType" Type="Edm.String"/>
+        <ReturnType Type="Edm.Guid"/>
+      </Action>
+      <Annotations Target="BuyerService.EntityContainer">
+        <Annotation Term="Common.AddressViaNavigationPath" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests">
+        <Annotation Term="UI.HeaderInfo">
+          <Record Type="UI.HeaderInfoType">
+            <PropertyValue Property="TypeName" String="Request for Quotation"/>
+            <PropertyValue Property="TypeNamePlural" String="Request for Quotations"/>
+            <PropertyValue Property="Title">
+              <Record Type="UI.DataField">
+                <PropertyValue Property="Value" Path="requestID"/>
+              </Record>
+            </PropertyValue>
+            <PropertyValue Property="Description">
+              <Record Type="UI.DataField">
+                <PropertyValue Property="Value" Path="description"/>
+              </Record>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="UI.LineItem">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="requestID"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="description"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="quotationDeadline"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="quotationDate"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="items/description"/>
+            </Record>
+          </Collection>
+        </Annotation>
+        <Annotation Term="UI.FieldGroup" Qualifier="General">
+          <Record Type="UI.FieldGroupType">
+            <PropertyValue Property="Data">
+              <Collection>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="requestID"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="description"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="quotationDate"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="quotationDeadline"/>
+                </Record>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="UI.FieldGroup" Qualifier="Terms">
+          <Record Type="UI.FieldGroupType">
+            <PropertyValue Property="Data">
+              <Collection>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="paymentTerms"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="incoterms1"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="incoterms2"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="invoiceAddress"/>
+                </Record>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="UI.FieldGroup" Qualifier="Notes">
+          <Record Type="UI.FieldGroupType">
+            <PropertyValue Property="Data">
+              <Collection>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="notes"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="headerText"/>
+                </Record>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="UI.Facets">
+          <Collection>
+            <Record Type="UI.ReferenceFacet">
+              <PropertyValue Property="ID" String="GeneralFacet"/>
+              <PropertyValue Property="Label" String="General Information"/>
+              <PropertyValue Property="Target" AnnotationPath="@UI.FieldGroup#General"/>
+            </Record>
+            <Record Type="UI.ReferenceFacet">
+              <PropertyValue Property="ID" String="TermsFacet"/>
+              <PropertyValue Property="Label" String="Terms &amp; Address"/>
+              <PropertyValue Property="Target" AnnotationPath="@UI.FieldGroup#Terms"/>
+            </Record>
+            <Record Type="UI.ReferenceFacet">
+              <PropertyValue Property="ID" String="NotesFacet"/>
+              <PropertyValue Property="Label" String="Notes"/>
+              <PropertyValue Property="Target" AnnotationPath="@UI.FieldGroup#Notes"/>
+              <Annotation Term="UI.Hidden" Bool="true"/>
+            </Record>
+            <Record Type="UI.ReferenceFacet">
+              <PropertyValue Property="Label" String="Items"/>
+              <PropertyValue Property="ID" String="Items"/>
+              <PropertyValue Property="Target" AnnotationPath="items/@UI.LineItem#Items"/>
+            </Record>
+            <Record Type="UI.ReferenceFacet">
+              <PropertyValue Property="Label" String="Quotations"/>
+              <PropertyValue Property="ID" String="Quotations"/>
+              <PropertyValue Property="Target" AnnotationPath="quotations/@UI.LineItem#Quotations"/>
+            </Record>
+            <Record Type="UI.ReferenceFacet">
+              <PropertyValue Property="Target" AnnotationPath="attachments/@UI.LineItem"/>
+              <PropertyValue Property="ID" String="attachments_attachments"/>
+              <PropertyValue Property="Label" String="Attachments"/>
+            </Record>
+          </Collection>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.Messages" Path="DraftMessages"/>
+      </Annotations>
+      <Annotations Target="BuyerService.EntityContainer/Requests">
+        <Annotation Term="Common.DraftRoot">
+          <Record Type="Common.DraftRootType">
+            <PropertyValue Property="ActivationAction" String="BuyerService.draftActivate"/>
+            <PropertyValue Property="EditAction" String="BuyerService.draftEdit"/>
+            <PropertyValue Property="PreparationAction" String="BuyerService.draftPrepare"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/ID">
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/createdAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="Created On"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/createdBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="User's unique ID"/>
+        <Annotation Term="Common.Label" String="Created By"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/modifiedAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="Changed On"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/modifiedBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="User's unique ID"/>
+        <Annotation Term="Common.Label" String="Changed By"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/requestID">
+        <Annotation Term="Common.Label" String="RFQ Number"/>
+        <Annotation Term="Common.FieldControl" EnumMember="Common.FieldControlType/Mandatory"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/description">
+        <Annotation Term="Common.Label" String="Description"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/supplier">
+        <Annotation Term="Common.Label" String="Supplier"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/quotationDate">
+        <Annotation Term="Common.Label" String="Quotation Date"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/quotationDeadline">
+        <Annotation Term="Common.Label" String="Quotation Deadline"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/paymentTerms">
+        <Annotation Term="Common.Label" String="Payment Terms"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/incoterms1">
+        <Annotation Term="Common.Label" String="Incoterms"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/incoterms2">
+        <Annotation Term="Common.Label" String="Incoterms Location"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/invoiceAddress">
+        <Annotation Term="Common.Label" String="Invoice Address"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/headerText">
+        <Annotation Term="Common.Label" String="Header Text"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/notes">
+        <Annotation Term="Common.Label" String="Notes/Detailed Description"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/attachments">
+        <Annotation Term="Common.Label" String="Request.attachments"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/IsActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/HasActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/HasDraftEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/DraftAdministrativeData">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests/DraftMessages">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems">
+        <Annotation Term="UI.HeaderInfo">
+          <Record Type="UI.HeaderInfoType">
+            <PropertyValue Property="TypeName" String="RFQ Item"/>
+            <PropertyValue Property="TypeNamePlural" String="RFQ Items"/>
+            <PropertyValue Property="Title">
+              <Record Type="UI.DataField">
+                <PropertyValue Property="Value" Path="itemNumber"/>
+              </Record>
+            </PropertyValue>
+            <PropertyValue Property="Description">
+              <Record Type="UI.DataField">
+                <PropertyValue Property="Value" Path="description"/>
+              </Record>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="UI.LineItem" Qualifier="Items">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="itemNumber"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="material"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="description"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="quantity"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="requiredByDate"/>
+            </Record>
+          </Collection>
+        </Annotation>
+        <Annotation Term="UI.Facets">
+          <Collection>
+            <Record Type="UI.ReferenceFacet">
+              <PropertyValue Property="Label" String="Details"/>
+              <PropertyValue Property="ID" String="Details"/>
+              <PropertyValue Property="Target" AnnotationPath="@UI.FieldGroup#Details"/>
+            </Record>
+          </Collection>
+        </Annotation>
+        <Annotation Term="UI.FieldGroup" Qualifier="Details">
+          <Record Type="UI.FieldGroupType">
+            <PropertyValue Property="Data">
+              <Collection>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="itemNumber"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="material"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="description"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="quantity"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="unit"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="requiredByDate"/>
+                </Record>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="UI.DataPoint" Qualifier="quantity">
+          <Record Type="UI.DataPointType">
+            <PropertyValue Property="Value" Path="quantity"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="UI.Chart" Qualifier="quantity">
+          <Record Type="UI.ChartDefinitionType">
+            <PropertyValue Property="ChartType" EnumMember="UI.ChartType/Column"/>
+            <PropertyValue Property="Measures">
+              <Collection>
+                <PropertyPath>quantity</PropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="MeasureAttributes">
+              <Collection>
+                <Record Type="UI.ChartMeasureAttributeType">
+                  <PropertyValue Property="DataPoint" AnnotationPath="@UI.DataPoint#quantity"/>
+                  <PropertyValue Property="Role" EnumMember="UI.ChartMeasureRoleType/Axis1"/>
+                  <PropertyValue Property="Measure" PropertyPath="quantity"/>
+                </Record>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="Dimensions">
+              <Collection>
+                <PropertyPath>quantity</PropertyPath>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.Messages" Path="DraftMessages"/>
+      </Annotations>
+      <Annotations Target="BuyerService.EntityContainer/RequestItems">
+        <Annotation Term="Common.DraftNode">
+          <Record Type="Common.DraftNodeType">
+            <PropertyValue Property="PreparationAction" String="BuyerService.draftPrepare"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/ID">
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/itemNumber">
+        <Annotation Term="Common.Label" String="Item Number"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/material">
+        <Annotation Term="Common.Label" String="Material"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/description">
+        <Annotation Term="Common.Label" String="Description"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/longText">
+        <Annotation Term="Common.Label" String="Long Text"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/quantity">
+        <Annotation Term="Common.Label" String="Quantity"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/unit">
+        <Annotation Term="Common.Label" String="Unit"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/deliveryAddress">
+        <Annotation Term="Common.Label" String="Delivery Address"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/requiredByDate">
+        <Annotation Term="Common.Label" String="Required By Date"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/remarks">
+        <Annotation Term="Common.Label" String="Remarks"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/IsActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/HasActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/HasDraftEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/DraftAdministrativeData">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.RequestItems/DraftMessages">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations">
+        <Annotation Term="UI.HeaderInfo">
+          <Record Type="UI.HeaderInfoType">
+            <PropertyValue Property="TypeName" String="Quotation"/>
+            <PropertyValue Property="TypeNamePlural" String="Quotations"/>
+            <PropertyValue Property="Title">
+              <Record Type="UI.DataField">
+                <PropertyValue Property="Value" Path="supplierQuotationId"/>
+              </Record>
+            </PropertyValue>
+            <PropertyValue Property="Description">
+              <Record Type="UI.DataField">
+                <PropertyValue Property="Value" Path="request/description"/>
+              </Record>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="UI.LineItem" Qualifier="Quotations">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="supplierQuotationId"/>
+              <PropertyValue Property="Label" String="Supplier Quotation ID"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="validUntil"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="totalValue"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="currency"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="createdAt"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="status_code"/>
+              <Annotation Term="UI.Importance" EnumMember="UI.ImportanceType/High"/>
+            </Record>
+          </Collection>
+        </Annotation>
+        <Annotation Term="UI.FieldGroup" Qualifier="VendorResponse">
+          <Record Type="UI.FieldGroupType">
+            <PropertyValue Property="Data">
+              <Collection>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="supplierQuotationId"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="validUntil"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="status"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="totalValue"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="currency"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="vendorRemarks"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="createdAt"/>
+                </Record>
+                <Record Type="UI.DataField">
+                  <PropertyValue Property="Value" Path="modifiedAt"/>
+                </Record>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="UI.Facets">
+          <Collection>
+            <Record Type="UI.ReferenceFacet">
+              <PropertyValue Property="Label" String="Vendor Response"/>
+              <PropertyValue Property="ID" String="VendorResponse"/>
+              <PropertyValue Property="Target" AnnotationPath="@UI.FieldGroup#VendorResponse"/>
+            </Record>
+            <Record Type="UI.ReferenceFacet">
+              <PropertyValue Property="Label" String="Items"/>
+              <PropertyValue Property="ID" String="Items"/>
+              <PropertyValue Property="Target" AnnotationPath="items/@UI.LineItem#Items"/>
+            </Record>
+            <Record Type="UI.ReferenceFacet">
+              <PropertyValue Property="Target" AnnotationPath="attachments/@UI.LineItem"/>
+              <PropertyValue Property="ID" String="attachments_attachments"/>
+              <PropertyValue Property="Label" String="Attachments"/>
+              <Annotation Term="UI.Hidden" Bool="true"/>
+            </Record>
+          </Collection>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.Messages" Path="DraftMessages"/>
+      </Annotations>
+      <Annotations Target="BuyerService.EntityContainer/Quotations">
+        <Annotation Term="Common.DraftRoot">
+          <Record Type="Common.DraftRootType">
+            <PropertyValue Property="ActivationAction" String="BuyerService.draftActivate"/>
+            <PropertyValue Property="EditAction" String="BuyerService.draftEdit"/>
+            <PropertyValue Property="PreparationAction" String="BuyerService.draftPrepare"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/ID">
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/createdAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="Created On"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/createdBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="User's unique ID"/>
+        <Annotation Term="Common.Label" String="Created By"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/modifiedAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="Changed On"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/modifiedBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="User's unique ID"/>
+        <Annotation Term="Common.Label" String="Changed By"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/request_ID">
+        <Annotation Term="Common.FieldControl" EnumMember="Common.FieldControlType/Mandatory"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/supplierQuotationId">
+        <Annotation Term="Common.Label" String="Supplier Quotation ID"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/validUntil">
+        <Annotation Term="Common.Label" String="Prices Valid Until"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/status">
+        <Annotation Term="Common.Label" String="Status"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/status_code">
+        <Annotation Term="Common.Text" Path="status/descr">
+          <Annotation Term="UI.TextArrangement" EnumMember="UI.TextArrangementType/TextOnly"/>
+        </Annotation>
+        <Annotation Term="Common.Label" String="Status"/>
+        <Annotation Term="Common.ValueList">
+          <Record Type="Common.ValueListType">
+            <PropertyValue Property="Label" String="Status"/>
+            <PropertyValue Property="CollectionPath" String="Status"/>
+            <PropertyValue Property="Parameters">
+              <Collection>
+                <Record Type="Common.ValueListParameterInOut">
+                  <PropertyValue Property="LocalDataProperty" PropertyPath="status_code"/>
+                  <PropertyValue Property="ValueListProperty" String="code"/>
+                </Record>
+                <Record Type="Common.ValueListParameterDisplayOnly">
+                  <PropertyValue Property="ValueListProperty" String="name"/>
+                </Record>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/totalValue">
+        <Annotation Term="Common.Label" String="Total Quotation Value"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/currency">
+        <Annotation Term="Common.Label" String="Currency"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/vendorRemarks">
+        <Annotation Term="Common.Label" String="Remarks"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/attachments">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Common.Label" String="Quotation.attachments"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/IsActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/HasActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/HasDraftEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/DraftAdministrativeData">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations/DraftMessages">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems">
+        <Annotation Term="UI.LineItem" Qualifier="Items">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="requestItem/itemNumber"/>
+              <PropertyValue Property="Label" String="Item"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="requestItem/description"/>
+              <PropertyValue Property="Label" String="Description"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="requestItem/quantity"/>
+              <PropertyValue Property="Label" String="Qty."/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="supplierCatalogNumber"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="manufacturerPartNumber"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="deliveryDate"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="totalPrice"/>
+              <PropertyValue Property="Label" String="Total"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="currency"/>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="remarks"/>
+              <PropertyValue Property="Label" String="Comment"/>
+            </Record>
+          </Collection>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.Messages" Path="DraftMessages"/>
+      </Annotations>
+      <Annotations Target="BuyerService.EntityContainer/QuotationItems">
+        <Annotation Term="Common.DraftNode">
+          <Record Type="Common.DraftNodeType">
+            <PropertyValue Property="PreparationAction" String="BuyerService.draftPrepare"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/ID">
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/requestItem_ID">
+        <Annotation Term="Common.FieldControl" EnumMember="Common.FieldControlType/Mandatory"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/supplierCatalogNumber">
+        <Annotation Term="Common.Label" String="Supplier Catalog No."/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/manufacturerPartNumber">
+        <Annotation Term="Common.Label" String="Manufacturer Part No."/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/deliveryDate">
+        <Annotation Term="Common.Label" String="Expected Delivery Date"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/netPrice">
+        <Annotation Term="Common.Label" String="Price per Unit"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/priceUnit">
+        <Annotation Term="Common.Label" String="Price Unit"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/totalPrice">
+        <Annotation Term="Common.Label" String="Total"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/currency">
+        <Annotation Term="Common.Label" String="Currency"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/remarks">
+        <Annotation Term="Common.Label" String="Comment/Remark"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/finalQuantity">
+        <Annotation Term="Common.Label" String="Quoted Quantity"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/formattedQuantity">
+        <Annotation Term="Common.Label" String="QuotationItem.formattedQuantity"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/IsActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/HasActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/HasDraftEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/DraftAdministrativeData">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.QuotationItems/DraftMessages">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Status">
+        <Annotation Term="UI.Identification">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="name"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="BuyerService.Status/name">
+        <Annotation Term="Common.Label" String="Name"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Status/descr">
+        <Annotation Term="Common.Label" String="Description"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Status/code">
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="open"/>
+              <PropertyValue Property="Value" String="open"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="saved"/>
+              <PropertyValue Property="Value" String="saved"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="submitted"/>
+              <PropertyValue Property="Value" String="submitted"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="BuyerService.ScanStates">
+        <Annotation Term="UI.Identification">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="name"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="BuyerService.ScanStates/name">
+        <Annotation Term="Common.Label" String="Scan status"/>
+      </Annotations>
+      <Annotations Target="BuyerService.ScanStates/descr">
+        <Annotation Term="Common.Label" String="Description"/>
+      </Annotations>
+      <Annotations Target="BuyerService.ScanStates/code">
+        <Annotation Term="Common.Text" Path="name">
+          <Annotation Term="UI.TextArrangement" EnumMember="UI.TextArrangementType/TextOnly"/>
+        </Annotation>
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Unscanned"/>
+              <PropertyValue Property="Value" String="Unscanned"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Scanning"/>
+              <PropertyValue Property="Value" String="Scanning"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Infected"/>
+              <PropertyValue Property="Value" String="Infected"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Clean"/>
+              <PropertyValue Property="Value" String="Clean"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Failed"/>
+              <PropertyValue Property="Value" String="Failed"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="BuyerService.ScanStates/criticality">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.DraftAdministrativeData">
+        <Annotation Term="Common.Label" String="Draft Administrative Data"/>
+      </Annotations>
+      <Annotations Target="BuyerService.DraftAdministrativeData/DraftUUID">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Common.Label" String="Draft (Technical ID)"/>
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.DraftAdministrativeData/CreationDateTime">
+        <Annotation Term="Common.Label" String="Draft Created On"/>
+      </Annotations>
+      <Annotations Target="BuyerService.DraftAdministrativeData/CreatedByUser">
+        <Annotation Term="Common.Label" String="Draft Created By"/>
+      </Annotations>
+      <Annotations Target="BuyerService.DraftAdministrativeData/DraftIsCreatedByMe">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Common.Label" String="Draft Created By Me"/>
+      </Annotations>
+      <Annotations Target="BuyerService.DraftAdministrativeData/LastChangeDateTime">
+        <Annotation Term="Common.Label" String="Draft Last Changed On"/>
+      </Annotations>
+      <Annotations Target="BuyerService.DraftAdministrativeData/LastChangedByUser">
+        <Annotation Term="Common.Label" String="Draft Last Changed By"/>
+      </Annotations>
+      <Annotations Target="BuyerService.DraftAdministrativeData/InProcessByUser">
+        <Annotation Term="Common.Label" String="Draft In Process By"/>
+      </Annotations>
+      <Annotations Target="BuyerService.DraftAdministrativeData/DraftIsProcessedByMe">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Common.Label" String="Draft In Process By Me"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments">
+        <Annotation Term="UI.HeaderInfo">
+          <Record Type="UI.HeaderInfoType">
+            <PropertyValue Property="TypeName" String="Attachment"/>
+            <PropertyValue Property="TypeNamePlural" String="Attachments"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="UI.LineItem">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="content"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="30%"/>
+                </Record>
+              </Annotation>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="status"/>
+              <PropertyValue Property="Criticality" Path="statusNav/criticality"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="10%"/>
+                </Record>
+              </Annotation>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="createdAt"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="20%"/>
+                </Record>
+              </Annotation>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="createdBy"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="15%"/>
+                </Record>
+              </Annotation>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="note"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="25%"/>
+                </Record>
+              </Annotation>
+            </Record>
+          </Collection>
+        </Annotation>
+        <Annotation Term="UI.MediaResource">
+          <Record Type="UI.MediaResourceType">
+            <PropertyValue Property="Stream" Path="content"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.Messages" Path="DraftMessages"/>
+      </Annotations>
+      <Annotations Target="BuyerService.EntityContainer/Requests_attachments">
+        <Annotation Term="Capabilities.SortRestrictions">
+          <Record Type="Capabilities.SortRestrictionsType">
+            <PropertyValue Property="NonSortableProperties">
+              <Collection>
+                <PropertyPath>content</PropertyPath>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.DraftNode">
+          <Record Type="Common.DraftNodeType">
+            <PropertyValue Property="PreparationAction" String="BuyerService.draftPrepare"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/up_">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/up__ID">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/ID">
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/createdAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="Created On"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/createdBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="User's unique ID"/>
+        <Annotation Term="Common.Label" String="Created By"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/modifiedAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="Changed On"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/modifiedBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="User's unique ID"/>
+        <Annotation Term="Common.Label" String="Changed By"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/url">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/content">
+        <Annotation Term="Core.ContentDisposition">
+          <Record Type="Core.ContentDispositionType">
+            <PropertyValue Property="Filename" Path="filename"/>
+            <PropertyValue Property="Type" String="inline"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Core.MediaType" Path="mimeType"/>
+        <Annotation Term="Common.Label" String="Attachment"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/mimeType">
+        <Annotation Term="Core.IsMediaType" Bool="true"/>
+        <Annotation Term="Common.Label" String="Media type"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/filename">
+        <Annotation Term="Common.Label" String="File name"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/hash">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/status">
+        <Annotation Term="Common.Text" Path="statusNav/name">
+          <Annotation Term="UI.TextArrangement" EnumMember="UI.TextArrangementType/TextOnly"/>
+        </Annotation>
+        <Annotation Term="Common.Label" String="Scan status"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/lastScan">
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="Last scan"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/note">
+        <Annotation Term="UI.MultiLineText" Bool="true"/>
+        <Annotation Term="Common.Label" String="Note"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/IsActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/HasActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/HasDraftEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/DraftAdministrativeData">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Requests_attachments/DraftMessages">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments">
+        <Annotation Term="UI.HeaderInfo">
+          <Record Type="UI.HeaderInfoType">
+            <PropertyValue Property="TypeName" String="Attachment"/>
+            <PropertyValue Property="TypeNamePlural" String="Attachments"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="UI.LineItem">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="content"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="30%"/>
+                </Record>
+              </Annotation>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="status"/>
+              <PropertyValue Property="Criticality" Path="statusNav/criticality"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="10%"/>
+                </Record>
+              </Annotation>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="createdAt"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="20%"/>
+                </Record>
+              </Annotation>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="createdBy"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="15%"/>
+                </Record>
+              </Annotation>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="note"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="25%"/>
+                </Record>
+              </Annotation>
+            </Record>
+          </Collection>
+        </Annotation>
+        <Annotation Term="UI.MediaResource">
+          <Record Type="UI.MediaResourceType">
+            <PropertyValue Property="Stream" Path="content"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.Messages" Path="DraftMessages"/>
+      </Annotations>
+      <Annotations Target="BuyerService.EntityContainer/Quotations_attachments">
+        <Annotation Term="Capabilities.SortRestrictions">
+          <Record Type="Capabilities.SortRestrictionsType">
+            <PropertyValue Property="NonSortableProperties">
+              <Collection>
+                <PropertyPath>content</PropertyPath>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.DraftNode">
+          <Record Type="Common.DraftNodeType">
+            <PropertyValue Property="PreparationAction" String="BuyerService.draftPrepare"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/up_">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/up__ID">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/ID">
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/createdAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="Created On"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/createdBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="User's unique ID"/>
+        <Annotation Term="Common.Label" String="Created By"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/modifiedAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="Changed On"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/modifiedBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="User's unique ID"/>
+        <Annotation Term="Common.Label" String="Changed By"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/url">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/content">
+        <Annotation Term="Core.ContentDisposition">
+          <Record Type="Core.ContentDispositionType">
+            <PropertyValue Property="Filename" Path="filename"/>
+            <PropertyValue Property="Type" String="inline"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Core.MediaType" Path="mimeType"/>
+        <Annotation Term="Common.Label" String="Attachment"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/mimeType">
+        <Annotation Term="Core.IsMediaType" Bool="true"/>
+        <Annotation Term="Common.Label" String="Media type"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/filename">
+        <Annotation Term="Common.Label" String="File name"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/hash">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/status">
+        <Annotation Term="Common.Text" Path="statusNav/name">
+          <Annotation Term="UI.TextArrangement" EnumMember="UI.TextArrangementType/TextOnly"/>
+        </Annotation>
+        <Annotation Term="Common.Label" String="Scan status"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/lastScan">
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="Last scan"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/note">
+        <Annotation Term="UI.MultiLineText" Bool="true"/>
+        <Annotation Term="Common.Label" String="Note"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/IsActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/HasActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/HasDraftEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/DraftAdministrativeData">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Quotations_attachments/DraftMessages">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Status_texts/locale">
+        <Annotation Term="Common.Label" String="Language Code"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Status_texts/name">
+        <Annotation Term="Common.Label" String="Name"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Status_texts/descr">
+        <Annotation Term="Common.Label" String="Description"/>
+      </Annotations>
+      <Annotations Target="BuyerService.Status_texts/code">
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="open"/>
+              <PropertyValue Property="Value" String="open"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="saved"/>
+              <PropertyValue Property="Value" String="saved"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="submitted"/>
+              <PropertyValue Property="Value" String="submitted"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="BuyerService.ScanStates_texts/locale">
+        <Annotation Term="Common.Label" String="Language Code"/>
+      </Annotations>
+      <Annotations Target="BuyerService.ScanStates_texts/name">
+        <Annotation Term="Common.Label" String="Scan status"/>
+      </Annotations>
+      <Annotations Target="BuyerService.ScanStates_texts/descr">
+        <Annotation Term="Common.Label" String="Description"/>
+      </Annotations>
+      <Annotations Target="BuyerService.ScanStates_texts/code">
+        <Annotation Term="Common.Text" Path="name">
+          <Annotation Term="UI.TextArrangement" EnumMember="UI.TextArrangementType/TextOnly"/>
+        </Annotation>
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Unscanned"/>
+              <PropertyValue Property="Value" String="Unscanned"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Scanning"/>
+              <PropertyValue Property="Value" String="Scanning"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Infected"/>
+              <PropertyValue Property="Value" String="Infected"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Clean"/>
+              <PropertyValue Property="Value" String="Clean"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Failed"/>
+              <PropertyValue Property="Value" String="Failed"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+    </Schema>
+  </edmx:DataServices>
+</edmx:Edmx>

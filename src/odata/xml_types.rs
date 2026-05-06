@@ -1,7 +1,7 @@
 // ── XML building blocks ────────────────────────────────────────
 
 /// A `<PropertyValue Property="..." .../>` element with typed content.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum PV {
     /// `String="Y"`
     Str(String, String),
@@ -26,14 +26,14 @@ pub enum PV {
 }
 
 /// A `<Record Type="...">` element with child PropertyValues.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Rec {
     pub record_type: Option<String>,
     pub props: Vec<PV>,
 }
 
 /// Content wrapped by an `<Annotation>` element.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AnnContent {
     Record(Rec),
     Collection(Vec<Rec>),
@@ -45,7 +45,7 @@ pub enum AnnContent {
 }
 
 /// An `<Annotation Term="..." ...>` element.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Ann {
     pub term: String,
     pub qualifier: Option<String>,
@@ -53,7 +53,7 @@ pub struct Ann {
 }
 
 /// An `<Annotations Target="...">` block containing child annotations.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Anns {
     pub target: String,
     pub annotations: Vec<Ann>,

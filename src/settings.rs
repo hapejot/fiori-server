@@ -1,8 +1,8 @@
 use serde::Deserialize;
 use std::path::Path;
 
-/// Konfiguration aus webapp/config/settings.json.
-/// Felder werden beim Serverstart gelesen und in die HTML-Generierung injiziert.
+/// Configuration from webapp/config/settings.json.
+/// Fields are read at server startup and injected into the HTML generation.
 #[derive(Debug, Clone)]
 pub struct Settings {
     pub ui5_version: String,
@@ -72,10 +72,10 @@ struct ComponentBlock {
 }
 
 impl Settings {
-    /// Liest settings.json vom angegebenen Pfad.
-    /// Fallback: eincompilierte Version, dann Defaults.
+    /// Reads settings.json from the specified path.
+    /// Fallback: embedded version, then defaults.
     pub fn load(path: &Path) -> Self {
-        // 1. Dateisystem
+        // 1. File system
         let raw: Option<RawSettings> = std::fs::read_to_string(path)
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok());
@@ -84,10 +84,10 @@ impl Settings {
             return Self::from_raw(r);
         }
 
-        // 2. Eincompilierte Version
+        // 2. Embedded version
         if let Ok(r) = serde_json::from_str::<RawSettings>(crate::EMBEDDED_SETTINGS_JSON) {
             println!(
-                "  [settings] {} nicht gefunden -- verwende eincompilierte Version",
+                "  [settings] {} not found -- using embedded version",
                 path.display()
             );
             return Self::from_raw(r);
@@ -95,7 +95,7 @@ impl Settings {
 
         // 3. Defaults
         println!(
-            "  [settings] {} nicht gefunden oder ungueltig -- verwende Defaults",
+            "  [settings] {} not found or invalid -- using defaults",
             path.display()
         );
         Self::defaults()

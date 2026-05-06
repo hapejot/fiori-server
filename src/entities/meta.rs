@@ -16,9 +16,9 @@ use super::generic::{
     TableFacetConfig, TileConfig,
 };
 
-/// Erzeugt Meta-Entity-Daten aus den geladenen EntityConfig-Structs.
-/// Gibt (EntityConfigs, EntityFields, EntityFacets, EntityNavigations, EntityTableFacets,
-///       FieldValueLists, FieldValueListItems) zurueck.
+/// Generates meta entity data from the loaded EntityConfig structs.
+/// Returns (EntityConfigs, EntityFields, EntityFacets, EntityNavigations, EntityTableFacets,
+///       FieldValueLists, FieldValueListItems).
 #[cfg(test)]
 fn generate_meta_data(
     configs: &[EntityConfig],
@@ -167,7 +167,7 @@ fn generate_meta_data(
                 "Description": vl.description,
             }));
             for (idx, entry) in vl.entries.iter().enumerate() {
-                // Deterministischer GUID aus ListName + Code
+                // Deterministic GUID from ListName + Code
                 let raw = format!("{}_{}", vl.list_name, entry.code);
                 let hash = value_list_id(&raw);
                 value_list_item_records.push(json!({
@@ -192,7 +192,7 @@ fn generate_meta_data(
     )
 }
 
-/// Schreibt Meta-Entity-Daten als JSON-Dateien ins Data-Verzeichnis (Test-Hilfe).
+/// Writes meta entity data as JSON files to the data directory (test helper).
 #[cfg(test)]
 fn write_meta_data(data_dir: &Path, configs: &[EntityConfig]) {
     let (
@@ -213,15 +213,15 @@ fn write_meta_data(data_dir: &Path, configs: &[EntityConfig]) {
             Ok(json) => {
                 if let Err(e) = std::fs::write(&path, json) {
                     eprintln!(
-                        "  WARNUNG: Konnte {} nicht schreiben: {}",
+                        "  WARNING: Could not write {}: {}",
                         path.display(),
                         e
                     );
                 } else {
-                    info!("  Meta-Daten: {} ({} Eintraege)", name, data.len());
+                    info!("  Meta data: {} ({} entries)", name, data.len());
                 }
             }
-            Err(e) => eprintln!("  WARNUNG: JSON-Fehler fuer {}: {}", name, e),
+            Err(e) => eprintln!("  WARNING: JSON error for {}: {}", name, e),
         }
     };
 
@@ -231,18 +231,18 @@ fn write_meta_data(data_dir: &Path, configs: &[EntityConfig]) {
     write_json("EntityNavigations", &nav_data);
     write_json("EntityTableFacets", &table_facet_data);
 
-    // Wertelisten nur ueberschreiben wenn Configs tatsaechlich welche definieren,
-    // damit manuell gepflegte Seed-Daten erhalten bleiben.
+    // Only overwrite value lists when configs actually define some,
+    // so manually maintained seed data is preserved.
     if !value_lists_data.is_empty() {
         write_json("FieldValueLists", &value_lists_data);
         write_json("FieldValueListItems", &value_list_items_data);
     }
 }
 
-/// Rekonstruiert `Vec<EntityConfig>` direkt aus den Meta-JSON-Dateien im Data-Verzeichnis.
+/// Reconstructs `Vec<EntityConfig>` directly from the meta JSON files in the data directory.
 ///
-/// Dies ist der Startup-Pfad: die Meta-Tabellen (EntityConfigs.json, EntityFields.json, …)
-/// sind die einzige Quelle der Wahrheit. Separate Config-Dateien werden nicht benoetigt.
+/// This is the startup path: the meta tables (EntityConfigs.json, EntityFields.json, …)
+/// are the single source of truth. Separate config files are not needed.
 pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
     let read_json = |name: &str| -> Vec<Value> {
         let path = data_dir.join(format!("{}.json", name));
@@ -540,10 +540,10 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
         .collect()
 }
 
-/// Publiziert Meta-Entity-Aenderungen: persistiert die Data-Store-Datensaetze
-/// in die JSON-Dateien im Data-Verzeichnis.
+/// Publishes meta entity changes: persists the data store records
+/// to the JSON files in the data directory.
 ///
-/// Gibt den EntityConfigs-Datensatz des publizierten EntitySets zurueck.
+/// Returns the EntityConfigs record of the published EntitySet.
 pub fn publish_entity_config(
     key_value: &str,
     data_store: &dyn crate::runtime::data_store::DataStore,
@@ -557,7 +557,7 @@ pub fn publish_entity_config(
                     .and_then(|v| v.as_bool())
                     .unwrap_or(true)
         })
-        .ok_or_else(|| format!("Entity-Config '{}' nicht gefunden", key_value))?;
+        .ok_or_else(|| format!("Entity config '{}' not found", key_value))?;
 
     let set_name = config_record
         .get("SetName")
@@ -566,7 +566,7 @@ pub fn publish_entity_config(
 
     data_store.commit();
 
-    info!("  Config publiziert: {}", set_name);
+    info!("  Config published: {}", set_name);
 
     Ok(config_record)
 }
@@ -1173,7 +1173,7 @@ mod tests {
 
         let result = publish_entity_config("NonExistent", &mock_store);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("nicht gefunden"));
+        assert!(result.unwrap_err().contains("not found"));
     }
 
     #[test]
@@ -1256,6 +1256,10 @@ mod tests {
     #[test]
     fn meta_reconstruct_from_real_workspace_data() {
         let data_dir = Path::new("data");
+        if !data_dir.exists() {
+            // Skip test when data/ directory is not present
+            return;
+        }
         let configs = reconstruct_configs_from_data(data_dir);
         assert!(!configs.is_empty(), "Expected configs from workspace data");
 
