@@ -38,14 +38,55 @@ pub struct ResolvedProperty {
     pub package: Option<String>,
 }
 
+impl ResolvedProperty {
+    pub fn with_field_group(mut self, field_group: String) -> Self {
+        self.presentation.form_group = Some(field_group);
+        self
+    }
+    pub fn new(name: String, edm_type: String) -> Self {
+        let label = name.clone();
+        let max_length = None;
+        let precision = None;
+        let scale = None;
+        let computed = false;
+        let immutable = false;
+        let hidden = false;
+        let text_path = None;
+        let value_list = None;
+        let measure = None;
+        let presentation = ResolvedPresentation {
+            searchable: true,
+            show_in_list: true,
+            list_sort_order: None,
+            list_importance: None,
+            criticality_path: None,
+            form_group: None,
+        };
+        let package = None;
+        Self {
+            name,
+            edm_type,
+            label,
+            max_length,
+            precision,
+            scale,
+            computed,
+            immutable,
+            hidden,
+            text_path,
+            value_list,
+            measure,
+            presentation,
+            package,
+        }
+    }
+}
+
 /// Resolved value list — ready for annotation generation.
 #[derive(Debug, Clone)]
 pub enum ResolvedValueList {
     /// FieldValueListItems with Constant filter on ListID.
-    CodeList {
-        list_id: String,
-        fixed_values: bool,
-    },
+    CodeList { list_id: String, fixed_values: bool },
     /// Reference to another EntitySet.
     EntityRef {
         collection_path: String,
