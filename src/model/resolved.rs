@@ -165,7 +165,6 @@ pub struct ResolvedFacetSection {
     pub label: String,
     pub id: String,
     pub field_group_qualifier: String,
-    pub field_group_label: String,
 }
 
 /// A resolved table facet (child collection table on the Object Page).

@@ -111,7 +111,7 @@ pub fn generate_ui_annotations(e: &ResolvedEntity) -> Vec<Anns> {
             label: sec.label.clone(),
             facets: vec![FacetVariant::ReferenceFacet {
                 id: format!("{}Ref", sec.field_group_qualifier),
-                label: sec.field_group_label.clone(),
+                label: sec.label.clone(),
                 target: format!("@UI.FieldGroup#{}", sec.field_group_qualifier),
             }],
         });

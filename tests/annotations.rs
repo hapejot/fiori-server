@@ -26,7 +26,6 @@ fn test_ui_ann_gen() {
             label: "General".into(),
             id: "general".into(),
             field_group_qualifier: "fg1".into(),
-            field_group_label: "General".into(),
         }],
         table_facets: vec![],
         selection_fields: vec![],

@@ -114,7 +114,6 @@ fn base_from_spec(spec: &EntitySpec) -> ResolvedEntity {
             label: f.label.clone(),
             id: f.id.clone(),
             field_group_qualifier: f.field_group_qualifier.clone(),
-            field_group_label: f.field_group_label.clone(),
         })
         .collect();
 

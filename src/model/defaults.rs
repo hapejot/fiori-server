@@ -44,7 +44,6 @@ fn derive_facet_sections(entity: &mut ResolvedEntity) {
             label: group.clone(),
             id: format!("{group}Section"),
             field_group_qualifier: group.clone(),
-            field_group_label: group,
         })
         .collect();
 }
