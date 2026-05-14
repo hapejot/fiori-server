@@ -3,14 +3,14 @@ use std::collections::HashMap;
 use serde_json::{json, Value};
 
 use crate::annotations::*;
-use crate::entity::{value_list_id, ODataEntity};
+use crate::entity::{ODataEntity, ODataEntityImp, value_list_id};
 use crate::spec::{self, EntitySpec};
 use crate::NAMESPACE;
 
 #[derive(Debug)]
 pub struct FieldValueListEntity;
 
-impl ODataEntity for FieldValueListEntity {
+impl ODataEntityImp for FieldValueListEntity {
     fn set_name(&self) -> &'static str {
         "FieldValueLists"
     }
@@ -18,7 +18,7 @@ impl ODataEntity for FieldValueListEntity {
         "FieldValueList"
     }
 
-    fn mock_data(&self) -> Vec<Value> {
+    fn initial_data(&self) -> Vec<Value> {
         vec![
             json!({ "ID": value_list_id("EdmTypes"), "ListName": "EdmTypes", "Description": "OData EDM Datentypen" }),
         ]
@@ -48,7 +48,7 @@ impl ODataEntity for FieldValueListEntity {
         &self,
         record: &mut Value,
         nav_properties: &[&str],
-        _entities: &[&dyn ODataEntity],
+        _entities: &[ODataEntity],
         data_store: &HashMap<String, Vec<Value>>,
     ) {
         let list_id = record.get("ID").and_then(|v| v.as_str()).map(|s| s.to_string());

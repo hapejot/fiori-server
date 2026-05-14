@@ -7,8 +7,6 @@ use tracing::info;
 
 use crate::builders;
 use crate::runtime::data_store::{DataStore, InMemoryDataStore};
-use crate::entities::generic::create_generic_entities;
-use crate::entities::meta::reconstruct_configs_from_data;
 use crate::entity::ODataEntity;
 use crate::model::{self, ResolvedEntity};
 use crate::settings::Settings;
@@ -20,7 +18,7 @@ use crate::spec::Relationship;
 /// Fields that can change at runtime (e.g. after activate_config)
 /// are protected behind RwLock.
 pub struct AppState {
-    pub entities: RwLock<Vec<&'static dyn ODataEntity>>,
+    pub entities: RwLock<Vec<ODataEntity>>,
     pub metadata_xml: RwLock<String>,
     pub manifest_json: RwLock<String>,
     /// Per-entity manifest.json: EntitySet name -> JSON string.
@@ -43,6 +41,8 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Returns a builder for constructing [`AppState`] with entities,
+    /// relationships, settings, and storage backend.
     pub fn builder() -> AppStateBuilder {
         AppStateBuilder::new()
     }
@@ -54,91 +54,93 @@ impl AppState {
     /// 4. Rebuild metadata_xml, manifest_json, entity_manifests, apps_json
     /// 5. Update DataStore entities
     pub fn activate_config(&self) {
-        info!("  [activate_config] Rebuilding generic entities from meta tables...");
+        info!("  [activate_config] currently not implemented...");
 
-        // 1. Persist current data
-        self.data_store.commit();
+        // // 1. Persist current data
+        // self.data_store.commit();
 
-        // 2. Reconstruct configs from persisted meta tables
-        let raw_configs = reconstruct_configs_from_data(&self.data_dir);
-        let (generic_entities, generic_relationships) = create_generic_entities(raw_configs);
+        // // 2. Reconstruct configs from persisted meta tables
+        // let raw_configs = reconstruct_configs_from_data(&self.data_dir);
+        // let (generic_entities, generic_relationships) = create_generic_entities(raw_configs);
 
-        // 3. Build new entity list: keep built-in, replace generic.
-        //    Built-in entities have known type names that are NOT from EntityConfigs.
-        let old_entities = self.entities.read().unwrap().clone();
-        let builtin: Vec<&'static dyn ODataEntity> = old_entities
-            .iter()
-            .filter(|e| !is_generic_entity(e))
-            .copied()
-            .collect();
-        info!("starting with {} builtin entities", builtin.len());
-        let mut new_entities = builtin;
-        new_entities.extend(generic_entities);
+        // // 3. Build new entity list: keep built-in, replace generic.
+        // //    Built-in entities have known type names that are NOT from EntityConfigs.
+        // // let old_entities = self.entities.read().unwrap();
+        // // let builtin: Vec<Box<dyn ODataEntity>> = old_entities
+        // //     .iter()
+        // //     .filter(|e| !is_generic_entity(e.as_ref()))
+        // //     .collect();
+        // // info!("starting with {} builtin entities", builtin.len());
+        // // let mut new_entities = builtin;
+        // let new_entities= generic_entities;
 
-        // 4. Resolve specs + relationships (builtin + generic) — needed for metadata build
-        let builtin_relationships = self.relationships.read().unwrap().clone();
-        let mut all_relationships = builtin_relationships;
-        all_relationships.extend(generic_relationships);
-        let specs: Vec<_> = new_entities
-            .iter()
-            .filter_map(|e| e.entity_spec())
-            .collect();
-        let mut resolved_entities = model::resolve(&specs, &all_relationships);
-        for entity in &new_entities {
-            if let Some(resolved) = resolved_entities
-                .iter_mut()
-                .find(|r| r.set_name == entity.set_name())
-            {
-                entity.tweak_resolved(resolved);
-            }
-        }
+        // // 4. Resolve specs + relationships (builtin + generic) — needed for metadata build
+        // let builtin_relationships = self.relationships.read().unwrap().clone();
+        // let mut all_relationships = builtin_relationships;
+        // all_relationships.extend(generic_relationships);
+        // let specs: Vec<_> = new_entities
+        //     .iter()
+        //     .filter_map(|e| e.entity_spec())
+        //     .collect();
+        // let mut resolved_entities = model::resolve(&specs, &all_relationships);
+        // for entity in &new_entities {
+        //     if let Some(resolved) = resolved_entities
+        //         .iter_mut()
+        //         .find(|r| r.set_name == entity.set_name())
+        //     {
+        //         entity.tweak_resolved(resolved);
+        //     }
+        // }
 
-        // 5. Rebuild all derived artifacts
-        let metadata_xml = builders::build_metadata_xml(&resolved_entities);
-        let manifest_json = serde_json::to_string_pretty(&builders::build_manifest_json(
-            &new_entities,
-            &self.settings,
-        ))
-        .unwrap_or_default();
+        // // 5. Rebuild all derived artifacts
+        // let metadata_xml = builders::build_metadata_xml(&resolved_entities);
+        // let manifest_json = serde_json::to_string_pretty(&builders::build_manifest_json(
+        //     &new_entities,
+        //     &self.settings,
+        // ))
+        // .unwrap_or_default();
 
-        let mut entity_manifests = HashMap::new();
-        for (idx, entity) in new_entities.iter().enumerate() {
-            let manifest_val = builders::build_entity_manifest(&new_entities, &self.settings, idx);
-            entity_manifests.insert(
-                entity.set_name().to_string(),
-                serde_json::to_string_pretty(&manifest_val).unwrap_or_default(),
-            );
-        }
+        // let mut entity_manifests = HashMap::new();
+        // for (idx, entity) in new_entities.iter().enumerate() {
+        //     let manifest_val = builders::build_entity_manifest(&new_entities, &self.settings, idx);
+        //     entity_manifests.insert(
+        //         entity.set_name().to_string(),
+        //         serde_json::to_string_pretty(&manifest_val).unwrap_or_default(),
+        //     );
+        // }
 
-        let apps_json = build_apps_json(&new_entities);
+        // let apps_json = build_apps_json(&new_entities);
 
-        info!(
-            "setting CDM site.json with {} resolved entities",
-            resolved_entities.len()
-        );
-        let cdm_site_json =
-            serde_json::to_string_pretty(&builders::build_cdm_site_json(&resolved_entities))
-                .unwrap_or_default();
+        // info!(
+        //     "setting CDM site.json with {} resolved entities",
+        //     resolved_entities.len()
+        // );
+        // let cdm_site_json =
+        //     serde_json::to_string_pretty(&builders::build_cdm_site_json(&resolved_entities))
+        //         .unwrap_or_default();
 
-        // 6. Update DataStore entity list
-        self.data_store.update_entities(new_entities.clone());
+        // // 6. Update DataStore entity list
+        // self.data_store.update_entities(&new_entities);
+        //     self.data_store
+        //         .update_resolved_entities(resolved_entities);
 
-        // 7. Swap in new values
-        *self.entities.write().unwrap() = new_entities;
-        *self.metadata_xml.write().unwrap() = metadata_xml;
-        *self.manifest_json.write().unwrap() = manifest_json;
-        *self.entity_manifests.write().unwrap() = entity_manifests;
-        *self.apps_json.write().unwrap() = apps_json;
-        *self.cdm_site_json.write().unwrap() = cdm_site_json;
-        *self.resolved_entities.write().unwrap() = resolved_entities;
+        // // 7. Swap in new values
+        // *self.entities.write().unwrap() = new_entities;
+        // *self.metadata_xml.write().unwrap() = metadata_xml;
+        // *self.manifest_json.write().unwrap() = manifest_json;
+        // *self.entity_manifests.write().unwrap() = entity_manifests;
+        // *self.apps_json.write().unwrap() = apps_json;
+        // *self.cdm_site_json.write().unwrap() = cdm_site_json;
+        // *self.resolved_entities.write().unwrap() = resolved_entities;
 
-        info!("  [activate_config] Done – entities rebuilt.");
+        // info!("  [activate_config] Done – entities rebuilt.");
     }
 }
 
 /// Checks whether an entity is a generic one (from EntityConfig).
 /// Built-in entities have known SetNames.
-fn is_generic_entity(entity: &&'static dyn ODataEntity) -> bool {
+#[allow(dead_code)]
+fn is_generic_entity(entity: ODataEntity) -> bool {
     const BUILTIN_SETS: &[&str] = &[
         "EntityConfigs",
         "EntityFields",
@@ -152,7 +154,7 @@ fn is_generic_entity(entity: &&'static dyn ODataEntity) -> bool {
 }
 
 /// Builds the apps.json from static file and entity app entries.
-fn build_apps_json(entities: &[&'static dyn ODataEntity]) -> String {
+fn build_apps_json(entities: &[ODataEntity]) -> String {
     let webapp_dir = std::env::current_dir().unwrap_or_default().join("webapp");
     let static_path = webapp_dir.join("config/apps.json");
     let base_json = if static_path.is_file() {
@@ -181,7 +183,7 @@ fn build_apps_json(entities: &[&'static dyn ODataEntity]) -> String {
 
 /// Builder for step-by-step configuration of the AppState.
 pub struct AppStateBuilder {
-    pub(crate) entities: Vec<&'static dyn ODataEntity>,
+    entities: Vec<ODataEntity>,
     relationships: Vec<Relationship>,
     settings: Option<Settings>,
     data_dir: Option<PathBuf>,
@@ -189,6 +191,7 @@ pub struct AppStateBuilder {
 }
 
 impl AppStateBuilder {
+    /// Creates an empty builder.
     fn new() -> Self {
         Self {
             entities: Vec::new(),
@@ -199,17 +202,22 @@ impl AppStateBuilder {
         }
     }
 
+    /// Sets runtime/UI settings used for generated artifacts.
     pub fn settings(mut self, settings: Settings) -> Self {
         self.settings = Some(settings);
         self
     }
 
+    /// Sets the data directory used for JSON persistence/reconstruction.
     pub fn data_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.data_dir = Some(path.into());
         self
     }
 
-    pub fn entity(mut self, entity: &'static dyn ODataEntity) -> Self {
+    /// Registers a single entity in the app state.
+    ///
+    /// Duplicate `EntitySet` names are ignored.
+    pub fn entity(mut self, entity: ODataEntity) -> Self {
         if self
             .entities
             .iter()
@@ -226,21 +234,25 @@ impl AppStateBuilder {
         self
     }
 
+    /// Registers a single relationship declaration.
     pub fn relationship(mut self, rel: Relationship) -> Self {
         self.relationships.push(rel);
         self
     }
 
+    /// Registers many relationship declarations.
     pub fn relationships(mut self, rels: Vec<Relationship>) -> Self {
         self.relationships.extend(rels);
         self
     }
 
+    /// Overrides the default in-memory store with a custom implementation.
     pub fn data_store(mut self, store: Box<dyn DataStore>) -> Self {
         self.data_store = Some(store);
         self
     }
 
+    /// Builds the final [`AppState`], resolving specs and generating artifacts.
     pub fn build(self) -> AppState {
         let entities = self.entities;
         assert!(!entities.is_empty(), "No entities");
@@ -297,6 +309,7 @@ impl AppStateBuilder {
         let data_store = self.data_store.unwrap_or_else(|| {
             Box::new(InMemoryDataStore::new(data_dir.clone(), entities.clone()))
         });
+        data_store.update_resolved_entities(resolved_entities.clone());
 
         // Inject synthetic records for builtin (meta-package) entities
         let meta_specs: Vec<_> = specs
@@ -314,7 +327,7 @@ impl AppStateBuilder {
             for (set_name, records) in synth {
                 if !records.is_empty() {
                     info!("  Seeding {} synthetic {} records", records.len(), set_name);
-                    data_store.seed_records(set_name, records);
+                    data_store.initialize_records(set_name, records);
                 }
             }
         }

@@ -39,10 +39,13 @@ pub struct ResolvedProperty {
 }
 
 impl ResolvedProperty {
+    /// Assigns a field-group qualifier used for Object Page form sections.
     pub fn with_field_group(mut self, field_group: String) -> Self {
         self.presentation.form_group = Some(field_group);
         self
     }
+
+    /// Creates a minimal, editable property with sensible defaults.
     pub fn new(name: String, edm_type: String) -> Self {
         let label = name.clone();
         let max_length = None;

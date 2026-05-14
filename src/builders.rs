@@ -92,16 +92,22 @@ pub fn build_metadata_xml(resolved: &[ResolvedEntity]) -> String {
     )
 }
 
-/// Builds the complete manifest.json dynamically from all registered entities.
-/// `default_entity_idx` determines which entity gets the default route (empty hash).
-pub fn build_manifest_json(entities: &[&dyn ODataEntity], settings: &Settings) -> Value {
+/// Builds a combined manifest.json for all registered entities.
+///
+/// This is used for the default app shell where one entity acts as landing page.
+/// The default target is selected via index 0 and can be overridden with
+/// [`build_manifest_json_with_default`].
+pub fn build_manifest_json(entities: &[ODataEntity], settings: &Settings) -> Value {
     info!("build manifest");
     build_manifest_json_with_default(entities, settings, 0)
 }
 
-/// Like `build_manifest_json`, but with a selectable default entity.
+/// Builds a combined manifest.json with a configurable default entity route.
+///
+/// `default_entity_idx` selects which entity receives the empty route pattern
+/// (`:?query:`), making it the startup target when no hash is provided.
 pub fn build_manifest_json_with_default(
-    entities: &[&dyn ODataEntity],
+    entities: &[ODataEntity],
     settings: &Settings,
     default_entity_idx: usize,
 ) -> Value {
@@ -133,22 +139,23 @@ pub fn build_manifest_json_with_default(
     }
 
     // Entity-specific App-ID: e.g. "products.app", "orders.app"
-    let default_entity = entities[default_entity_idx];
+    let default_entity = &entities[default_entity_idx];
     let app_id = format!("{}.app", default_entity.set_name().to_lowercase());
     let app_title = default_entity.tile_title();
 
     build_manifest_value(&app_id, &app_title, routes, targets, inbounds, settings)
 }
 
-/// Builds a manifest.json for a single entity (CDM mode).
-/// Only routes/targets/inbounds of the entity and its composition children
-/// are included — so the UShell recognizes cross-app navigation correctly.
+/// Builds a manifest.json for one entity app in CDM mode.
+///
+/// Routes, targets, and inbounds are limited to the selected entity and its
+/// direct composition children so intent-based navigation resolves correctly.
 pub fn build_entity_manifest(
-    entities: &[&dyn ODataEntity],
+    entities: &[ODataEntity],
     settings: &Settings,
     entity_idx: usize,
 ) -> Value {
-    let target_entity = entities[entity_idx];
+    let target_entity = &entities[entity_idx];
     let target_set = target_entity.set_name();
     let app_id = format!("{}.app", target_set.to_lowercase());
     let app_title = target_entity.tile_title();

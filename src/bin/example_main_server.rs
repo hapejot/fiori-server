@@ -9,9 +9,9 @@ use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
-use fake_fiori_server::settings::Settings;
-use fake_fiori_server::{app_state::AppState, spec, BASE_PATH};
-use fake_fiori_server::{entity::ODataEntity, runtime::handlers::*, NAMESPACE};
+use simple_fiori_server::{app_state::AppState, entity::ODataEntity, spec, BASE_PATH};
+use simple_fiori_server::{entity::ODataEntityImp, runtime::handlers::*, NAMESPACE};
+use simple_fiori_server::settings::Settings;
 
 fn webapp_dir() -> PathBuf {
     std::env::current_dir().unwrap_or_default().join("webapp")
@@ -25,13 +25,15 @@ pub struct ExampleOrderEntity;
 
 #[derive(Debug)]
 pub struct ExampleOrderItemEntity;
+impl ExampleOrderItemEntity {
+    fn new() -> Self {
+        Self
+    }
+}
 
 #[derive(Debug)]
 pub struct ExampleCustomerEntity;
 
-pub static EXAMPLE_ORDER_ENTITY: ExampleOrderEntity = ExampleOrderEntity;
-pub static EXAMPLE_ORDER_ITEM_ENTITY: ExampleOrderItemEntity = ExampleOrderItemEntity;
-pub static EXAMPLE_CUSTOMER_ENTITY: ExampleCustomerEntity = ExampleCustomerEntity;
 use crate::spec::{FacetSectionSpec, FieldSpec, Relationship, Side};
 
 /// Central generator for a minimal example service model.
@@ -81,7 +83,7 @@ pub fn order_spec() -> EntitySpec {
         fields: vec![
             FieldSpec::string("OrderName", "Order Name", 80)
                 .searchable()
-                .form_group("orders-general")
+                .form_group("FGQ")
                 .show_in_list(),
             FieldSpec::atom("OrderDate", "Order Date", "Edm.Date").show_in_list(),
             FieldSpec::decimal("TotalAmount", "Total Amount", 13, 2).show_in_list(),
@@ -92,7 +94,6 @@ pub fn order_spec() -> EntitySpec {
             label: "General".into(),
             id: "orders-general".into(),
             field_group_qualifier: "FGQ".into(),
-            field_group_label: "FG Label".into(),
         }],
         table_facets: vec![],
     }
@@ -141,7 +142,7 @@ pub fn customer_spec() -> EntitySpec {
     }
 }
 
-impl ODataEntity for ExampleOrderEntity {
+impl ODataEntityImp for ExampleOrderEntity {
     fn set_name(&self) -> &'static str {
         "Orders"
     }
@@ -150,7 +151,7 @@ impl ODataEntity for ExampleOrderEntity {
         "Order"
     }
 
-    fn mock_data(&self) -> Vec<Value> {
+    fn initial_data(&self) -> Vec<Value> {
         vec![json!({
             "ID": "11111111-1111-1111-1111-111111111111",
             "OrderName": "Laptop Bundle",
@@ -172,7 +173,7 @@ impl ODataEntity for ExampleOrderEntity {
     }
 }
 
-impl ODataEntity for ExampleOrderItemEntity {
+impl ODataEntityImp for ExampleOrderItemEntity {
     fn set_name(&self) -> &'static str {
         "OrderItems"
     }
@@ -185,7 +186,7 @@ impl ODataEntity for ExampleOrderItemEntity {
         Some("Orders")
     }
 
-    fn mock_data(&self) -> Vec<Value> {
+    fn initial_data(&self) -> Vec<Value> {
         vec![json!({
             "ID": "22222222-2222-2222-2222-222222222222",
             "Description": "15-inch Laptop",
@@ -205,9 +206,13 @@ impl ODataEntity for ExampleOrderItemEntity {
             ns = NAMESPACE
         )
     }
+
+    fn navigation_properties(&self) -> &'static [spec::NavigationPropertyDef] {
+        &[]
+    }
 }
 
-impl ODataEntity for ExampleCustomerEntity {
+impl ODataEntityImp for ExampleCustomerEntity {
     fn set_name(&self) -> &'static str {
         "Customers"
     }
@@ -216,7 +221,7 @@ impl ODataEntity for ExampleCustomerEntity {
         "Customer"
     }
 
-    fn mock_data(&self) -> Vec<Value> {
+    fn initial_data(&self) -> Vec<Value> {
         vec![json!({
             "ID": "33333333-3333-3333-3333-333333333333",
             "CustomerName": "Acme Corp",
@@ -270,14 +275,14 @@ async fn main() {
     println!("  Storage      : In-Memory");
     println!("{}", "=".repeat(60));
     println!("  Press Ctrl+C to stop\n");
-
+    let order_item_entity = ExampleOrderItemEntity::new();
     let data_dir = std::env::current_dir().unwrap_or_default().join("data");
     let builder = AppState::builder()
         .settings(settings)
         .data_dir(&data_dir)
-        .entity(&EXAMPLE_ORDER_ENTITY)
-        .entity(&EXAMPLE_ORDER_ITEM_ENTITY)
-        .entity(&EXAMPLE_CUSTOMER_ENTITY)
+        .entity(ODataEntity::new(Arc::new(ExampleOrderEntity)))
+        .entity(ODataEntity::new(Arc::new(order_item_entity)))
+        .entity(ODataEntity::new(Arc::new(ExampleCustomerEntity)))
         .relationships(relationships());
 
     let app_state = Arc::new(builder.build());

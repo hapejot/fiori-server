@@ -1,6 +1,6 @@
-//! # Fake Fiori Server
+//! # simple Fiori Server
 //! 
-//! OData V4 mock server for SAP Fiori Elements...
+//! OData V4 server for SAP Fiori Elements...
 //! 
 //! Main modules are
 //! - `spec` high level definition of relationships and entities
@@ -21,14 +21,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 
-use fake_fiori_server::{app_state::AppState, *};
+use simple_fiori_server::{app_state::AppState, entity::ODataEntity, *};
 use entities::{
     EntityConfigEntity, EntityFacetEntity, EntityFieldEntity, EntityNavigationEntity,
     EntityRelationshipEntity, EntityTableFacetEntity, FieldValueListEntity,
     FieldValueListItemEntity,
 };
 use runtime::handlers::*;
-use fake_fiori_server::settings::Settings;
+use simple_fiori_server::settings::Settings;
 
 
 // ── Webapp directory (sibling to the executable's working dir) ──────────
@@ -98,14 +98,14 @@ async fn main() {
         .settings(settings)
         .data_dir(&data_dir)
         .relationships(spec::meta_package::meta_relationships())
-        .entity(&EntityConfigEntity)
-        .entity(&EntityFieldEntity)
-        .entity(&EntityFacetEntity)
-        .entity(&EntityNavigationEntity)
-        .entity(&EntityRelationshipEntity)
-        .entity(&EntityTableFacetEntity)
-        .entity(&FieldValueListEntity)
-        .entity(&FieldValueListItemEntity)
+        .entity(ODataEntity::new(Arc::new(EntityConfigEntity)))
+        .entity(ODataEntity::new(Arc::new(EntityFieldEntity)))
+        .entity(ODataEntity::new(Arc::new(EntityFacetEntity)))
+        .entity(ODataEntity::new(Arc::new(EntityNavigationEntity)))
+        .entity(ODataEntity::new(Arc::new(EntityRelationshipEntity)))
+        .entity(ODataEntity::new(Arc::new(EntityTableFacetEntity)))
+        .entity(ODataEntity::new(Arc::new(FieldValueListEntity)))
+        .entity(ODataEntity::new(Arc::new(FieldValueListItemEntity)))
         .relationships(generic_relationships);
 
     for ge in generic_entities {

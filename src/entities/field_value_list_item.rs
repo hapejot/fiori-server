@@ -1,14 +1,14 @@
 use serde_json::{json, Value};
 
 use crate::annotations::*;
-use crate::entity::{value_list_id, ODataEntity};
+use crate::entity::{value_list_id, ODataEntityImp};
 use crate::spec::{self, EntitySpec};
 use crate::NAMESPACE;
 
 #[derive(Debug)]
 pub struct FieldValueListItemEntity;
 
-impl ODataEntity for FieldValueListItemEntity {
+impl ODataEntityImp for FieldValueListItemEntity {
     fn set_name(&self) -> &'static str {
         "FieldValueListItems"
     }
@@ -24,7 +24,7 @@ impl ODataEntity for FieldValueListItemEntity {
         Some(spec::meta_package::field_value_list_items())
     }
 
-    fn mock_data(&self) -> Vec<Value> {
+    fn initial_data(&self) -> Vec<Value> {
         let edm_id = value_list_id("EdmTypes");
         vec![
             json!({ "ID": value_list_id("EdmTypes_Edm.String"),         "ListID": edm_id, "Code": "Edm.String",         "Description": "Zeichenkette",      "SortOrder": 0 }),

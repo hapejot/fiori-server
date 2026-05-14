@@ -1,7 +1,7 @@
-# Copilot Instructions — fake-fiori-server
+# Copilot Instructions — simple-fiori-server
 
 ## Project Overview
-Rust/Axum OData V4 mock server for SAP Fiori Elements. Simulates draft-enabled CRUD, batch requests, metadata (EDMX), and a Fiori Launchpad shell using the CDM 3.1 platform.
+Rust/Axum OData V4 simple server for SAP Fiori Elements. Simulates draft-enabled CRUD, batch requests, metadata (EDMX), and a Fiori Launchpad shell using the CDM 3.1 platform.
 
 ## Architecture
 
@@ -48,7 +48,7 @@ EntitySpec + Relationship  ──→  resolve()  ──→  ResolvedEntity  ─�
 2. Implement `entity_spec()` returning `Some(EntitySpec)` — the new pipeline auto-generates EDMX, annotations, and all metadata
 3. Register in `AppStateBuilder` via `.entity()` and `.relationships()`
 4. Automatically included in EDMX, manifest.json, CDM site document
-5. Optional: JSON file in `data/` for persistence; falls back to `mock_data()`
+5. Optional: JSON file in `data/` for persistence; falls back to `initial_data()`
 6. Optional: `tweak_resolved()` for entity-specific adjustments after resolution
 7. Legacy path: `fields_def()`, `annotations_def()`, `navigation_properties()` still work as fallback when `entity_spec()` returns `None`
 
@@ -96,7 +96,7 @@ EntitySpec + Relationship  ──→  resolve()  ──→  ResolvedEntity  ─�
 - `LineItemField` variants: `UI.DataField` (default), `UI.DataFieldWithIntentBasedNavigation` (semantic_object), `UI.DataFieldWithNavigationPath` (navigation_path)
 
 ### Data Flow
-- `InMemoryDataStore::new()` loads from `data/<EntitySet>.json`, falls back to `mock_data()`
+- `InMemoryDataStore::new()` loads from `data/<EntitySet>.json`, falls back to `initial_data()`
 - After store creation, `generate_synth_records()` injects synthetic records for all meta-package entities (package="meta") via `seed_records()` — makes code-defined entities visible in the admin UI
 - Draft flags (`IsActiveEntity`, `HasActiveEntity`, `HasDraftEntity`) injected at read time by `prepare_baseline_record()`
 - `commit()` persists active records to `data/` as JSON (strips draft flags)
@@ -114,7 +114,7 @@ EntitySpec + Relationship  ──→  resolve()  ──→  ResolvedEntity  ─�
 - All entities use `ID` as key field with type `Edm.Guid` (trait default, no override needed)
 - `key_field()` has a default implementation returning `"ID"` — only override if needed
 - `create_entity()` auto-generates the key as a random UUID v4 when not provided
-- Mock data uses deterministic UUIDs via `value_list_id()` (UUID v5 from a fixed namespace + name)
+- Initial data uses deterministic UUIDs via `value_list_id()` (UUID v5 from a fixed namespace + name)
 - FK fields (e.g. `OrderItems.OrderID`, `OrderItems.ProductID`) store the UUID of the referenced entity
 
 ### Title Field (Common.Text)
@@ -211,7 +211,7 @@ EntitySpec + Relationship  ──→  resolve()  ──→  ResolvedEntity  ─�
 - **In-memory** (default): data loaded from `data/*.json`, persisted on `commit()`
 - **PostgreSQL** (feature `postgres`): set `DATABASE_URL` env var to activate
   - Schema auto-created on startup from `migrations/001_create_entity_records.sql`
-  - Seeds data from `data/*.json` or `mock_data()` when entity set table is empty
+  - Seeds data from `data/*.json` or `initial_data()` when entity set table is empty
   - All entity data stored as JSONB in `entity_records(entity_set, key_value, is_active, data)`
   - `docker-compose.yml` provided for local Postgres
 

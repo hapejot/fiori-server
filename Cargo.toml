@@ -1,5 +1,5 @@
 [package]
-name = "fake-fiori-server"
+name = "simple-fiori-server"
 version = "0.1.0"
 edition = "2021"
 

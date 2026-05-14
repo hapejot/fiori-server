@@ -1,13 +1,13 @@
 use serde_json::{json, Value};
 
-use crate::entity::ODataEntity;
+use crate::entity::ODataEntityImp;
 use crate::spec::{self, EntitySpec};
 use crate::NAMESPACE;
 
 #[derive(Debug)]
 pub struct EntityRelationshipEntity;
 
-impl ODataEntity for EntityRelationshipEntity {
+impl ODataEntityImp for EntityRelationshipEntity {
     fn set_name(&self) -> &'static str {
         "EntityRelationships"
     }
@@ -29,7 +29,7 @@ impl ODataEntity for EntityRelationshipEntity {
         )
     }
 
-    fn mock_data(&self) -> Vec<Value> {
+    fn initial_data(&self) -> Vec<Value> {
         vec![]
     }
 

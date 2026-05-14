@@ -1,4 +1,16 @@
-// ── ParentKey ───────────────────────────────────────────────────────
+use std::collections::HashMap;
+use std::fmt;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
+
+use serde_json::{json, Value};
+use tracing::info;
+use uuid::Uuid;
+
+use crate::entity::ODataEntity;
+use crate::model::ResolvedEntity;
+use crate::runtime::query::query_collection_from;
+use crate::BASE_PATH;
 
 /// Parent context for sub-collection / deep navigation.
 #[derive(Debug, Clone)]
@@ -15,20 +27,6 @@ impl ParentKey {
         }
     }
 }
-use std::collections::HashMap;
-use std::fmt;
-use std::path::{Path, PathBuf};
-use std::sync::RwLock;
-
-use serde_json::{json, Value};
-use tracing::info;
-use uuid::Uuid;
-
-use crate::entity::ODataEntity;
-use crate::runtime::query::query_collection_from;
-use crate::BASE_PATH;
-
-// ── Low-level record helpers ────────────────────────────────────────
 
 /// Find a record by key field value.
 fn find_record<'a>(records: &'a [Value], key_field: &str, key_value: &str) -> Option<&'a Value> {
@@ -294,6 +292,7 @@ impl ODataQuery {
 
     /// Parse $expand value, extracting nav property names and nested $select.
     fn parse_expand(expand: &str) -> Vec<ExpandClause> {
+        info!("Parsing $expand: {}", expand);
         let mut result = Vec::new();
         let mut depth = 0;
         let mut current = String::new();
@@ -377,13 +376,11 @@ impl fmt::Display for StoreError {
     }
 }
 
-// ── DataStore Trait ─────────────────────────────────────────────────
-
 /// Trait for data storage backends.
 /// All locking/transaction management is internal to the implementation.
 /// Callers pass only string identifiers, structured query types, and JSON values.
 pub trait DataStore: Send + Sync {
-    // ── Collections ──
+    /// Query a set of entity records with optional querying.
     fn get_collection(
         &self,
         set_name: &str,
@@ -391,16 +388,20 @@ pub trait DataStore: Send + Sync {
         parent: Option<&ParentKey>,
     ) -> Result<Value, StoreError>;
 
+    /// Count the number of results that would be returned by an equivalent `get_collection` call (ignoring $top/$skip)
     fn count(&self, set_name: &str, query: &ODataQuery, parent: Option<&ParentKey>) -> usize;
 
-    // ── Single Entity CRUD ──
-    fn read_entity(
+    /// Retrieve a single entity record by key, with optional querying for draft read.
+    /// How is this draft handling controlled?
+    /// It needs to have an additional Key field for IsActiveEntity.
+    fn read_record(
         &self,
         set_name: &str,
         key: &EntityKey,
         query: &ODataQuery,
     ) -> Result<Value, StoreError>;
 
+    /// Create a new entity record in the specified set, returning the created record with key and default values populated.
     fn create_entity(
         &self,
         set_name: &str,
@@ -408,6 +409,7 @@ pub trait DataStore: Send + Sync {
         parent: Option<&ParentKey>,
     ) -> Result<Value, StoreError>;
 
+    /// Update an existing entity record by key with the provided data, returning the updated record.
     fn patch_entity(
         &self,
         set_name: &str,
@@ -415,19 +417,30 @@ pub trait DataStore: Send + Sync {
         patch: &Value,
     ) -> Result<Value, StoreError>;
 
+    /// Delete an entity record by key.
     fn delete_entity(&self, set_name: &str, key: &EntityKey) -> Result<(), StoreError>;
 
-    // ── Draft Actions ──
+    /// Draft-specific operations.
+    /// `draft_edit` changes the draft entity, copying it to the changeset and returning the draft version.
     fn draft_edit(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError>;
 
+    /// `draft_activate` activates a draft entity, making it the active version.
     fn draft_activate(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError>;
 
+    /// `draft_prepare` prepares a draft entity for editing, without activating it.
     fn draft_prepare(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError>;
 
-    // ── Sibling Entity (draft ↔ active) ──
+    /// Read the sibling entity (draft ↔ active) for a given key.
+    ///
+    /// In the context of draft-enabled entities, a sibling entity refers to the counterpart of a
+    /// given entity in its alternate state. For example, if you have an active entity (IsActiveEntity=true),
+    /// its sibling would be the corresponding draft entity (IsActiveEntity=false) that holds the
+    /// in-progress changes. Conversely, if you start with a draft entity, its sibling would be the
+    /// active version that represents the last committed state. This allows you to easily navigate between
+    /// the two versions of an entity during the editing and activation process.
     fn read_sibling_entity(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError>;
 
-    // ── Property / Ad-hoc ──
+    /// Expand navigation properties for a record, used as a fallback if the query engine doesn't handle it.
     fn get_property(
         &self,
         set_name: &str,
@@ -435,17 +448,123 @@ pub trait DataStore: Send + Sync {
         property: &str,
     ) -> Result<Value, StoreError>;
 
+    /// Returns all records of an entity
+    /// This should not be used other then for testing/debugging purposes
     fn get_records(&self, set_name: &str) -> Vec<Value>;
 
-    // ── Persistence ──
+    /// Persist any pending changes to the underlying storage medium (e.g. write to disk).
     fn commit(&self);
 
-    // ── Entity Updates ──
-    fn update_entities(&self, entities: Vec<&'static dyn ODataEntity>);
+    /// Update the entity definitions in the store (e.g. after resolution or dynamic changes).?
+    /// Why do we need this?
+    fn update_entities(&self, entities: &[ODataEntity]);
 
-    // ── Seeding ──
-    /// Inject additional records into an entity set (skip duplicates by ID).
-    fn seed_records(&self, set_name: &str, records: Vec<Value>);
+    /// Update the resolved entity metadata in the store (e.g. after resolution).
+    /// Do we need this, or can the store just read from the resolved entities in AppState?
+    fn update_resolved_entities(&self, _resolved_entities: Vec<ResolvedEntity>) {}
+
+    /// Initialize the store with a set of records for a given entity set, used for seeding synthetic records on startup.
+    fn initialize_records(&self, set_name: &str, records: Vec<Value>);
+}
+
+pub struct DraftDataStore {
+    parent: Arc<dyn DataStore>,
+    /// Single active changeset overlay (None = no draft session active).
+    changeset: RwLock<ChangeSet>,
+}
+
+impl DraftDataStore {
+    pub fn new(parent: Arc<dyn DataStore>) -> Self {
+        let changeset = RwLock::new(ChangeSet::new());
+        Self { parent, changeset }
+    }
+}
+
+impl DataStore for DraftDataStore {
+    fn get_collection(
+        &self,
+        set_name: &str,
+        query: &ODataQuery,
+        parent: Option<&ParentKey>,
+    ) -> Result<Value, StoreError> {
+        todo!()
+    }
+
+    fn count(&self, set_name: &str, query: &ODataQuery, parent: Option<&ParentKey>) -> usize {
+        todo!()
+    }
+
+    fn read_record(
+        &self,
+        set_name: &str,
+        key: &EntityKey,
+        query: &ODataQuery,
+    ) -> Result<Value, StoreError> {
+        todo!()
+    }
+
+    fn create_entity(
+        &self,
+        set_name: &str,
+        data: &Value,
+        parent: Option<&ParentKey>,
+    ) -> Result<Value, StoreError> {
+        todo!()
+    }
+
+    fn patch_entity(
+        &self,
+        set_name: &str,
+        key: &EntityKey,
+        patch: &Value,
+    ) -> Result<Value, StoreError> {
+        todo!()
+    }
+
+    fn delete_entity(&self, set_name: &str, key: &EntityKey) -> Result<(), StoreError> {
+        todo!()
+    }
+
+    fn draft_edit(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError> {
+        todo!()
+    }
+
+    fn draft_activate(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError> {
+        todo!()
+    }
+
+    fn draft_prepare(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError> {
+        todo!()
+    }
+
+    fn read_sibling_entity(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError> {
+        todo!()
+    }
+
+    fn get_property(
+        &self,
+        set_name: &str,
+        key: &EntityKey,
+        property: &str,
+    ) -> Result<Value, StoreError> {
+        todo!()
+    }
+
+    fn get_records(&self, set_name: &str) -> Vec<Value> {
+        todo!()
+    }
+
+    fn commit(&self) {
+        todo!()
+    }
+
+    fn update_entities(&self, entities: &[ODataEntity]) {
+        todo!()
+    }
+
+    fn initialize_records(&self, set_name: &str, records: Vec<Value>) {
+        todo!()
+    }
 }
 
 // ── InMemoryDataStore ───────────────────────────────────────────────
@@ -456,39 +575,38 @@ pub trait DataStore: Send + Sync {
 pub struct InMemoryDataStore {
     /// Baseline data: only active/committed records.
     store: RwLock<HashMap<String, Vec<Value>>>,
-    entities: RwLock<Vec<&'static dyn ODataEntity>>,
+    entities: RwLock<Vec<ODataEntity>>,
+    resolved_entities: RwLock<Vec<ResolvedEntity>>,
     data_dir: PathBuf,
-    /// Single active changeset overlay (None = no draft session active).
-    changeset: RwLock<Option<ChangeSet>>,
 }
 
 impl InMemoryDataStore {
     /// Create a new in-memory store, loading data from JSON files.
     /// Baseline contains clean records without draft flags.
-    pub fn new(data_dir: PathBuf, entities: Vec<&'static dyn ODataEntity>) -> Self {
+    pub fn new(data_dir: PathBuf, entities: Vec<ODataEntity>) -> Self {
         let mut store = HashMap::new();
         for entity in &entities {
             let set_name = entity.set_name();
-            let records = load_entity_data(set_name, &data_dir, *entity);
+            let records = load_entity_data(set_name, &data_dir, entity);
             store.insert(set_name.to_string(), records);
         }
 
         Self {
             store: RwLock::new(store),
             entities: RwLock::new(entities),
+            resolved_entities: RwLock::new(vec![]),
             data_dir,
-            changeset: RwLock::new(None),
         }
     }
 
     #[tracing::instrument(skip(self))]
-    fn find_entity(&self, set_name: &str) -> Option<&'static dyn ODataEntity> {
-        self.entities
-            .read()
-            .unwrap()
-            .iter()
-            .find(|e| e.set_name() == set_name)
-            .copied()
+    fn find_entity(&self, set_name: &str) -> Option<ODataEntity> {
+        for x in self.entities.read().unwrap().iter() {
+            if x.set_name() == set_name {
+                return Some(x.clone());
+            }
+        }
+        None
     }
 
     #[tracing::instrument(skip(self))]
@@ -511,87 +629,125 @@ impl InMemoryDataStore {
     }
 
     #[tracing::instrument(skip(self))]
-    fn entities_snapshot(&self) -> Vec<&'static dyn ODataEntity> {
+    fn entities_snapshot(&self) -> Vec<ODataEntity> {
         self.entities.read().unwrap().clone()
     }
 
-    /// Copy children of a parent entity into the changeset, recursively.
-    /// Handles arbitrary depth: Orders → OrderItems → grandchildren, etc.
-    fn copy_children_to_changeset(
+    #[tracing::instrument(skip(self))]
+    fn resolved_entities_snapshot(&self) -> Vec<ResolvedEntity> {
+        self.resolved_entities.read().unwrap().clone()
+    }
+
+    fn fallback_expand_collection(
         &self,
+        set_name: &str,
+        result: &mut Value,
+        expand_names: &[&str],
+        entities: &[ODataEntity],
         store: &HashMap<String, Vec<Value>>,
-        changeset: &mut ChangeSet,
-        parent_entity: &dyn ODataEntity,
-        parent_key_value: &str,
-        entities: &[&'static dyn ODataEntity],
+        resolved_entities: &[ResolvedEntity],
     ) {
-        for &child in entities {
-            if child.parent_set_name() != Some(parent_entity.set_name()) {
-                continue;
-            }
-            let child_fk = resolve_child_fk(parent_entity, child);
-            let children: Vec<Value> = store
-                .get(child.set_name())
-                .map(|recs| {
-                    recs.iter()
-                        .filter(|r| {
-                            r.get(child_fk).and_then(|v| v.as_str()) == Some(parent_key_value)
-                        })
-                        .cloned()
-                        .collect()
-                })
-                .unwrap_or_default();
-            let child_key_field = child.key_field();
-            for record in &children {
-                // Recurse: copy grandchildren of this child
-                if let Some(child_key) = record.get(child_key_field).and_then(|v| v.as_str()) {
-                    self.copy_children_to_changeset(store, changeset, child, child_key, entities);
-                }
-            }
-            changeset
-                .records
-                .entry(child.set_name().to_string())
-                .or_default()
-                .extend(children);
+        info!("fallback");
+        let Some(rows) = result.get_mut("value").and_then(|v| v.as_array_mut()) else {
+            return;
+        };
+        for row in rows {
+            self.fallback_expand_record(
+                set_name,
+                row,
+                expand_names,
+                entities,
+                store,
+                resolved_entities,
+            );
         }
     }
 
-    /// Inject draft flags into a record read from baseline.
-    /// Checks changeset to determine HasDraftEntity.
-    fn prepare_baseline_record(
+    fn fallback_expand_record(
         &self,
-        record: &Value,
         set_name: &str,
-        key_field: &str,
-        changeset: &Option<ChangeSet>,
-    ) -> Value {
-        let mut result = record.clone();
-        let key_value = record.get(key_field).and_then(|v| v.as_str()).unwrap_or("");
-        let has_draft = changeset
-            .as_ref()
-            .map(|cs| cs.contains(set_name, key_field, key_value))
-            .unwrap_or(false);
-        inject_draft_flags(&mut result, true, false, has_draft);
-        result
-    }
-
-    /// Inject draft flags into a record read from changeset.
-    /// Checks baseline to determine HasActiveEntity.
-    fn prepare_changeset_record(
-        &self,
-        record: &Value,
-        set_name: &str,
-        key_field: &str,
+        record: &mut Value,
+        expand_names: &[&str],
+        entities: &[ODataEntity],
         store: &HashMap<String, Vec<Value>>,
-    ) -> Value {
-        let mut result = record.clone();
-        let key_value = record.get(key_field).and_then(|v| v.as_str()).unwrap_or("");
-        let has_active = store
-            .get(set_name)
-            .map(|recs| find_record(recs, key_field, key_value).is_some())
-            .unwrap_or(false);
-        inject_draft_flags(&mut result, false, has_active, false);
-        result
+        resolved_entities: &[ResolvedEntity],
+    ) {
+        let Some(obj) = record.as_object_mut() else {
+            return;
+        };
+        let Some(entity_resolved) = resolved_entities.iter().find(|e| e.set_name == set_name)
+        else {
+            return;
+        };
+
+        for nav_name in expand_names {
+            // Respect explicit entity-specific expansion if it already populated the nav.
+            if obj.contains_key(*nav_name) {
+                continue;
+            }
+            let Some(nav) = entity_resolved
+                .nav_properties
+                .iter()
+                .find(|n| n.name == *nav_name)
+            else {
+                continue;
+            };
+
+            let target_entity = entities
+                .iter()
+                .find(|e| e.set_name() == nav.target_set)
+                .cloned()
+                .or_else(|| {
+                    entities
+                        .iter()
+                        .find(|e| e.type_name() == nav.target_type)
+                        .cloned()
+                });
+            let Some(target_entity) = target_entity else {
+                continue;
+            };
+
+            let target_records = store
+                .get(target_entity.set_name())
+                .cloned()
+                .unwrap_or_else(|| target_entity.initial_data());
+
+            if nav.is_collection {
+                let parent_key = obj
+                    .get("ID")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let Some(parent_key) = parent_key else {
+                    continue;
+                };
+                let child_fk = nav.foreign_key.as_deref().unwrap_or("ID");
+                let children: Vec<Value> = target_records
+                    .into_iter()
+                    .filter(|r| {
+                        r.get(child_fk).and_then(|v| v.as_str()) == Some(parent_key.as_str())
+                    })
+                    .collect();
+                obj.insert(nav.name.clone(), Value::Array(children));
+            } else {
+                let fk_field = nav
+                    .foreign_key
+                    .as_deref()
+                    .unwrap_or(target_entity.key_field());
+                let fk_value = obj
+                    .get(fk_field)
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let Some(fk_value) = fk_value else {
+                    continue;
+                };
+                let target_key = target_entity.key_field();
+                let found = target_records
+                    .into_iter()
+                    .find(|r| r.get(target_key).and_then(|v| v.as_str()) == Some(fk_value.as_str()))
+                    .unwrap_or(Value::Null);
+                obj.insert(nav.name.clone(), found);
+            }
+        }
     }
 
     pub fn record_count(&self, arg: &str) -> usize {
@@ -602,11 +758,15 @@ impl InMemoryDataStore {
             .map(|v| v.len())
             .unwrap_or(0)
     }
-    
-    pub fn entities(&self) -> Vec<&'static dyn ODataEntity> {
+
+    pub fn entities(&self) -> Vec<ODataEntity> {
         self.entities.try_read().unwrap().clone()
     }
-    
+
+    pub(crate) fn expand_record(&self, r: &mut Value, arg: &str) -> Result<(), StoreError> {
+        eprintln!("expand record: {:#?}", r);
+        Ok(())
+    }
 }
 
 impl DataStore for InMemoryDataStore {
@@ -621,136 +781,29 @@ impl DataStore for InMemoryDataStore {
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
         let entities_snap = self.entities_snapshot();
+        let resolved_entities = self.resolved_entities_snapshot();
         let store = self.store.read().unwrap();
-        let changeset = self.changeset.read().unwrap();
         let qs = query.to_query_map();
-        info!(".");
+        let expand_names: Vec<String> = query
+            .expand
+            .iter()
+            .map(|e| e.nav_property.clone())
+            .collect();
+        let expand_refs: Vec<&str> = expand_names.iter().map(|s| s.as_str()).collect();
         match parent {
-            Some(parent_ref) => {
-                info!("read for parent key: {:?}", parent_ref);
-                let parent_entity = self.find_entity(&parent_ref.set_name).ok_or_else(|| {
-                    StoreError::NotFound(format!(
-                        "Parent entity set '{}' not found",
-                        parent_ref.set_name
-                    ))
-                })?;
-                let parent_key_field = parent_entity.key_field();
-                let parent_key_value = parent_ref
-                    .key
-                    .resolve_key_value(parent_key_field)
-                    .ok_or_else(|| {
-                        StoreError::BadRequest("Parent key value not found".to_string())
-                    })?;
-                let parent_is_active = parent_ref.key.is_active();
-
-                let child_fk = parent_entity
-                    .navigation_properties()
-                    .iter()
-                    .find(|np| np.target_type == entity.type_name())
-                    .and_then(|np| np.foreign_key)
-                    .unwrap_or(parent_key_field);
-
-                let key_field = entity.key_field();
-                let child_records: Vec<Value> = if parent_is_active {
-                    // Active parent → children from baseline, inject draft flags
-                    store
-                        .get(set_name)
-                        .map(|records| {
-                            records
-                                .iter()
-                                .filter(|r| {
-                                    r.get(child_fk).and_then(|v| v.as_str())
-                                        == Some(parent_key_value)
-                                })
-                                .map(|r| {
-                                    self.prepare_baseline_record(r, set_name, key_field, &changeset)
-                                })
-                                .collect()
-                        })
-                        .unwrap_or_default()
-                } else {
-                    // Draft parent → children from changeset
-                    changeset
-                        .as_ref()
-                        .and_then(|cs| cs.records.get(set_name))
-                        .map(|records| {
-                            records
-                                .iter()
-                                .filter(|r| {
-                                    r.get(child_fk).and_then(|v| v.as_str())
-                                        == Some(parent_key_value)
-                                })
-                                .map(|r| {
-                                    self.prepare_changeset_record(r, set_name, key_field, &store)
-                                })
-                                .collect()
-                        })
-                        .unwrap_or_default()
-                };
-                Ok(query_collection_from(
-                    entity,
-                    &child_records,
-                    &qs,
+            Some(parent_ref) => todo!(),
+            None => {
+                let records: Vec<Value> = store.get(set_name).cloned().unwrap_or_default();
+                let mut out = query_collection_from(entity, &records, &qs, &entities_snap, &store);
+                self.fallback_expand_collection(
+                    set_name,
+                    &mut out,
+                    &expand_refs,
                     &entities_snap,
                     &store,
-                ))
-            }
-            None => {
-                let key_field = entity.key_field();
-                // Root collection: return baseline records with draft flags injected
-                let records: Vec<Value> = store
-                    .get(set_name)
-                    .map(|data| {
-                        data.iter()
-                            .map(|r| {
-                                self.prepare_baseline_record(r, set_name, key_field, &changeset)
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default();
-
-                // Also include changeset-only records (newly created drafts)
-                let mut all_records = records;
-                if let Some(cs) = changeset.as_ref() {
-                    if let Some(cs_records) = cs.records.get(set_name) {
-                        for r in cs_records {
-                            let key_value = r.get(key_field).and_then(|v| v.as_str()).unwrap_or("");
-                            // Only add records that are NOT in baseline (new creates)
-                            let in_baseline = store
-                                .get(set_name)
-                                .map(|recs| find_record(recs, key_field, key_value).is_some())
-                                .unwrap_or(false);
-                            if !in_baseline {
-                                let rec =
-                                    self.prepare_changeset_record(r, set_name, key_field, &store);
-                                all_records.push(rec);
-                            }
-                        }
-                    }
-                }
-
-                if all_records.is_empty() {
-                    let mock = entity.mock_data();
-                    let mock_with_flags: Vec<Value> = mock
-                        .iter()
-                        .map(|r| self.prepare_baseline_record(r, set_name, key_field, &changeset))
-                        .collect();
-                    Ok(query_collection_from(
-                        entity,
-                        &mock_with_flags,
-                        &qs,
-                        &entities_snap,
-                        &store,
-                    ))
-                } else {
-                    Ok(query_collection_from(
-                        entity,
-                        &all_records,
-                        &qs,
-                        &entities_snap,
-                        &store,
-                    ))
-                }
+                    &resolved_entities,
+                );
+                Ok(out)
             }
         }
     }
@@ -784,115 +837,87 @@ impl DataStore for InMemoryDataStore {
                     .and_then(|np| np.foreign_key)
                     .unwrap_or(parent_key_field);
 
-                if parent_is_active {
-                    store
-                        .get(set_name)
-                        .map(|records| {
-                            records
-                                .iter()
-                                .filter(|r| {
-                                    r.get(child_fk).and_then(|v| v.as_str())
-                                        == Some(parent_key_value)
-                                })
-                                .count()
-                        })
-                        .unwrap_or(0)
-                } else {
-                    let changeset = self.changeset.read().unwrap();
-                    changeset
-                        .as_ref()
-                        .and_then(|cs| cs.records.get(set_name))
-                        .map(|records| {
-                            records
-                                .iter()
-                                .filter(|r| {
-                                    r.get(child_fk).and_then(|v| v.as_str())
-                                        == Some(parent_key_value)
-                                })
-                                .count()
-                        })
-                        .unwrap_or(0)
-                }
+                store
+                    .get(set_name)
+                    .map(|records| {
+                        records
+                            .iter()
+                            .filter(|r| {
+                                r.get(child_fk).and_then(|v| v.as_str()) == Some(parent_key_value)
+                            })
+                            .count()
+                    })
+                    .unwrap_or(0)
             }
             None => store.get(set_name).map(|v| v.len()).unwrap_or(0),
         }
     }
 
     #[tracing::instrument(skip(self, query, key))]
-    fn read_entity(
+    fn read_record(
         &self,
         set_name: &str,
         key: &EntityKey,
         query: &ODataQuery,
     ) -> Result<Value, StoreError> {
-        info!(".");
         let entity = self
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
-        let (key_value, is_active) = self.resolve_key(set_name, key)?;
-        let entities_snap = self.entities_snapshot();
+
+        let (key_value, _is_active) = self.resolve_key(set_name, key)?;
         let store = self.store.read().unwrap();
-        let changeset = self.changeset.read().unwrap();
-        let qs = query.to_query_map();
         let key_field = entity.key_field();
 
-        let mut result = if is_active {
-            // Read from baseline
-            let records = store.get(set_name).ok_or_else(|| {
-                StoreError::NotFound(format!("Entity set '{}' not found", set_name))
-            })?;
-            let record = find_record(records, key_field, key_value).ok_or_else(|| {
+        let records = store
+            .get(set_name)
+            .ok_or_else(|| StoreError::NotFound(format!("Data for '{}' not found", set_name)))?;
+        let mut record = find_record(records, key_field, key_value)
+            .ok_or_else(|| {
                 StoreError::NotFound(format!(
                     "Entity with {}='{}' not found",
                     key_field, key_value
                 ))
-            })?;
-            self.prepare_baseline_record(record, set_name, key_field, &changeset)
-        } else {
-            // Read from changeset
-            let cs = changeset
-                .as_ref()
-                .ok_or_else(|| StoreError::NotFound("No active changeset".to_string()))?;
-            let cs_records = cs.records.get(set_name).ok_or_else(|| {
-                StoreError::NotFound(format!("Entity set '{}' not in changeset", set_name))
-            })?;
-            let record = find_record(cs_records, key_field, key_value).ok_or_else(|| {
-                StoreError::NotFound(format!(
-                    "Entity with {}='{}' not found in changeset",
-                    key_field, key_value
-                ))
-            })?;
-            self.prepare_changeset_record(record, set_name, key_field, &store)
-        };
+            })
+            .cloned()?;
 
-        inject_odata_context(&mut result, set_name);
-
-        if let Some(expand_str) = qs.get("$expand") {
-            if !expand_str.is_empty() {
-                let nav_names: Vec<String> = query
-                    .expand
+        inject_odata_context(&mut record, set_name);
+        if !query.expand.is_empty() {
+            for x in query.expand.iter() {
+                if let Some(n) = entity
+                    .navigation_properties()
                     .iter()
-                    .map(|e| e.nav_property.clone())
-                    .collect();
-                let nav_refs: Vec<&str> = nav_names.iter().map(|s| s.as_str()).collect();
-                entity.expand_record(&mut result, &nav_refs, &entities_snap, &store);
-                if nav_refs.iter().any(|n| *n == "DraftAdministrativeData") {
-                    inject_draft_admin_data(&mut result, key_field);
-                }
-                if nav_refs.iter().any(|n| *n == "SiblingEntity") {
-                    inject_sibling_entity_from_changeset(
-                        &mut result,
-                        key_field,
-                        set_name,
-                        &store,
-                        &changeset,
-                    );
+                    .find(|n| n.name == x.nav_property)
+                {
+                    eprintln!("{:#?}", n);
+                    let target_set = format!("{}s", n.target_type);
+                    let records = store.get(&target_set).ok_or_else(|| {
+                        StoreError::NotFound(format!("Child data for '{}' not found", target_set))
+                    })?;
+                    let k = record
+                        .get(n.foreign_key.unwrap())
+                        .unwrap()
+                        .as_str()
+                        .unwrap();
+                    if let Some(r) = find_record(records, "ID", k) {
+                        record
+                            .as_object_mut()
+                            .unwrap()
+                            .insert(n.name.into(), r.clone());
+                    }
+                    else {
+                        todo!("Handle missing navigation target record for key '{}'", k);
+                    }
+                } else {
+                    return Err(StoreError::BadRequest(format!(
+                        "Navigation property '{}' not found on entity '{}'",
+                        x.nav_property, set_name
+                    )));
                 }
             }
         }
         // Resolve value_source text fields
-        resolve_value_texts(entity, &mut result, &store);
-        Ok(result)
+        resolve_value_texts(entity, &mut record, &store);
+        Ok(record.clone())
     }
 
     #[tracing::instrument(skip(self, data, parent))]
@@ -902,12 +927,9 @@ impl DataStore for InMemoryDataStore {
         data: &Value,
         parent: Option<&ParentKey>,
     ) -> Result<Value, StoreError> {
-        info!(".");
         let entity = self
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
-        let mut changeset = self.changeset.write().unwrap();
-        let cs = changeset.get_or_insert_with(ChangeSet::new);
 
         let mut new_record = data.clone();
         if let Some(obj) = new_record.as_object_mut() {
@@ -918,7 +940,7 @@ impl DataStore for InMemoryDataStore {
                         .key
                         .resolve_key_value(parent_entity.key_field())
                         .unwrap_or("");
-                    let child_fk = resolve_child_fk(parent_entity, entity);
+                    let child_fk = resolve_child_fk(parent_entity.clone(), entity.clone());
                     obj.entry(child_fk.to_string())
                         .or_insert_with(|| json!(parent_key_value));
                 }
@@ -926,6 +948,7 @@ impl DataStore for InMemoryDataStore {
 
             // Generate key if not present
             let key_field = entity.key_field();
+            eprintln!("key field: {}", key_field);
             if !obj.contains_key(key_field) {
                 obj.insert(key_field.to_string(), json!(Uuid::new_v4().to_string()));
             }
@@ -961,31 +984,22 @@ impl DataStore for InMemoryDataStore {
                         });
                 }
             }
+        } else {
+            return Err(StoreError::BadRequest(
+                "Invalid data format: expected JSON object".to_string(),
+            ));
         }
 
+        self.store
+            .write()
+            .unwrap()
+            .entry(set_name.to_string())
+            .or_default()
+            .push(new_record.clone());
         // Computed fields
         entity.compute_fields(&mut new_record);
 
-        // Auto-create child entities (also into changeset)
-        let children = entity.auto_create_children(&mut new_record);
-
-        let mut result = new_record.clone();
-        // Inject draft flags for response (new entity = no active counterpart)
-        inject_draft_flags(&mut result, false, false, false);
-        inject_odata_context(&mut result, set_name);
-
-        // Store in changeset
-        cs.records
-            .entry(set_name.to_string())
-            .or_default()
-            .push(new_record);
-
-        // Push auto-created children to changeset
-        for (child_set, child_data) in children {
-            cs.records.entry(child_set).or_default().push(child_data);
-        }
-
-        Ok(result)
+        Ok(new_record)
     }
 
     #[tracing::instrument(skip(self, patch, key))]
@@ -1036,42 +1050,13 @@ impl DataStore for InMemoryDataStore {
             }
             entity.compute_fields(record);
 
-            let changeset = self.changeset.read().unwrap();
-            let mut result = self.prepare_baseline_record(record, set_name, key_field, &changeset);
+            let mut result = record;
             inject_odata_context(&mut result, set_name);
-            Ok(result)
+            Ok(result.clone())
         } else {
-            // Patch changeset record
-            let mut changeset = self.changeset.write().unwrap();
-            let cs = changeset
-                .as_mut()
-                .ok_or_else(|| StoreError::NotFound("No active changeset".to_string()))?;
-            let cs_records = cs.records.get_mut(set_name).ok_or_else(|| {
-                StoreError::NotFound(format!("Entity set '{}' not in changeset", set_name))
-            })?;
-            let record = find_record_mut(cs_records, key_field, key_value).ok_or_else(|| {
-                StoreError::NotFound(format!(
-                    "Entity with {}='{}' not found in changeset",
-                    key_field, key_value
-                ))
-            })?;
-
-            if let Some(patch_obj) = patch.as_object() {
-                if let Some(rec_obj) = record.as_object_mut() {
-                    for (k, v) in patch_obj {
-                        if is_draft_field(k) || readonly_fields.contains(&k.as_str()) {
-                            continue;
-                        }
-                        rec_obj.insert(k.clone(), v.clone());
-                    }
-                }
-            }
-            entity.compute_fields(record);
-
-            let store = self.store.read().unwrap();
-            let mut result = self.prepare_changeset_record(record, set_name, key_field, &store);
-            inject_odata_context(&mut result, set_name);
-            Ok(result)
+            Err(StoreError::NotFound(
+                "Entity not found in changeset for patching".to_string(),
+            ))
         }
     }
 
@@ -1099,234 +1084,24 @@ impl DataStore for InMemoryDataStore {
             }
             Ok(())
         } else {
-            // Delete from changeset — discard entire changeset
-            let mut changeset = self.changeset.write().unwrap();
-            let found = changeset
-                .as_ref()
-                .map(|cs| cs.contains(set_name, entity.key_field(), key_value))
-                .unwrap_or(false);
-            if !found {
-                return Err(StoreError::NotFound(
-                    "Entity not found in changeset".to_string(),
-                ));
-            }
-            // Clear the entire changeset (discard all pending changes)
-            *changeset = None;
             Ok(())
         }
     }
 
-    #[tracing::instrument(skip(self, key))]
     fn draft_edit(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError> {
-        info!(".");
-        let entity = self
-            .find_entity(set_name)
-            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
-        let (key_value, _) = self.resolve_key(set_name, key)?;
-        info!("key: {}", key_value);
-        let entities_snap = self.entities_snapshot();
-        let store = self.store.read().unwrap();
-
-        let records = store
-            .get(set_name)
-            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
-
-        let active = find_record(records, entity.key_field(), key_value)
-            .ok_or_else(|| StoreError::NotFound("Active entity not found".to_string()))?
-            .clone();
-
-        let mut changeset = self.changeset.write().unwrap();
-        let cs = changeset.get_or_insert_with(ChangeSet::new);
-
-        // Copy entity into changeset
-        cs.records
-            .entry(set_name.to_string())
-            .or_default()
-            .push(active.clone());
-
-        // Recursively copy all composition children into changeset
-        self.copy_children_to_changeset(&store, cs, entity, key_value, &entities_snap);
-
-        info!(
-            "changeset records for {}: {}",
-            set_name,
-            cs.records.get(set_name).map(|v| v.len()).unwrap_or(0)
-        );
-
-        // Return record with draft flags
-        let mut result = active;
-        inject_draft_flags(&mut result, false, true, false);
-        inject_odata_context(&mut result, set_name);
-        info!(".");
-        Ok(result)
+        todo!()
     }
 
-    #[tracing::instrument(skip(self, key))]
     fn draft_activate(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError> {
-        info!(".");
-
-        let entity = self
-            .find_entity(set_name)
-            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
-        let (key_value, _) = self.resolve_key(set_name, key)?;
-        let key_field = entity.key_field();
-
-        info!(
-            "  [draftActivate] {}('{}') – merging entire changeset",
-            set_name, key_value
-        );
-
-        let mut changeset = self.changeset.write().unwrap();
-        let cs = changeset
-            .as_ref()
-            .ok_or_else(|| StoreError::NotFound("No active changeset to activate".to_string()))?;
-
-        // Verify the requested entity is in the changeset
-        if !cs.contains(set_name, key_field, key_value) {
-            return Err(StoreError::NotFound(
-                "Draft not found in changeset".to_string(),
-            ));
-        }
-
-        // Take ownership of the changeset
-        let cs = changeset.take().unwrap();
-        let mut store = self.store.write().unwrap();
-
-        // Merge all changeset records into baseline
-        for (cs_set_name, cs_records) in &cs.records {
-            let cs_entity = self.find_entity(cs_set_name);
-            let cs_key_field = cs_entity.map(|e| e.key_field()).unwrap_or("ID");
-
-            let baseline = store.entry(cs_set_name.clone()).or_default();
-            for cs_rec in cs_records {
-                let cs_key = cs_rec
-                    .get(cs_key_field)
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                // Upsert: overwrite existing or insert new
-                if let Some(existing) = find_record_mut(baseline, cs_key_field, cs_key) {
-                    *existing = cs_rec.clone();
-                } else {
-                    baseline.push(cs_rec.clone());
-                }
-            }
-        }
-
-        // Return the activated entity from baseline
-        let result = store
-            .get(set_name)
-            .and_then(|recs| find_record(recs, key_field, key_value))
-            .cloned();
-
-        info!(".");
-
-        match result {
-            Some(mut r) => {
-                inject_draft_flags(&mut r, true, false, false);
-                inject_odata_context(&mut r, set_name);
-                Ok(r)
-            }
-            None => Err(StoreError::NotFound(
-                "Activated entity not found".to_string(),
-            )),
-        }
+        todo!()
     }
 
-    #[tracing::instrument(skip(self, key))]
     fn draft_prepare(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError> {
-        info!(".");
-        let entity = self
-            .find_entity(set_name)
-            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
-        let (key_value, is_active) = self.resolve_key(set_name, key)?;
-        let key_field = entity.key_field();
-
-        info!(
-            "  [draftPrepare] {}('{}') is_active={}",
-            set_name, key_value, is_active
-        );
-
-        if is_active {
-            let store = self.store.read().unwrap();
-            let records = store.get(set_name).ok_or_else(|| {
-                StoreError::NotFound(format!("Entity set '{}' not found", set_name))
-            })?;
-            let record = find_record(records, key_field, key_value).ok_or_else(|| {
-                StoreError::NotFound("Entity not found for draftPrepare".to_string())
-            })?;
-            let changeset = self.changeset.read().unwrap();
-            let mut result = self.prepare_baseline_record(record, set_name, key_field, &changeset);
-            inject_odata_context(&mut result, set_name);
-            info!(".");
-            Ok(result)
-        } else {
-            let changeset = self.changeset.read().unwrap();
-            let cs = changeset
-                .as_ref()
-                .ok_or_else(|| StoreError::NotFound("No active changeset".to_string()))?;
-            let cs_records = cs
-                .records
-                .get(set_name)
-                .ok_or_else(|| StoreError::NotFound("Entity not found in changeset".to_string()))?;
-            let record = find_record(cs_records, key_field, key_value).ok_or_else(|| {
-                StoreError::NotFound("Entity not found for draftPrepare".to_string())
-            })?;
-            let store = self.store.read().unwrap();
-            let mut result = self.prepare_changeset_record(record, set_name, key_field, &store);
-            inject_odata_context(&mut result, set_name);
-            info!(".");
-            Ok(result)
-        }
+        todo!()
     }
 
-    #[tracing::instrument(skip(self))]
     fn read_sibling_entity(&self, set_name: &str, key: &EntityKey) -> Result<Value, StoreError> {
-        info!(".");
-        let entity = self
-            .find_entity(set_name)
-            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
-        let (key_value, is_active) = self.resolve_key(set_name, key)?;
-        let key_field = entity.key_field();
-
-        if is_active {
-            // Active entity → sibling is in changeset
-            let changeset = self.changeset.read().unwrap();
-            let cs = changeset
-                .as_ref()
-                .ok_or_else(|| StoreError::NotFound("No active changeset".to_string()))?;
-            let cs_records = cs
-                .records
-                .get(set_name)
-                .ok_or_else(|| StoreError::NotFound("No draft sibling found".to_string()))?;
-            let sibling = find_record(cs_records, key_field, key_value).ok_or_else(|| {
-                StoreError::NotFound(format!(
-                    "Sibling entity with {}='{}' not found in changeset",
-                    key_field, key_value
-                ))
-            })?;
-            let store = self.store.read().unwrap();
-            let mut result = self.prepare_changeset_record(sibling, set_name, key_field, &store);
-            inject_odata_context(&mut result, set_name);
-            info!(".");
-            Ok(result)
-        } else {
-            // Draft entity → sibling is in baseline
-            let store = self.store.read().unwrap();
-            let records = store
-                .get(set_name)
-                .ok_or_else(|| StoreError::NotFound("No active sibling found".to_string()))?;
-            let sibling = find_record(records, key_field, key_value).ok_or_else(|| {
-                StoreError::NotFound(format!(
-                    "Sibling entity with {}='{}' not found",
-                    key_field, key_value
-                ))
-            })?;
-            let changeset = self.changeset.read().unwrap();
-            let mut result = self.prepare_baseline_record(sibling, set_name, key_field, &changeset);
-            inject_odata_context(&mut result, set_name);
-            info!(".");
-            Ok(result)
-        }
+        todo!()
     }
 
     #[tracing::instrument(skip(self))]
@@ -1336,45 +1111,25 @@ impl DataStore for InMemoryDataStore {
         key: &EntityKey,
         property: &str,
     ) -> Result<Value, StoreError> {
-        info!(".");
         let entity = self
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
         let (key_value, is_active) = self.resolve_key(set_name, key)?;
         let key_field = entity.key_field();
 
-        let record = if is_active {
-            let store = self.store.read().unwrap();
-            let records = store.get(set_name).ok_or_else(|| {
-                StoreError::NotFound(format!("Entity set '{}' not found", set_name))
-            })?;
-            find_record(records, key_field, key_value)
-                .ok_or_else(|| {
-                    StoreError::NotFound(format!(
-                        "Entity with {}='{}' not found",
-                        key_field, key_value
-                    ))
-                })?
-                .clone()
-        } else {
-            let changeset = self.changeset.read().unwrap();
-            let cs = changeset
-                .as_ref()
-                .ok_or_else(|| StoreError::NotFound("No active changeset".to_string()))?;
-            let cs_records = cs.records.get(set_name).ok_or_else(|| {
-                StoreError::NotFound(format!("Entity set '{}' not in changeset", set_name))
-            })?;
-            find_record(cs_records, key_field, key_value)
-                .ok_or_else(|| {
-                    StoreError::NotFound(format!(
-                        "Entity with {}='{}' not found in changeset",
-                        key_field, key_value
-                    ))
-                })?
-                .clone()
-        };
+        let store = self.store.read().unwrap();
+        let records = store
+            .get(set_name)
+            .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
+        let record = find_record(records, key_field, key_value)
+            .ok_or_else(|| {
+                StoreError::NotFound(format!(
+                    "Entity with {}='{}' not found",
+                    key_field, key_value
+                ))
+            })?
+            .clone();
 
-        info!(".");
         record
             .get(property)
             .cloned()
@@ -1383,8 +1138,13 @@ impl DataStore for InMemoryDataStore {
 
     #[tracing::instrument(skip(self))]
     fn get_records(&self, set_name: &str) -> Vec<Value> {
+        let mut result = vec![];
         let store = self.store.read().unwrap();
-        store.get(set_name).cloned().unwrap_or_default()
+        if let Some(records) = store.get(set_name).cloned() {
+            result.extend(records);
+        }
+
+        result
     }
 
     #[tracing::instrument(skip(self))]
@@ -1406,13 +1166,13 @@ impl DataStore for InMemoryDataStore {
     }
 
     #[tracing::instrument(skip(self))]
-    fn update_entities(&self, new_entities: Vec<&'static dyn ODataEntity>) {
+    fn update_entities(&self, new_entities: &[ODataEntity]) {
         // Register any new entity sets that don't have data yet
         let mut store = self.store.write().unwrap();
-        for entity in &new_entities {
+        for entity in new_entities {
             let set_name = entity.set_name();
             if !store.contains_key(set_name) {
-                let records = load_entity_data(set_name, &self.data_dir, *entity);
+                let records = load_entity_data(set_name, &self.data_dir, entity);
                 info!(
                     "inserted entity {} with {} records",
                     set_name,
@@ -1422,10 +1182,14 @@ impl DataStore for InMemoryDataStore {
             }
         }
         drop(store);
-        *self.entities.write().unwrap() = new_entities;
+        *self.entities.write().unwrap() = new_entities.iter().cloned().collect::<Vec<_>>();
     }
 
-    fn seed_records(&self, set_name: &str, records: Vec<Value>) {
+    fn update_resolved_entities(&self, new_resolved_entities: Vec<ResolvedEntity>) {
+        *self.resolved_entities.write().unwrap() = new_resolved_entities;
+    }
+
+    fn initialize_records(&self, set_name: &str, records: Vec<Value>) {
         let mut store = self.store.write().unwrap();
         let collection = store.entry(set_name.to_string()).or_insert_with(Vec::new);
         for record in records {
@@ -1515,6 +1279,7 @@ pub(crate) fn inject_sibling_entity_from_changeset(
 }
 
 /// Injects SiblingEntity from flat record list (used by pg_store).
+#[cfg_attr(not(feature = "postgres"), allow(dead_code))]
 pub(crate) fn inject_sibling_entity(record: &mut Value, key_field: &str, records: &[Value]) {
     if let Some(obj) = record.as_object_mut() {
         let is_active = obj
@@ -1554,7 +1319,7 @@ pub(crate) fn inject_sibling_entity(record: &mut Value, key_field: &str, records
 /// For each field with value_source + text_path, looks up the Code in
 /// FieldValueListItems and sets the _text field to the Description.
 fn resolve_value_texts(
-    entity: &dyn ODataEntity,
+    entity: ODataEntity,
     record: &mut Value,
     store: &HashMap<String, Vec<Value>>,
 ) {
@@ -1593,20 +1358,21 @@ fn resolve_value_texts(
 /// Resolve the FK field name on the child that points back to the parent.
 /// Uses NavigationProperty.foreign_key if declared, otherwise falls back to parent key_field.
 pub(crate) fn resolve_child_fk<'a>(
-    parent_entity: &'a dyn ODataEntity,
-    child_entity: &'a dyn ODataEntity,
-) -> &'a str {
+    parent_entity: ODataEntity,
+    child_entity: ODataEntity,
+) -> String {
     parent_entity
         .navigation_properties()
         .iter()
         .find(|np| np.target_type == child_entity.type_name())
         .and_then(|np| np.foreign_key)
         .unwrap_or(parent_entity.key_field())
+        .to_string()
 }
 
 // ── Data loading ────────────────────────────────────────────────────
 
-fn load_entity_data(set_name: &str, data_dir: &Path, entity: &dyn ODataEntity) -> Vec<Value> {
+fn load_entity_data(set_name: &str, data_dir: &Path, entity: &ODataEntity) -> Vec<Value> {
     let json_path = data_dir.join(format!("{}.json", set_name));
     if json_path.is_file() {
         match std::fs::read_to_string(&json_path) {
@@ -1643,5 +1409,5 @@ fn load_entity_data(set_name: &str, data_dir: &Path, entity: &dyn ODataEntity) -
             json_path.display()
         );
     }
-    entity.mock_data()
+    entity.initial_data()
 }

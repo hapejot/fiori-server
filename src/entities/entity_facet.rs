@@ -1,14 +1,14 @@
 use serde_json::{json, Value};
 
 use crate::annotations::*;
-use crate::entity::ODataEntity;
+use crate::entity::ODataEntityImp;
 use crate::spec::{self, EntitySpec};
 use crate::NAMESPACE;
 
 #[derive(Debug)]
 pub struct EntityFacetEntity;
 
-impl ODataEntity for EntityFacetEntity {
+impl ODataEntityImp for EntityFacetEntity {
     fn set_name(&self) -> &'static str {
         "EntityFacets"
     }

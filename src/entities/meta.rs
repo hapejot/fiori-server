@@ -252,7 +252,7 @@ pub fn reconstruct_configs_from_data(data_dir: &Path) -> Vec<EntityConfig> {
             .unwrap_or_default()
     };
 
-    let all_relations = read_json("EntityRelationships");
+    let _all_relations = read_json("EntityRelationships");
     let all_configs = read_json("EntityConfigs");
     let all_fields = read_json("EntityFields");
     let all_facets = read_json("EntityFacets");
@@ -811,7 +811,7 @@ mod tests {
         fn count(&self, _: &str, _: &ODataQuery, _: Option<&ParentKey>) -> usize {
             0
         }
-        fn read_entity(&self, _: &str, _: &EntityKey, _: &ODataQuery) -> Result<Value, StoreError> {
+        fn read_record(&self, _: &str, _: &EntityKey, _: &ODataQuery) -> Result<Value, StoreError> {
             Err(StoreError::NotFound("mock".to_string()))
         }
         fn create_entity(
@@ -852,8 +852,8 @@ mod tests {
                 .unwrap_or_default()
         }
         fn commit(&self) {}
-        fn update_entities(&self, _: Vec<&'static dyn ODataEntity>) {}
-        fn seed_records(&self, _: &str, _: Vec<Value>) {}
+        fn update_entities(&self, _: &[ODataEntity]) {}
+        fn initialize_records(&self, _: &str, _: Vec<Value>) {}
     }
 
     // ── generate_meta_data Tests ────────────────────────────────

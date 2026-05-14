@@ -7,9 +7,9 @@
 
 use std::fs::File;
 
-use fake_fiori_server::builders::build_metadata_xml;
-use fake_fiori_server::model::resolved::*;
-use fake_fiori_server::spec::{MeasureKind, ValueListFilter};
+use simple_fiori_server::builders::build_metadata_xml;
+use simple_fiori_server::model::resolved::*;
+use simple_fiori_server::spec::{MeasureKind, ValueListFilter};
 
 // ══════════════════════════════════════════════════════════════
 //  Sample entities
@@ -306,13 +306,11 @@ fn order_entity() -> ResolvedEntity {
                 label: "General Information".into(),
                 id: "GeneralSection".into(),
                 field_group_qualifier: "General".into(),
-                field_group_label: "General".into(),
             },
             ResolvedFacetSection {
                 label: "Pricing".into(),
                 id: "PricingSection".into(),
                 field_group_qualifier: "Pricing".into(),
-                field_group_label: "Pricing".into(),
             },
         ],
         table_facets: vec![ResolvedTableFacet {
@@ -442,7 +440,6 @@ fn order_item_entity() -> ResolvedEntity {
             label: "Details".into(),
             id: "DetailsSection".into(),
             field_group_qualifier: "Details".into(),
-            field_group_label: "Details".into(),
         }],
         table_facets: vec![],
         selection_fields: vec![],
@@ -554,13 +551,11 @@ fn customer_entity() -> ResolvedEntity {
                 label: "General".into(),
                 id: "GeneralSection".into(),
                 field_group_qualifier: "General".into(),
-                field_group_label: "General".into(),
             },
             ResolvedFacetSection {
                 label: "Contact".into(),
                 id: "ContactSection".into(),
                 field_group_qualifier: "Contact".into(),
-                field_group_label: "Contact".into(),
             },
         ],
         table_facets: vec![],
@@ -949,10 +944,10 @@ fn data_point_stock_with_progress_visualization() {
 // ══════════════════════════════════════════════════════════════
 
 #[test]
-fn ui_facets_has_collection_facets() {
+fn ui_facets_has_reference_facets() {
     let xml = build_test_edmx();
     assert!(xml.contains("Term=\"UI.Facets\""));
-    assert!(xml.contains("Record Type=\"UI.CollectionFacet\""));
+    assert!(xml.contains("Record Type=\"UI.ReferenceFacet\""));
     assert!(xml.contains("Property=\"Label\" String=\"General Information\""));
     assert!(xml.contains("Property=\"Label\" String=\"Pricing\""));
 }

@@ -50,6 +50,7 @@ pub struct ValueListDef {
 }
 
 /// NavigationProperty definition in the EntityType.
+#[derive(Debug)]
 pub struct NavigationPropertyDef {
     pub name: &'static str,
     pub target_type: &'static str,

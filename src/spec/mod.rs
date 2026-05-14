@@ -1,12 +1,18 @@
-//! Layer 1: Application specification types
+//! Layer 1 of the metadata pipeline: application-level specifications.
 //!
-//! New types for the relationships-first architecture:
+//! This module declares the source model used to describe entities and their
+//! relationships before resolution:
+//! - [`crate::spec::entity_spec`] defines entities, fields, facets, and presentation hints.
+//! - [`crate::spec::relationship`] defines references and compositions between entity sets.
+//! - [`crate::spec::meta_package`] provides the built-in self-hosting meta model.
+//! - [`crate::spec::synth_records`] generates synthetic admin/config records from specs.
 pub mod entity_spec;
 pub mod meta_package;
 pub mod relationship;
 pub mod synth_records;
 
 pub mod package {
+  #[allow(dead_code)]
     pub struct Package {
         name: String,
     }
@@ -23,6 +29,7 @@ pub mod app {
 
     use crate::spec::package::Package;
 
+  #[allow(dead_code)]
     pub struct App {
         name: String,
         title: String,
@@ -93,6 +100,7 @@ pub mod app {
             )
         }
 
+        #[allow(dead_code)]
         pub(crate) fn set_name(&self) -> &str {
             todo!()
         }

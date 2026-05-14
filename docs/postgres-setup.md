@@ -1,6 +1,6 @@
 # PostgreSQL Backend Setup
 
-This guide explains how to run fake-fiori-server with PostgreSQL for persistent storage instead of in-memory JSON files.
+This guide explains how to run simple-fiori-server with PostgreSQL for persistent storage instead of in-memory JSON files.
 
 ## Prerequisites
 
@@ -46,14 +46,14 @@ cargo build --release --features postgres
 ### 4. Run the Server
 
 ```bash
-./target/release/fake-fiori-server
+./target/release/simple-fiori-server
 ```
 
 OR install globally:
 
 ```bash
 cargo install --path . --features postgres
-fake-fiori-server
+simple-fiori-server
 ```
 
 You should see:
@@ -95,7 +95,6 @@ CREATE TABLE entity_records (
 When an entity set is first accessed:
 1. Server checks if records exist in PostgreSQL
 2. If empty, seeds from `data/<EntitySet>.json`
-3. Falls back to `mock_data()` if no JSON file exists
 
 ### Draft Support
 

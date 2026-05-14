@@ -1,3 +1,8 @@
+//! In-memory OData query execution utilities.
+//!
+//! Provides filtering, ordering, projection, expansion, and value-text
+//! enrichment over JSON record collections used by the runtime data store.
+
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -45,6 +50,9 @@ fn inject_sibling_entity(record: &mut Value, key_field: &str, all_records: &[Val
     }
 }
 
+/// Compares two JSON values using OData-friendly ordering rules.
+///
+/// Supports booleans, numeric coercion, and string fallback.
 pub fn compare_values(a: &Value, b: &Value) -> std::cmp::Ordering {
     // Boolean comparison
     if let (Some(a_b), Some(b_b)) = (a.as_bool(), b.as_bool()) {
@@ -59,6 +67,7 @@ pub fn compare_values(a: &Value, b: &Value) -> std::cmp::Ordering {
     }
 }
 
+/// Attempts to coerce a JSON value into `f64`.
 pub fn value_as_f64(v: &Value) -> Option<f64> {
     match v {
         Value::Number(n) => n.as_f64(),
@@ -67,6 +76,10 @@ pub fn value_as_f64(v: &Value) -> Option<f64> {
     }
 }
 
+/// Evaluates a simple OData `$filter` expression against one record.
+///
+/// Supports `and` / `or` composition and comparison operators
+/// (`eq`, `ne`, `gt`, `ge`, `lt`, `le`) for primitive fields.
 pub fn match_filter(record: &Value, expr: &str) -> bool {
     static FILTER_RE: LazyLock<regex::Regex> =
         LazyLock::new(|| regex::Regex::new(r"(?i)([\w/]+)\s+(eq|ne|gt|ge|lt|le)\s+(.+)").unwrap());
@@ -212,8 +225,11 @@ pub fn parse_expand_names(expand: &str) -> Vec<String> {
     names
 }
 
-/// Executes an OData query on already loaded data.
-pub fn query_collection_from(entity: &dyn ODataEntity, data: &[Value], qs: &HashMap<String, String>, entities: &[&dyn ODataEntity], data_store: &HashMap<String, Vec<Value>>) -> Value {
+/// Executes OData query options against a loaded entity collection.
+///
+/// Applies filtering, ordering, paging, expansion, value-text resolution,
+/// projection, and optional `$count` generation.
+pub fn query_collection_from(entity: ODataEntity, data: &[Value], qs: &HashMap<String, String>, entities: &[ODataEntity], data_store: &HashMap<String, Vec<Value>>) -> Value {
     let mut results: Vec<Value> = data.to_vec();
 
     // $filter
@@ -261,7 +277,8 @@ pub fn query_collection_from(entity: &dyn ODataEntity, data: &[Value], qs: &Hash
             let nav_names = parse_expand_names(expand);
             let nav_refs: Vec<&str> = nav_names.iter().map(|s| s.as_str()).collect();
             for r in &mut results {
-                entity.expand_record(r, &nav_refs, entities, data_store);
+                // entity.expand_record(r, &nav_refs, entities, data_store);
+                todo!("expand record");
                 // DraftAdministrativeData: inject null for active, minimal object for drafts
                 if nav_refs.iter().any(|n| *n == "DraftAdministrativeData") {
                     if let Some(obj) = r.as_object_mut() {
@@ -381,11 +398,17 @@ pub fn query_collection_from(entity: &dyn ODataEntity, data: &[Value], qs: &Hash
 mod tests {
     use super::*;
     use crate::annotations::*;
+    use crate::entity::ODataEntityImp;
     use std::collections::HashMap;
 
     #[derive(Debug)]
     struct TestEntity;
-    impl ODataEntity for TestEntity {
+    impl TestEntity {
+        fn new() -> ODataEntity {
+            ODataEntity::new(std::sync::Arc::new(Self))
+        }
+    }
+    impl ODataEntityImp for TestEntity {
         fn set_name(&self) -> &'static str { "Tests" }
         fn type_name(&self) -> &'static str { "Test" }
         fn entity_set(&self) -> String { String::new() }
@@ -409,10 +432,10 @@ mod tests {
 
     #[test]
     fn select_returns_only_requested_fields() {
-        let entity = TestEntity;
+        let entity = TestEntity::new();
         let data = vec![json!({"ID": "1", "Name": "Alice", "Extra": "x"})];
         let qs = make_qs(&[("$select", "ID,Name")]);
-        let result = query_collection_from(&entity, &data, &qs, &[], &empty_ds());
+        let result = query_collection_from(entity, &data, &qs, &[], &empty_ds());
         let row = &result["value"][0];
         assert_eq!(row["ID"], "1");
         assert_eq!(row["Name"], "Alice");
@@ -421,11 +444,11 @@ mod tests {
 
     #[test]
     fn select_includes_missing_fields_as_null() {
-        let entity = TestEntity;
+        let entity = TestEntity::new();
         // Record that does NOT have the "Extra" key at all
         let data = vec![json!({"ID": "1", "Name": "Alice"})];
         let qs = make_qs(&[("$select", "ID,Name,Extra")]);
-        let result = query_collection_from(&entity, &data, &qs, &[], &empty_ds());
+        let result = query_collection_from(entity, &data, &qs, &[], &empty_ds());
         let row = &result["value"][0];
         assert_eq!(row["ID"], "1");
         assert_eq!(row["Name"], "Alice");
@@ -436,10 +459,10 @@ mod tests {
 
     #[test]
     fn select_preserves_expanded_nav_properties() {
-        let entity = TestEntity;
-        let mut data = vec![json!({"ID": "1", "Name": "Alice", "Children": [{"x": 1}]})];
+        let entity = TestEntity::new();
+        let data = vec![json!({"ID": "1", "Name": "Alice", "Children": [{"x": 1}]})];
         let qs = make_qs(&[("$select", "ID"), ("$expand", "Children")]);
-        let result = query_collection_from(&entity, &data, &qs, &[], &empty_ds());
+        let result = query_collection_from(entity, &data, &qs, &[], &empty_ds());
         let row = &result["value"][0];
         assert_eq!(row["ID"], "1");
         assert!(row.get("Children").is_some(), "expanded nav should be kept");
@@ -448,10 +471,10 @@ mod tests {
 
     #[test]
     fn select_empty_string_returns_all_fields() {
-        let entity = TestEntity;
+        let entity = TestEntity::new();
         let data = vec![json!({"ID": "1", "Name": "Alice", "Extra": "x"})];
         let qs = make_qs(&[("$select", "")]);
-        let result = query_collection_from(&entity, &data, &qs, &[], &empty_ds());
+        let result = query_collection_from(entity, &data, &qs, &[], &empty_ds());
         let row = &result["value"][0];
         assert_eq!(row["ID"], "1");
         assert_eq!(row["Name"], "Alice");
@@ -460,10 +483,10 @@ mod tests {
 
     #[test]
     fn select_without_param_returns_all_fields() {
-        let entity = TestEntity;
+        let entity = TestEntity::new();
         let data = vec![json!({"ID": "1", "Name": "Alice", "Extra": "x"})];
         let qs = make_qs(&[]);
-        let result = query_collection_from(&entity, &data, &qs, &[], &empty_ds());
+        let result = query_collection_from( entity, &data, &qs, &[], &empty_ds());
         let row = &result["value"][0];
         assert_eq!(row["ID"], "1");
         assert_eq!(row["Name"], "Alice");

@@ -202,7 +202,7 @@ pub fn generate_synth_records(
                 "SectionLabel": section.label,
                 "SectionId": section.id,
                 "FieldGroupQualifier": section.field_group_qualifier,
-                "FieldGroupLabel": section.field_group_label,
+                "FieldGroupLabel": section.label,
                 "FieldGroupFields": "",
                 "SortOrder": idx as u32,
             }));

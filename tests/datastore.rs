@@ -1,4 +1,11 @@
-use fake_fiori_server::{entities::EntityFacetEntity, entity::ODataEntity, runtime::data_store::*, spec::{FieldDef, NavigationPropertyDef}};
+use std::sync::Arc;
+
+use simple_fiori_server::{
+    entities::EntityFacetEntity,
+    entity::{ODataEntity, ODataEntityImp},
+    runtime::data_store::*,
+    spec::{FieldDef, NavigationPropertyDef},
+};
 use serde_json::{json, Value};
 
 // ── EntityKey tests ─────────────────────────────────────────────
@@ -200,14 +207,14 @@ fn store_error_display() {
 #[derive(Debug)]
 struct TestProductEntity;
 
-impl ODataEntity for TestProductEntity {
+impl ODataEntityImp for TestProductEntity {
     fn set_name(&self) -> &'static str {
         "Products"
     }
     fn type_name(&self) -> &'static str {
         "Product"
     }
-    fn mock_data(&self) -> Vec<Value> {
+    fn initial_data(&self) -> Vec<Value> {
         vec![
             json!({"ID": "P001", "ProductName": "Laptop", "Price": "1299.99", "Status": "A"}),
             json!({"ID": "P002", "ProductName": "Mouse", "Price": "29.99", "Status": "A"}),
@@ -307,14 +314,14 @@ impl ODataEntity for TestProductEntity {
 #[derive(Debug)]
 struct TestOrderEntity;
 
-impl ODataEntity for TestOrderEntity {
+impl ODataEntityImp for TestOrderEntity {
     fn set_name(&self) -> &'static str {
         "Orders"
     }
     fn type_name(&self) -> &'static str {
         "Order"
     }
-    fn mock_data(&self) -> Vec<Value> {
+    fn initial_data(&self) -> Vec<Value> {
         vec![
             json!({"ID": "O001", "CustomerName": "Alice", "TotalAmount": "100.00"}),
             json!({"ID": "O002", "CustomerName": "Bob", "TotalAmount": "200.00"}),
@@ -337,14 +344,14 @@ impl ODataEntity for TestOrderEntity {
 #[derive(Debug)]
 struct TestOrderItemEntity;
 
-impl ODataEntity for TestOrderItemEntity {
+impl ODataEntityImp for TestOrderItemEntity {
     fn set_name(&self) -> &'static str {
         "OrderItems"
     }
     fn type_name(&self) -> &'static str {
         "OrderItem"
     }
-    fn mock_data(&self) -> Vec<Value> {
+    fn initial_data(&self) -> Vec<Value> {
         vec![
             json!({"ID": "I001", "OrderID": "O001", "ProductID": "P001", "Quantity": 2}),
             json!({"ID": "I002", "OrderID": "O001", "ProductID": "P002", "Quantity": 5}),
@@ -362,11 +369,11 @@ impl ODataEntity for TestOrderItemEntity {
 fn create_test_store() -> InMemoryDataStore {
     // Use a temp dir that doesn't exist so it falls back to mock_data
     let data_dir = std::env::temp_dir().join("fiori-test-nonexistent");
-    let entities: Vec<&'static dyn ODataEntity> = vec![
-        &TestProductEntity,
-        &TestOrderEntity,
-        &TestOrderItemEntity,
-        &EntityFacetEntity,
+    let entities: Vec<ODataEntity> = vec![
+        ODataEntity::new(Arc::new(TestProductEntity)),
+        ODataEntity::new(Arc::new(TestOrderEntity)),
+        ODataEntity::new(Arc::new(TestOrderItemEntity)),
+        ODataEntity::new(Arc::new(EntityFacetEntity)),
     ];
     InMemoryDataStore::new(data_dir, entities)
 }
@@ -459,7 +466,7 @@ fn store_read_entity() {
     let store = create_test_store();
     let key = EntityKey::single("ID", "P001");
     let q = ODataQuery::empty();
-    let result = store.read_entity("Products", &key, &q).unwrap();
+    let result = store.read_record("Products", &key, &q).unwrap();
     assert_eq!(
         result.get("ProductName").unwrap().as_str().unwrap(),
         "Laptop"
@@ -472,7 +479,7 @@ fn store_read_entity_not_found() {
     let store = create_test_store();
     let key = EntityKey::single("ID", "P999");
     let q = ODataQuery::empty();
-    let result = store.read_entity("Products", &key, &q);
+    let result = store.read_record("Products", &key, &q);
     assert!(result.is_err());
 }
 
@@ -481,7 +488,7 @@ fn store_read_entity_parsed_key() {
     let store = create_test_store();
     let key = EntityKey::parse("'P002'");
     let q = ODataQuery::empty();
-    let result = store.read_entity("Products", &key, &q).unwrap();
+    let result = store.read_record("Products", &key, &q).unwrap();
     assert_eq!(
         result.get("ProductName").unwrap().as_str().unwrap(),
         "Mouse"
@@ -507,7 +514,7 @@ fn store_create_entity() {
     // But the new entity should be readable as a draft
     let new_key_value = result.get("ID").unwrap().as_str().unwrap();
     let draft_key = EntityKey::composite(&[("ID", new_key_value), ("IsActiveEntity", "false")]);
-    let draft = store.read_entity("Products", &draft_key, &q).unwrap();
+    let draft = store.read_record("Products", &draft_key, &q).unwrap();
     assert_eq!(
         draft.get("ProductName").unwrap().as_str().unwrap(),
         "Keyboard"
@@ -590,14 +597,14 @@ fn store_delete_entity() {
     // Draft should be gone, active should have HasDraftEntity=false
     let active_key = EntityKey::composite(&[("ID", "P001"), ("IsActiveEntity", "true")]);
     let q = ODataQuery::empty();
-    let active = store.read_entity("Products", &active_key, &q).unwrap();
+    let active = store.read_record("Products", &active_key, &q).unwrap();
     assert_eq!(
         active.get("HasDraftEntity").unwrap().as_bool().unwrap(),
         false
     );
 
     // Draft should not exist
-    let draft_read = store.read_entity("Products", &draft_key, &q);
+    let draft_read = store.read_record("Products", &draft_key, &q);
     assert!(draft_read.is_err());
 }
 
@@ -633,7 +640,7 @@ fn store_draft_edit_creates_draft() {
     // Active entity should now have HasDraftEntity=true
     let active_key = EntityKey::composite(&[("ID", "P001"), ("IsActiveEntity", "true")]);
     let q = ODataQuery::empty();
-    let active = store.read_entity("Products", &active_key, &q).unwrap();
+    let active = store.read_record("Products", &active_key, &q).unwrap();
     assert_eq!(
         active.get("HasDraftEntity").unwrap().as_bool().unwrap(),
         true
@@ -686,7 +693,7 @@ fn store_draft_activate_updates_active() {
 
     // Draft should be gone (no changeset)
     let q = ODataQuery::empty();
-    let draft_read = store.read_entity("Products", &draft_key, &q);
+    let draft_read = store.read_record("Products", &draft_key, &q);
     assert!(draft_read.is_err());
 }
 
@@ -854,7 +861,7 @@ fn store_commit_writes_json_files() {
     let tmp_dir = std::env::temp_dir().join(format!("fiori-test-{}", std::process::id()));
     std::fs::create_dir_all(&tmp_dir).unwrap();
 
-    let entities: Vec<&'static dyn ODataEntity> = vec![&TestProductEntity];
+    let entities: Vec<ODataEntity> = vec![ODataEntity::new(Arc::new(TestProductEntity))];
     let store = InMemoryDataStore::new(tmp_dir.clone(), entities);
 
     // Patch a product via draft lifecycle
@@ -905,7 +912,7 @@ fn store_full_draft_lifecycle() {
 
     // 1. Read active entity
     let key = EntityKey::single("ID", "P001");
-    let active = store.read_entity("Products", &key, &q).unwrap();
+    let active = store.read_record("Products", &key, &q).unwrap();
     assert_eq!(
         active.get("ProductName").unwrap().as_str().unwrap(),
         "Laptop"
@@ -947,14 +954,14 @@ fn store_full_draft_lifecycle() {
     );
 
     // 6. Verify active entity is updated
-    let final_read = store.read_entity("Products", &key, &q).unwrap();
+    let final_read = store.read_record("Products", &key, &q).unwrap();
     assert_eq!(
         final_read.get("ProductName").unwrap().as_str().unwrap(),
         "Laptop 2026"
     );
 
     // 7. Verify no draft remains
-    let draft_read = store.read_entity("Products", &draft_key, &q);
+    let draft_read = store.read_record("Products", &draft_key, &q);
     assert!(draft_read.is_err());
 }
 
@@ -977,7 +984,7 @@ fn store_draft_discard_lifecycle() {
     store.delete_entity("Products", &draft_key).unwrap();
 
     // 4. Active should be unchanged
-    let active = store.read_entity("Products", &key, &q).unwrap();
+    let active = store.read_record("Products", &key, &q).unwrap();
     assert_eq!(
         active.get("ProductName").unwrap().as_str().unwrap(),
         "Mouse"
@@ -993,14 +1000,14 @@ fn store_draft_discard_lifecycle() {
 #[derive(Debug)]
 struct TestValueListEntity;
 
-impl ODataEntity for TestValueListEntity {
+impl ODataEntityImp for TestValueListEntity {
     fn set_name(&self) -> &'static str {
         "FieldValueLists"
     }
     fn type_name(&self) -> &'static str {
         "FieldValueList"
     }
-    fn mock_data(&self) -> Vec<Value> {
+    fn initial_data(&self) -> Vec<Value> {
         vec![
             json!({"ID": "VL-001", "ListName": "EdmTypes", "Description": "OData EDM Datentypen"}),
             json!({"ID": "VL-002", "ListName": "StatusCodes", "Description": "Status"}),
@@ -1088,14 +1095,14 @@ impl ODataEntity for TestValueListEntity {
 #[derive(Debug)]
 struct TestValueListItemEntity;
 
-impl ODataEntity for TestValueListItemEntity {
+impl ODataEntityImp for TestValueListItemEntity {
     fn set_name(&self) -> &'static str {
         "FieldValueListItems"
     }
     fn type_name(&self) -> &'static str {
         "FieldValueListItem"
     }
-    fn mock_data(&self) -> Vec<Value> {
+    fn initial_data(&self) -> Vec<Value> {
         vec![
             json!({"ID": "ITEM-001", "ListID": "VL-001", "Code": "Edm.String",  "Description": "Zeichenkette", "SortOrder": 0}),
             json!({"ID": "ITEM-002", "ListID": "VL-001", "Code": "Edm.Int32",   "Description": "Ganzzahl",     "SortOrder": 1}),
@@ -1217,8 +1224,10 @@ impl ODataEntity for TestValueListItemEntity {
 
 fn create_vl_store() -> InMemoryDataStore {
     let data_dir = std::env::temp_dir().join("fiori-test-vl-nonexistent");
-    let entities: Vec<&'static dyn ODataEntity> =
-        vec![&TestValueListEntity, &TestValueListItemEntity];
+    let entities: Vec<ODataEntity> = vec![
+        ODataEntity::new(Arc::new(TestValueListEntity)),
+        ODataEntity::new(Arc::new(TestValueListItemEntity)),
+    ];
     InMemoryDataStore::new(data_dir, entities)
 }
 
@@ -1420,7 +1429,7 @@ fn vl_activate_with_patched_child() {
     // Read active child
     let active_item_key = EntityKey::composite(&[("ID", "ITEM-001"), ("IsActiveEntity", "true")]);
     let item = store
-        .read_entity("FieldValueListItems", &active_item_key, &q)
+        .read_record("FieldValueListItems", &active_item_key, &q)
         .unwrap();
     assert_eq!(
         item.get("Description").unwrap().as_str().unwrap(),

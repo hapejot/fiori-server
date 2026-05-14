@@ -1,4 +1,4 @@
-# Request Flow — fake-fiori-server
+# Request Flow — simple-fiori-server
 
 ## 1. Server Startup
 
@@ -14,7 +14,7 @@
    - `build_flp_html()` — generates the Fiori Launchpad HTML shell, injecting UI5 CDN URL, theme, language, company logo, and user profile into `sap-ushell-config`.
    - `build_apps_json()` — merges the static `webapp/config/apps.json` with dynamic tile entries from generic entities.
    - `build_cdm_site_json()` — generates the CDM 3.1 site document with applications, visualizations, pages/sections, and navigation inbounds.
-7. The `InMemoryDataStore` (or `PgDataStore` if the `postgres` feature is active and `DATABASE_URL` is set) is created. For each registered entity it loads records from `data/{EntitySet}.json`, falling back to `mock_data()` if the file is absent. Draft flags (`IsActiveEntity`, `HasActiveEntity`, `HasDraftEntity`) are injected into every record.
+7. The `InMemoryDataStore` (or `PgDataStore` if the `postgres` feature is active and `DATABASE_URL` is set) is created. For each registered entity it loads records from `data/{EntitySet}.json`, falling back to `inital_data()` if the file is absent. Draft flags (`IsActiveEntity`, `HasActiveEntity`, `HasDraftEntity`) are injected into every record.
 8. Axum routes are registered:
    - `GET /health` — health check.
    - `GET {base}/$metadata` — EDMX metadata.

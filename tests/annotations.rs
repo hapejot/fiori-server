@@ -1,7 +1,7 @@
 // Legacy annotation builder tests removed — covered by new pipeline tests in odata/
 
-use fake_fiori_server::{
-    model::{ResolvedEntity, ResolvedFacetSection, ResolvedPresentation, ResolvedProperty},
+use simple_fiori_server::{
+    model::{ResolvedEntity, ResolvedFacetSection, ResolvedProperty},
     odata::{self, xml_types::AnnContent},
 };
 
@@ -16,8 +16,10 @@ fn test_ui_ann_gen() {
         description_field: None,
         parent_set_name: None,
         properties: vec![
-            ResolvedProperty::new("ID".into(), "Edm.Guid".into()).with_field_group("fg1".into()),
-            ResolvedProperty::new("Name".into(), "Edm.String".into()),
+            ResolvedProperty::new("ID".into(), "Edm.Guid".into())
+                .with_field_group("fg1".into()),
+            ResolvedProperty::new("Name".into(), "Edm.String".into())
+                .with_field_group("fg1".into()),
         ],
         nav_properties: vec![],
         data_points: vec![],
@@ -40,12 +42,21 @@ fn test_ui_ann_gen() {
     let ui_ans = &ans[0];
     assert_eq!(ui_ans.target, "Service.TName");
     assert_eq!(6, ui_ans.annotations.len());
+    if let Some(x) = ui_ans.annotations.iter().find(|x| x.term == "UI.FieldGroup") {
+        println!("Field Group: {:?}", x.content);
+    }
+    else {
+        panic!("Missing UI.FieldGroup annotation");
+    }
     if let Some(x) = ui_ans.annotations.iter().find(|x| x.term == "UI.Facets") {
         println!("{:?}: {:?}", x.term, x.content);
         match &x.content {
             AnnContent::Collection(recs) => assert_eq!(recs.len(), 1, "Expected one Facet record"),
             _ => panic!("Expected collection content for UI.Facets"),
         }
+    }
+    else {
+        panic!("Missing UI.Facets annotation");
     }
     let ans2 = odata::annotations_gen::generate_annotations(&e);
     assert_eq!(ans.len(), 1);

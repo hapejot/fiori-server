@@ -51,6 +51,13 @@ pub fn generate_entity_type(e: &ResolvedEntity) -> String {
                 "<NavigationProperty Name=\"{}\" Type=\"Collection({NAMESPACE}.{})\"/>",
                 nav.name, nav.target_type
             ));
+        } else if let Some(fk) = &nav.foreign_key {
+            x.push_str(&format!(
+                "<NavigationProperty Name=\"{}\" Type=\"{NAMESPACE}.{}\">\
+                    <ReferentialConstraint Property=\"{}\" ReferencedProperty=\"ID\"/>\
+                </NavigationProperty>",
+                nav.name, nav.target_type, fk
+            ));
         } else {
             x.push_str(&format!(
                 "<NavigationProperty Name=\"{}\" Type=\"{NAMESPACE}.{}\"/>",

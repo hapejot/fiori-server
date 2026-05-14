@@ -106,14 +106,10 @@ pub fn generate_ui_annotations(e: &ResolvedEntity) -> Vec<Anns> {
     // ── Facets ──
     let mut facet_variants: Vec<FacetVariant> = Vec::new();
     for sec in &e.facet_sections {
-        facet_variants.push(FacetVariant::CollectionFacet {
+        facet_variants.push(FacetVariant::ReferenceFacet {
             id: sec.id.clone(),
             label: sec.label.clone(),
-            facets: vec![FacetVariant::ReferenceFacet {
-                id: format!("{}Ref", sec.field_group_qualifier),
-                label: sec.label.clone(),
-                target: format!("@UI.FieldGroup#{}", sec.field_group_qualifier),
-            }],
+            target: format!("@UI.FieldGroup#{}", sec.field_group_qualifier),
         });
     }
     for tf in &e.table_facets {
@@ -525,13 +521,11 @@ mod tests {
                     label: "General".into(),
                     id: "GeneralSection".into(),
                     field_group_qualifier: "General".into(),
-                    field_group_label: "General".into(),
                 },
                 ResolvedFacetSection {
                     label: "Pricing".into(),
                     id: "PricingSection".into(),
                     field_group_qualifier: "Pricing".into(),
-                    field_group_label: "Pricing".into(),
                 },
             ],
             table_facets: vec![],

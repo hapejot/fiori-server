@@ -3,14 +3,14 @@ use std::sync::LazyLock;
 use serde_json::{json, Value};
 
 use crate::annotations::*;
-use crate::entity::{value_list_id, ODataEntity};
+use crate::entity::{ODataEntity, ODataEntityImp, value_list_id};
 use crate::spec::{self, EntitySpec};
 use crate::NAMESPACE;
 
 #[derive(Debug)]
 pub struct EntityFieldEntity;
 
-impl ODataEntity for EntityFieldEntity {
+impl ODataEntityImp for EntityFieldEntity {
     fn set_name(&self) -> &'static str {
         "EntityFields"
     }
@@ -565,7 +565,7 @@ impl ODataEntity for EntityFieldEntity {
         &self,
         record: &mut Value,
         nav_properties: &[&str],
-        entities: &[&dyn ODataEntity],
+        entities: &[ODataEntity],
         data_store: &std::collections::HashMap<String, Vec<Value>>,
     ) {
         // _ValueList expansion: attach FieldValueList based on ValueSource (UUID)
@@ -581,7 +581,7 @@ impl ODataEntity for EntityFieldEntity {
                         let data = data_store
                             .get(entity.set_name())
                             .cloned()
-                            .unwrap_or_else(|| entity.mock_data());
+                            .unwrap_or_else(|| entity.initial_data());
                         let vl = data
                             .into_iter()
                             .find(|p| p.get("ID").and_then(|v| v.as_str()) == Some(&list_id));

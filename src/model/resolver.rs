@@ -20,7 +20,10 @@ use crate::spec::{
     AtomValueList, Condition, EntitySpec, FieldSpec, Relationship, ValueListFilter,
 };
 
-/// Resolve a set of entity specs and relationships into fully resolved entities.
+/// Resolves Layer 1 specs and relationships into Layer 2 resolved entities.
+///
+/// The output is ordered by first appearance of entity names across specs and
+/// relationships to keep generated metadata stable between runs.
 pub fn resolve(
     specs: &[EntitySpec],
     relationships: &[Relationship],
@@ -76,7 +79,10 @@ pub fn resolve(
         .collect()
 }
 
-/// Build a base ResolvedEntity from an EntitySpec (own fields only, no FK/nav yet).
+/// Builds a base resolved entity from an explicit spec.
+///
+/// This step maps only intrinsic fields and presentation metadata.
+/// Foreign keys and navigation properties are injected later from relationships.
 fn base_from_spec(spec: &EntitySpec) -> ResolvedEntity {
     let has_key = spec.fields.iter().any(|f| f.name() == "ID");
     let mut properties: Vec<ResolvedProperty> = if has_key {
@@ -148,7 +154,7 @@ fn base_from_spec(spec: &EntitySpec) -> ResolvedEntity {
     }
 }
 
-/// Auto-create an entity with just ID + Name when introduced by a relationship.
+/// Auto-creates an entity with `ID` and `Name` when only relationships reference it.
 fn auto_entity(set_name: &str) -> ResolvedEntity {
     let type_name = if set_name.ends_with('s') && set_name.len() > 1 {
         set_name[..set_name.len() - 1].to_string()
@@ -199,7 +205,7 @@ fn auto_entity(set_name: &str) -> ResolvedEntity {
     }
 }
 
-/// Create the standard key property (ID, Edm.Guid, computed + hidden).
+/// Creates the standard key property (`ID`, `Edm.Guid`, computed + hidden).
 fn key_property() -> ResolvedProperty {
     ResolvedProperty {
         name: "ID".into(),
@@ -219,7 +225,7 @@ fn key_property() -> ResolvedProperty {
     }
 }
 
-/// Convert a FieldSpec into a ResolvedProperty.
+/// Converts a Layer 1 field specification to a resolved property.
 fn resolve_field(field: &FieldSpec) -> ResolvedProperty {
     match field {
         FieldSpec::Atom {

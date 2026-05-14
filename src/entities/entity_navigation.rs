@@ -1,14 +1,14 @@
 use serde_json::{json, Value};
 
 use crate::annotations::*;
-use crate::entity::ODataEntity;
+use crate::entity::ODataEntityImp;
 use crate::spec::{self, EntitySpec};
 use crate::NAMESPACE;
 
 #[derive(Debug)]
 pub struct EntityNavigationEntity;
 
-impl ODataEntity for EntityNavigationEntity {
+impl ODataEntityImp for EntityNavigationEntity {
     fn set_name(&self) -> &'static str {
         "EntityNavigations"
     }

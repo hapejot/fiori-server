@@ -4,14 +4,14 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::annotations::*;
-use crate::entity::ODataEntity;
+use crate::entity::{ODataEntity, ODataEntityImp};
 use crate::spec::{self, EntitySpec};
 use crate::NAMESPACE;
 
 #[derive(Debug)]
 pub struct EntityConfigEntity;
 
-impl ODataEntity for EntityConfigEntity {
+impl ODataEntityImp for EntityConfigEntity {
     fn set_name(&self) -> &'static str {
         "EntityConfigs"
     }
@@ -457,7 +457,7 @@ impl ODataEntity for EntityConfigEntity {
         &self,
         record: &mut Value,
         nav_properties: &[&str],
-        _entities: &[&dyn ODataEntity],
+        _entities: &[ODataEntity],
         data_store: &HashMap<String, Vec<Value>>,
     ) {
         let parent_id = record

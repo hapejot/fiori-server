@@ -1,13 +1,12 @@
-// Layer 3: OData XML generation
-//
-// xml_types — PV/Rec/Ann/Anns serialization DSL (internal)
-// vocab — Typed SAP UI annotation vocabulary (public API)
-// entity_type — EntityType/EntitySet/DraftActions XML from ResolvedEntity
-// annotations_gen — UI + Capability annotations from ResolvedEntity
-// builders — re-exports from legacy `builders` module (metadata, manifest, CDM, FLP)
-//
-// Annotation builders (build_annotations, build_capabilities, etc.) remain in
-// the legacy `annotations` module for now and are re-exported from crate root.
+//! Layer 3 of the metadata pipeline: OData XML and annotation generation.
+//!
+//! This module consumes the resolved model and emits metadata artifacts:
+//! - [`crate::odata::entity_type`] generates `EntityType` / `EntitySet` / draft action XML.
+//! - [`crate::odata::annotations_gen`] generates UI and capability annotations.
+//! - [`crate::odata::xml_types`] contains the XML serialization DSL used by generators.
+//! - [`crate::odata::vocab`] provides typed SAP UI annotation vocabulary helpers.
+//! - [`crate::odata::builders`] re-exports legacy high-level builders (metadata/manifest/CDM/FLP).
+
 pub mod annotations_gen;
 pub mod entity_type;
 pub mod vocab;

@@ -13,7 +13,7 @@ use tracing::{error, info};
 use crate::app_state::AppState;
 use crate::runtime::data_store::{EntityKey, ODataQuery, ParentKey, StoreError};
 use crate::entity::ODataEntity;
-use crate::runtime::routing::{resolve_odata_path, ODataPath};
+use crate::runtime::routing::{resolve_odata_path_with_resolved, ODataPath};
 use crate::BASE_PATH;
 
 fn http_reason_phrase(status: u16) -> &'static str {
@@ -40,6 +40,7 @@ fn cors_headers() -> Vec<(&'static str, &'static str)> {
     ]
 }
 
+/// Returns a standard successful OData JSON response.
 pub fn json_response(data: Value) -> Response {
     let body = serde_json::to_string_pretty(&data).unwrap_or_default();
     let mut builder = Response::builder()
@@ -118,6 +119,7 @@ fn entity_key_from_routing(key: &super::routing::EntityKeyInfo) -> EntityKey {
     ])
 }
 
+/// Returns an OData-style JSON error payload with mapped HTTP status.
 pub fn error_response(code: u16, message: &str) -> Response {
     let body = json!({"error": {"code": code.to_string(), "message": message}});
     let status = match code {
@@ -146,6 +148,7 @@ fn options_response() -> Response {
     builder.body(Body::empty()).unwrap()
 }
 
+/// Serves the generated `$metadata` EDMX document.
 pub async fn metadata_handler(State(state): State<Arc<AppState>>) -> Response {
     let mut builder = Response::builder()
         .status(StatusCode::OK)
@@ -177,10 +180,11 @@ pub async fn collection_handler(State(state): State<Arc<AppState>>, uri: Uri) ->
     let path = uri.path();
     let query_str = uri.query().unwrap_or("");
     let entities = state.entities.read().unwrap();
-    let parsed = resolve_odata_path(path, &entities);
+    let resolved_entities = state.resolved_entities.read().unwrap();
+    let parsed = resolve_odata_path_with_resolved(path, &entities, &resolved_entities);
 
     info!("retrieve collection");
-    if let ODataPath::Collection { entity: e } = parsed.path {
+    if let ODataPath::Collection { entity: e } = &parsed.path {
         info!("entity {}", e.set_name());
         let set_name = match &parsed.path {
             ODataPath::Collection { entity } => entity.set_name(),
@@ -196,7 +200,8 @@ pub async fn collection_handler(State(state): State<Arc<AppState>>, uri: Uri) ->
 pub async fn count_handler(State(state): State<Arc<AppState>>, uri: Uri) -> Response {
     let path = uri.path();
     let entities = state.entities.read().unwrap();
-    let parsed = resolve_odata_path(path, &entities);
+    let resolved_entities = state.resolved_entities.read().unwrap();
+    let parsed = resolve_odata_path_with_resolved(path, &entities, &resolved_entities);
     if let ODataPath::Count { entity } = parsed.path {
         let query = ODataQuery::empty();
         let count = state.data_store.count(entity.set_name(), &query, None);
@@ -215,11 +220,12 @@ pub async fn count_handler(State(state): State<Arc<AppState>>, uri: Uri) -> Resp
 /// Generischer Single-Entity-Handler: /SetName('key') or /SetName(Key='val',IsActiveEntity=true)
 fn handle_single_entity(path: &str, query_str: &str, state: &AppState) -> Response {
     let entities = state.entities.read().unwrap();
-    let parsed = resolve_odata_path(path, &entities);
+    let resolved_entities = state.resolved_entities.read().unwrap();
+    let parsed = resolve_odata_path_with_resolved(path, &entities, &resolved_entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
         let entity_key = entity_key_from_routing(&key);
         let query = ODataQuery::parse(query_str);
-        return store_result_to_response(state.data_store.read_entity(
+        return store_result_to_response(state.data_store.read_record(
             entity.set_name(),
             &entity_key,
             &query,
@@ -231,7 +237,8 @@ fn handle_single_entity(path: &str, query_str: &str, state: &AppState) -> Respon
 /// Generic PATCH handler: /SetName(key) – updates fields in-memory.
 fn handle_patch_entity(path: &str, body: &Value, state: &AppState) -> Response {
     let entities = state.entities.read().unwrap();
-    let parsed = resolve_odata_path(path, &entities);
+    let resolved_entities = state.resolved_entities.read().unwrap();
+    let parsed = resolve_odata_path_with_resolved(path, &entities, &resolved_entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
         let entity_key = entity_key_from_routing(&key);
         return store_result_to_response(state.data_store.patch_entity(
@@ -247,7 +254,8 @@ fn handle_patch_entity(path: &str, body: &Value, state: &AppState) -> Response {
 /// DELETE /SetName(key) – removes draft and sets HasDraftEntity=false on the active entity.
 fn handle_delete_entity(path: &str, state: &AppState) -> Response {
     let entities = state.entities.read().unwrap();
-    let parsed = resolve_odata_path(path, &entities);
+    let resolved_entities = state.resolved_entities.read().unwrap();
+    let parsed = resolve_odata_path_with_resolved(path, &entities, &resolved_entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
         let entity_key = entity_key_from_routing(&key);
         return store_delete_to_response(
@@ -265,7 +273,8 @@ fn handle_draft_action(path: &str, state: &AppState) -> Response {
     // Extract action info under read lock, then release it so activate_config can write-lock
     let action_info = {
         let entities = state.entities.read().unwrap();
-        let parsed = resolve_odata_path(path, &entities);
+        let resolved_entities = state.resolved_entities.read().unwrap();
+        let parsed = resolve_odata_path_with_resolved(path, &entities, &resolved_entities);
         match parsed.path {
             ODataPath::Action {
                 entity,
@@ -328,6 +337,10 @@ fn handle_draft_action(path: &str, state: &AppState) -> Response {
 }
 
 // ── $batch handler ──────────────────────────────────────────────────
+/// Handles OData `$batch` requests, including nested change sets.
+///
+/// The implementation supports GET/POST/PATCH/DELETE operations and maps each
+/// embedded request to the same store-backed handler logic used outside batch.
 #[tracing::instrument(skip(state, headers, body))]
 pub async fn batch_handler(
     State(state): State<Arc<AppState>>,
@@ -543,7 +556,8 @@ fn extract_batch_body(segment: &str) -> String {
 #[tracing::instrument(skip(state, body))]
 fn handle_batch_patch(rel_url: &str, body: &str, state: &AppState) -> (u16, Value) {
     let entities = state.entities.read().unwrap();
-    let parsed = resolve_odata_path(rel_url, &entities);
+    let resolved_entities = state.resolved_entities.read().unwrap();
+    let parsed = resolve_odata_path_with_resolved(rel_url, &entities, &resolved_entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
         let patch_data: Value = serde_json::from_str(body).unwrap_or(json!({}));
         let entity_key = entity_key_from_routing(&key);
@@ -571,7 +585,8 @@ fn handle_batch_patch(rel_url: &str, body: &str, state: &AppState) -> (u16, Valu
 #[tracing::instrument(skip(state))]
 fn handle_batch_delete(rel_url: &str, state: &AppState) -> (u16, Value) {
     let entities = state.entities.read().unwrap();
-    let parsed = resolve_odata_path(rel_url, &entities);
+    let resolved_entities = state.resolved_entities.read().unwrap();
+    let parsed = resolve_odata_path_with_resolved(rel_url, &entities, &resolved_entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
         let entity_key = entity_key_from_routing(&key);
         match state
@@ -617,7 +632,8 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
 
     let target = {
         let entities = state.entities.read().unwrap();
-        let parsed = resolve_odata_path(rel_url, &entities);
+        let resolved_entities = state.resolved_entities.read().unwrap();
+        let parsed = resolve_odata_path_with_resolved(rel_url, &entities, &resolved_entities);
         match parsed.path {
             ODataPath::Action {
                 entity,
@@ -737,7 +753,8 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
 #[tracing::instrument(skip(state, rel_url))]
 fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
     let entities = state.entities.read().unwrap();
-    let parsed = resolve_odata_path(rel_url, &entities);
+    let resolved_entities = state.resolved_entities.read().unwrap();
+    let parsed = resolve_odata_path_with_resolved(rel_url, &entities, &resolved_entities);
     let query = ODataQuery::parse(&parsed.query_string);
 
     match parsed.path {
@@ -768,7 +785,7 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
             let entity_key = entity_key_from_routing(&key);
             match state
                 .data_store
-                .read_entity(entity.set_name(), &entity_key, &query)
+                .read_record(entity.set_name(), &entity_key, &query)
             {
                 Ok(val) => val,
                 Err(e) => json!({"error": {"code": "404", "message": format!("{}", e)}}),
@@ -824,9 +841,9 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
 /// Returns the child entries of a composition.
 #[tracing::instrument(skip(state))]
 fn handle_sub_collection(
-    parent_entity: &dyn ODataEntity,
+    parent_entity: ODataEntity,
     parent_key: &super::routing::EntityKeyInfo,
-    child_entity: &dyn ODataEntity,
+    child_entity: ODataEntity,
     query_str: &str,
     state: &AppState,
 ) -> Response {
@@ -1101,6 +1118,10 @@ fn favicon_response() -> Response {
         .unwrap()
 }
 
+/// Main fallback router handling entity paths and static web assets.
+///
+/// This function dispatches non-explicit routes to OData entity handlers,
+/// action handlers, sub-collection handlers, or static file serving.
 #[tracing::instrument(skip(state, body))]
 pub async fn catch_all(
     State(state): State<Arc<AppState>>,
@@ -1121,7 +1142,8 @@ pub async fn catch_all(
 
     // Resolve entity-related paths via the central router
     let entities = state.entities.read().unwrap();
-    let parsed = resolve_odata_path(path, &entities);
+    let resolved_entities = state.resolved_entities.read().unwrap();
+    let parsed = resolve_odata_path_with_resolved(path, &entities, &resolved_entities);
     match parsed.path {
         ODataPath::Entity { .. } => match method {
             Method::GET => handle_single_entity(path, query, &state),

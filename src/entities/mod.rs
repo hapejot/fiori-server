@@ -1,3 +1,9 @@
+//! Built-in entity implementations and generic/meta reconstruction helpers.
+//!
+//! This module exposes concrete meta-table entities used by the admin/config
+//! layer, plus helpers for reconstructing and generating runtime generic
+//! entities from persisted configuration records.
+
 pub mod generic;
 pub mod meta;
 mod entity_config;
