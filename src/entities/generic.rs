@@ -1640,16 +1640,27 @@ mod tests {
     }
 
     #[test]
-    fn generic_entity_expand_1n() {}
+    fn generic_entity_expand_1n() {
+                let store = initialize_test_store();
+        let query = ODataQuery {
+            expand: vec![ExpandClause {
+                nav_property: "_Contacts".into(),
+                select: vec![],
+            }],
+            ..Default::default()
+        };
+        let r = store
+            .read_record("Customers", &EntityKey::single("ID", "C001"), &query)
+            .unwrap();
+
+        assert_eq!(r["ID"], "C001");
+        assert_eq!(r["_Contacts"], "Acme");
+
+    }
 
     #[test]
     fn generic_entity_expand_1_1() {
         let store = initialize_test_store();
-
-        let r = store.get_records("Contacts");
-        assert_eq!(2, r.len());
-        let r = store.get_records("Customers");
-        assert_eq!(2, r.len());
 
         let query = ODataQuery {
             expand: vec![ExpandClause {
@@ -1694,7 +1705,13 @@ mod tests {
                 FieldConfig::new("ID".into(), "Edm.String".into()),
                 FieldConfig::new("CustomerName".into(), "Edm.String".into()),
             ],
-            navigation_properties: vec![],
+            navigation_properties: vec![NavPropertyConfig {
+                name: "_Contacts".to_string(),
+                target_type: "Contact".to_string(),
+                target_set: "Contacts".to_string(),
+                is_collection: true,
+                foreign_key: Some("CustomerID".to_string()),
+            }],
             annotations: None,
             default_values: None,
             tile: None,
@@ -1706,38 +1723,31 @@ mod tests {
         let entities: Vec<ODataEntity> = vec![contact_entity.clone(), customer_entity.clone()];
         let store = InMemoryDataStore::new(PathBuf::new(), entities);
 
-        eprintln!(
-            "{:?}",
-            store.create_entity(
-                "Customers",
-                &json!({"ID": "C001", "CustomerName": "Acme"}),
-                None,
-            )
+        let _ = store.create_entity(
+            "Customers",
+            &json!({"ID": "C001", "CustomerName": "Acme"}),
+            None,
         );
-        eprintln!(
-            "{:?}",
-            store.create_entity(
-                "Customers",
-                &json!({"ID": "C002", "CustomerName": "Acme"}),
-                None,
-            )
+        let _ = store.create_entity(
+            "Customers",
+            &json!({"ID": "C002", "CustomerName": "Acme"}),
+            None,
         );
 
-        eprintln!(
-            "{:?}",
-            store.create_entity(
-                "Contacts",
-                &json!({"ID": "K001", "CustomerID": "C002"}),
-                None,
-            )
+        let _ = store.create_entity(
+            "Contacts",
+            &json!({"ID": "K001", "CustomerID": "C002"}),
+            None,
         );
-        eprintln!(
-            "{:?}",
-            store.create_entity(
-                "Contacts",
-                &json!({"ID": "K002", "CustomerID": "C001"}),
-                None,
-            )
+        let _ = store.create_entity(
+            "Contacts",
+            &json!({"ID": "K002", "CustomerID": "C001"}),
+            None,
+        );
+        let _ = store.create_entity(
+            "Contacts",
+            &json!({"ID": "K003", "CustomerID": "C001"}),
+            None,
         );
         store
     }

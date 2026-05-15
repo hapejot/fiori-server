@@ -599,10 +599,17 @@ impl InMemoryDataStore {
         }
     }
 
-    #[tracing::instrument(skip(self))]
     fn find_entity(&self, set_name: &str) -> Option<ODataEntity> {
         for x in self.entities.read().unwrap().iter() {
             if x.set_name() == set_name {
+                return Some(x.clone());
+            }
+        }
+        None
+    }
+    fn find_entity_by_type(&self, type_name: &str) -> Option<ODataEntity> {
+        for x in self.entities.read().unwrap().iter() {
+            if x.type_name() == type_name {
                 return Some(x.clone());
             }
         }
@@ -881,6 +888,7 @@ impl DataStore for InMemoryDataStore {
             .cloned()?;
 
         inject_odata_context(&mut record, set_name);
+
         if !query.expand.is_empty() {
             for x in query.expand.iter() {
                 if let Some(n) = entity
@@ -888,24 +896,32 @@ impl DataStore for InMemoryDataStore {
                     .iter()
                     .find(|n| n.name == x.nav_property)
                 {
-                    eprintln!("{:#?}", n);
-                    let target_set = format!("{}s", n.target_type);
-                    let records = store.get(&target_set).ok_or_else(|| {
-                        StoreError::NotFound(format!("Child data for '{}' not found", target_set))
+                    let child_entity =
+                        self.find_entity_by_type(n.target_type).ok_or_else(|| {
+                            StoreError::NotFound(format!("Entity set '{}' not found", set_name))
+                        })?;
+                    let target_set = child_entity.set_name();
+                    let records = store.get(target_set).ok_or_else(|| {
+                        StoreError::NotFound(format!(
+                            "Entity set '{}' not found for child data",
+                            target_set
+                        ))
                     })?;
-                    let k = record
-                        .get(n.foreign_key.unwrap())
-                        .unwrap()
-                        .as_str()
-                        .unwrap();
-                    if let Some(r) = find_record(records, "ID", k) {
-                        record
-                            .as_object_mut()
+                    if n.is_collection {
+                    } else {
+                        let k = record
+                            .get(n.foreign_key.unwrap())
                             .unwrap()
-                            .insert(n.name.into(), r.clone());
-                    }
-                    else {
-                        todo!("Handle missing navigation target record for key '{}'", k);
+                            .as_str()
+                            .unwrap();
+                        if let Some(r) = find_record(records, "ID", k) {
+                            record
+                                .as_object_mut()
+                                .unwrap()
+                                .insert(n.name.into(), r.clone());
+                        } else {
+                            todo!("Handle missing navigation target record for key '{}'", k);
+                        }
                     }
                 } else {
                     return Err(StoreError::BadRequest(format!(
