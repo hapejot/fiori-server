@@ -1,1 +1,2 @@
- cargo test --package simple-fiori-server --lib -- entities::generic::tests::generic_entity_expand_1_1 --nocapture
+ cargo test --package simple-fiori-server --lib -- entities::generic::tests::generic_entity_expand_1_1 entities::generic::tests::generic_entity_expand_1n --nocapture
+ # cargo test --package simple-fiori-server --lib -- entities::generic::tests --nocapture
