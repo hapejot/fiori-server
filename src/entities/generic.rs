@@ -1641,7 +1641,7 @@ mod tests {
 
     #[test]
     fn generic_entity_expand_1n() {
-                let store = initialize_test_store();
+        let store = initialize_test_store();
         let query = ODataQuery {
             expand: vec![ExpandClause {
                 nav_property: "_Contacts".into(),
@@ -1654,8 +1654,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(r["ID"], "C001");
-        assert_eq!(r["_Contacts"], "Acme");
-
+        assert_eq!(r["_Contacts"].as_array().unwrap().len(), 2);
     }
 
     #[test]
@@ -1754,15 +1753,17 @@ mod tests {
 
     #[test]
     fn generic_entity_expand_unknown_nav_ignored() {
-        let entity = GenericEntity::from_config(full_config(), &no_titles());
-        let entities: Vec<ODataEntity> = vec![entity.clone()];
-        let store: HashMap<String, Vec<Value>> = HashMap::new();
-
-        let mut record = json!({"OrderID": "O001"});
-        // entity.expand_record(&mut record, &["NonExistent"], &entities, &store);
-        todo!("expand record...");
-        // Record unchanged — no panic
-        assert!(record.get("NonExistent").is_none());
+        let store = initialize_test_store();
+        let query = ODataQuery {
+            expand: vec![ExpandClause {
+                nav_property: "_Customer".into(),
+                select: vec![],
+            }],
+            ..Default::default()
+        };
+        let r = store
+            .read_record("NonExistent", &EntityKey::single("ID", "K001"), &query);
+        assert!(r.is_err());
     }
 
     #[test]

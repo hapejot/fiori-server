@@ -9,7 +9,6 @@ use uuid::Uuid;
 
 use crate::entity::ODataEntity;
 use crate::model::ResolvedEntity;
-use crate::runtime::query::query_collection_from;
 use crate::BASE_PATH;
 
 /// Parent context for sub-collection / deep navigation.
@@ -33,6 +32,15 @@ fn find_record<'a>(records: &'a [Value], key_field: &str, key_value: &str) -> Op
     records
         .iter()
         .find(|r| r.get(key_field).and_then(|v| v.as_str()) == Some(key_value))
+}
+
+/// Find a list of records by field value.
+fn find_all_record<'a>(records: &'a [Value], field: &str, value: &str) -> Vec<Value> {
+    records
+        .iter()
+        .filter(|r| r.get(field).and_then(|v| v.as_str()) == Some(value))
+        .cloned()
+        .collect()
 }
 
 /// Find a record mutably by key field value.
@@ -770,9 +778,19 @@ impl InMemoryDataStore {
         self.entities.try_read().unwrap().clone()
     }
 
-    pub(crate) fn expand_record(&self, r: &mut Value, arg: &str) -> Result<(), StoreError> {
+    pub fn expand_record(&self, r: &mut Value, arg: &str) -> Result<(), StoreError> {
         eprintln!("expand record: {:#?}", r);
         Ok(())
+    }
+
+    fn query_collection_from(&self, query: &ODataQuery) -> Value {
+        if let Some(ref filter) = query.filter {
+            info!("filter: {}", filter);
+            let x = odata_params::filters::parse_str(filter);
+            info!("parsed filter: {:#?}", x);
+        }
+        todo!("Implement {query:?}");
+        json!([])
     }
 }
 
@@ -790,7 +808,7 @@ impl DataStore for InMemoryDataStore {
         let entities_snap = self.entities_snapshot();
         let resolved_entities = self.resolved_entities_snapshot();
         let store = self.store.read().unwrap();
-        let qs = query.to_query_map();
+        // let qs = query.to_query_map();
         let expand_names: Vec<String> = query
             .expand
             .iter()
@@ -801,7 +819,7 @@ impl DataStore for InMemoryDataStore {
             Some(parent_ref) => todo!(),
             None => {
                 let records: Vec<Value> = store.get(set_name).cloned().unwrap_or_default();
-                let mut out = query_collection_from(entity, &records, &qs, &entities_snap, &store);
+                let mut out = self.query_collection_from(query);
                 self.fallback_expand_collection(
                     set_name,
                     &mut out,
@@ -908,6 +926,11 @@ impl DataStore for InMemoryDataStore {
                         ))
                     })?;
                     if n.is_collection {
+                        let rows = find_all_record(records, n.foreign_key.unwrap(), key_value);
+                        record
+                            .as_object_mut()
+                            .unwrap()
+                            .insert(n.name.into(), rows.into());
                     } else {
                         let k = record
                             .get(n.foreign_key.unwrap())
@@ -948,6 +971,7 @@ impl DataStore for InMemoryDataStore {
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
 
         let mut new_record = data.clone();
+
         if let Some(obj) = new_record.as_object_mut() {
             // Inject parent key if sub-item
             if let Some(parent_ref) = parent {
@@ -964,7 +988,6 @@ impl DataStore for InMemoryDataStore {
 
             // Generate key if not present
             let key_field = entity.key_field();
-            eprintln!("key field: {}", key_field);
             if !obj.contains_key(key_field) {
                 obj.insert(key_field.to_string(), json!(Uuid::new_v4().to_string()));
             }
@@ -1404,7 +1427,7 @@ fn load_entity_data(set_name: &str, data_dir: &Path, entity: &ODataEntity) -> Ve
                 }
                 Err(e) => {
                     eprintln!(
-                        "  WARNING: {} is not a valid JSON array: {} – falling back to mock_data()",
+                        "  WARNING: {} is not a valid JSON array: {} - falling back to mock_data()",
                         json_path.display(),
                         e
                     );
@@ -1412,7 +1435,7 @@ fn load_entity_data(set_name: &str, data_dir: &Path, entity: &ODataEntity) -> Ve
             },
             Err(e) => {
                 eprintln!(
-                    "  WARNING: Could not read {}: {} – falling back to mock_data()",
+                    "  WARNING: Could not read {}: {} falling back to mock_data()",
                     json_path.display(),
                     e
                 );
