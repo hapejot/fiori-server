@@ -11,8 +11,9 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 use crate::app_state::AppState;
-use crate::runtime::data_store::{EntityKey, ODataQuery, ParentKey, StoreError};
 use crate::entity::ODataEntity;
+use crate::odata::path_parser::parse_odata_resource_path;
+use crate::runtime::data_store::{EntityKey, ODataQuery, ParentKey, StoreError};
 use crate::runtime::routing::{resolve_odata_path_with_resolved, ODataPath};
 use crate::BASE_PATH;
 
@@ -78,9 +79,17 @@ fn store_error_to_response(err: StoreError) -> Response {
     }
 }
 
-fn store_result_to_response(result: Result<Value, StoreError>) -> Response {
+fn store_result_to_response(result: Result<Vec<Value>, StoreError>) -> Response {
     match result {
-        Ok(val) => json_response(val),
+        Ok(val) => json_response(json!({"value": val, 
+                                                        "@odata.count": val.len()})),
+        Err(e) => store_error_to_response(e),
+    }
+}
+
+fn store_result_to_response_single(result: Result<Value, StoreError>) -> Response {
+    match result {
+        Ok(val) => json_response(json!({"value": val})),
         Err(e) => store_error_to_response(e),
     }
 }
@@ -176,22 +185,28 @@ pub async fn service_document(State(state): State<Arc<AppState>>) -> Response {
 }
 
 /// Generic collection handler for any EntitySet.
-pub async fn collection_handler(State(state): State<Arc<AppState>>, uri: Uri) -> Response {
-    let path = uri.path();
+pub async fn collection_handler(
+    axum::extract::Path(path): axum::extract::Path<String>,
+    State(state): State<Arc<AppState>>,
+    uri: Uri,
+) -> Response {
+    info!(path, ?uri, uri_path=?uri.path(), query=?uri.query(), "collection_handler");
+
+    let resource_path = parse_odata_resource_path(uri.path()).unwrap();
     let query_str = uri.query().unwrap_or("");
     let entities = state.entities.read().unwrap();
-    let resolved_entities = state.resolved_entities.read().unwrap();
-    let parsed = resolve_odata_path_with_resolved(path, &entities, &resolved_entities);
 
-    info!("retrieve collection");
-    if let ODataPath::Collection { entity: e } = &parsed.path {
-        info!("entity {}", e.set_name());
-        let set_name = match &parsed.path {
-            ODataPath::Collection { entity } => entity.set_name(),
-            _ => return error_response(404, "Entity set not found"),
-        };
-        let query = ODataQuery::parse(query_str);
-        return store_result_to_response(state.data_store.get_collection(set_name, &query, None));
+    if let Some(e) = resource_path.iter().nth(0) {
+        match (e) {
+            crate::odata::path_parser::ODataPathSegment::EntitySet(set_name) => {
+                let query = ODataQuery::parse(query_str);
+                return store_result_to_response(
+                    state.data_store.get_collection(set_name, &query, None),
+                );
+            }
+            crate::odata::path_parser::ODataPathSegment::KeyPredicate(_, items) => todo!(),
+            crate::odata::path_parser::ODataPathSegment::NavigationProperty(_) => todo!(),
+        }
     }
     error_response(404, "Entity set not found")
 }
@@ -225,7 +240,7 @@ fn handle_single_entity(path: &str, query_str: &str, state: &AppState) -> Respon
     if let ODataPath::Entity { entity, key } = parsed.path {
         let entity_key = entity_key_from_routing(&key);
         let query = ODataQuery::parse(query_str);
-        return store_result_to_response(state.data_store.read_record(
+        return store_result_to_response_single(state.data_store.read_record(
             entity.set_name(),
             &entity_key,
             &query,
@@ -241,7 +256,7 @@ fn handle_patch_entity(path: &str, body: &Value, state: &AppState) -> Response {
     let parsed = resolve_odata_path_with_resolved(path, &entities, &resolved_entities);
     if let ODataPath::Entity { entity, key } = parsed.path {
         let entity_key = entity_key_from_routing(&key);
-        return store_result_to_response(state.data_store.patch_entity(
+        return store_result_to_response_single(state.data_store.patch_entity(
             entity.set_name(),
             &entity_key,
             body,
@@ -299,7 +314,7 @@ fn handle_draft_action(path: &str, state: &AppState) -> Response {
 
     match action.as_str() {
         "draftEdit" => {
-            store_result_to_response(state.data_store.draft_edit(&set_name, &entity_key))
+            store_result_to_response_single(state.data_store.draft_edit(&set_name, &entity_key))
         }
         "draftActivate" => {
             let result = state.data_store.draft_activate(&set_name, &entity_key);
@@ -307,10 +322,10 @@ fn handle_draft_action(path: &str, state: &AppState) -> Response {
                 info!("  [action] draftActivate succeeded, calling commit()");
                 state.data_store.commit();
             }
-            store_result_to_response(result)
+            store_result_to_response_single(result)
         }
         "draftPrepare" => {
-            store_result_to_response(state.data_store.draft_prepare(&set_name, &entity_key))
+            store_result_to_response_single(state.data_store.draft_prepare(&set_name, &entity_key))
         }
         "publishConfig" => {
             match crate::entities::meta::publish_entity_config(
@@ -773,7 +788,7 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
                 .data_store
                 .get_collection(entity.set_name(), &query, None)
             {
-                Ok(val) => val,
+                Ok(val) => json!({"value": val, "@odata.count": val.len()}),
                 Err(e) => json!({"error": {"code": "404", "message": format!("{}", e)}}),
             }
         }
@@ -805,7 +820,7 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
                 .data_store
                 .get_collection(child_entity.set_name(), &query, Some(&parent))
             {
-                Ok(val) => val,
+                Ok(val) => json!({"value": val, "@odata.count": val.len()}),
                 Err(e) => json!({"error": {"code": "404", "message": format!("{}", e)}}),
             }
         }
@@ -1129,6 +1144,7 @@ pub async fn catch_all(
     uri: Uri,
     body: Bytes,
 ) -> Response {
+    info!(method=?method, uri=?uri, "request");
     let path = uri.path();
     let query = uri.query().unwrap_or("");
 
@@ -1205,7 +1221,7 @@ pub async fn catch_all(
         } => {
             let entity_key = entity_key_from_routing(&key);
             if property == "SiblingEntity" {
-                store_result_to_response(
+                store_result_to_response_single(
                     state
                         .data_store
                         .read_sibling_entity(entity.set_name(), &entity_key),

@@ -309,7 +309,6 @@ impl AppStateBuilder {
         let data_store = self.data_store.unwrap_or_else(|| {
             Box::new(InMemoryDataStore::new(data_dir.clone(), entities.clone()))
         });
-        data_store.update_resolved_entities(resolved_entities.clone());
 
         // Inject synthetic records for builtin (meta-package) entities
         let meta_specs: Vec<_> = specs

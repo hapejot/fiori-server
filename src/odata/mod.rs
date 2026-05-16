@@ -12,6 +12,7 @@ pub mod entity_type;
 pub mod vocab;
 pub mod xml_types;
 pub mod builders;
+pub mod path_parser;
 
 pub use annotations_gen::*;
 pub use entity_type::*;

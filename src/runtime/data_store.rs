@@ -3,7 +3,8 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
-use serde_json::{json, Value};
+use odata_params::filters::{Expr, Value as FilterValue};
+use serde_json::{json, Map, Value};
 use tracing::info;
 use uuid::Uuid;
 
@@ -188,10 +189,118 @@ impl EntityKey {
 
 // ── ODataQuery ──────────────────────────────────────────────────────
 
+#[derive(Debug, Clone, Default)]
+pub struct ODataFilterExpression {
+    raw: String,
+    ast: Arc<RwLock<Option<Expr>>>,
+}
+
+impl ODataFilterExpression {
+    pub fn new(raw: &str) -> Self {
+        Self {
+            raw: raw.trim().to_string(),
+            ast: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            raw: String::new(),
+            ast: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.raw.is_empty()
+    }
+
+    pub fn try_parse(&self) -> bool {
+        if self.is_empty() {
+            return true;
+        }
+        match odata_params::filters::parse_str(self.raw.as_str()) {
+            Ok(ast) => {
+                let mut lock = self.ast.write().unwrap();
+                *lock = Some(ast);
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
+    pub fn ast(&self) -> Option<Expr> {
+        self.ast.read().unwrap().clone()
+    }
+
+    pub fn eval(&self, record: &Value) -> bool {
+        if self.is_empty() {
+            return true;
+        }
+        self.try_parse();
+        let r: bool = if let Ok(ast) = self.ast.write() {
+            if let Some(ast) = ast.as_ref() {
+                if let Some(r) = record.as_object() {
+                    evaluate_cond(&ast, r)
+                } else {
+                    todo!();
+                }
+            } else {
+                todo!();
+            }
+        } else {
+            todo!("handle Lock error")
+        };
+
+        r
+    }
+}
+
+fn evaluate_cond(expr: &Expr, record: &Map<String, Value>) -> bool {
+    match expr {
+        Expr::Or(expr, expr1) => evaluate_cond(expr, record) || evaluate_cond(expr1, record),
+        Expr::And(expr, expr1) => evaluate_cond(expr, record) && evaluate_cond(expr1, record),
+        Expr::Not(expr) => !evaluate_cond(expr, record),
+        Expr::Compare(expr, compare_operator, expr1) => {
+            let l = evaluate_value(expr, record);
+            let r = evaluate_value(expr1, record);
+            match compare_operator {
+                odata_params::filters::CompareOperator::Equal => l == r,
+                odata_params::filters::CompareOperator::NotEqual => l != r,
+                odata_params::filters::CompareOperator::GreaterThan => l > r,
+                odata_params::filters::CompareOperator::GreaterOrEqual => l >= r,
+                odata_params::filters::CompareOperator::LessThan => l < r,
+                odata_params::filters::CompareOperator::LessOrEqual => l <= r,
+            }
+        }
+        Expr::In(expr, exprs) => todo!(),
+        Expr::Function(_, exprs) => todo!(),
+        Expr::Identifier(_) => todo!(),
+        Expr::Value(value) => todo!(),
+    }
+}
+
+fn evaluate_value(expr: &Expr, record: &Map<String, Value>) -> FilterValue {
+    match expr {
+        Expr::Identifier(name) => {
+            let v = record.get(name).unwrap();
+            match v {
+                Value::Null => FilterValue::Null,
+                Value::Bool(b) => FilterValue::Bool(*b),
+                Value::Number(number) => FilterValue::Number(number.as_i64().unwrap().into()),
+                Value::String(s) => FilterValue::String(s.clone()),
+                Value::Array(values) => todo!(),
+                Value::Object(map) => todo!(),
+            }
+        }
+        Expr::Value(value) => value.clone(),
+        _ => todo!(),
+    }
+}
+
 /// Structured OData query parameters.
 #[derive(Debug, Clone, Default)]
 pub struct ODataQuery {
-    pub filter: Option<String>,
+    pub filter: ODataFilterExpression,
     pub select: Vec<String>,
     pub expand: Vec<ExpandClause>,
     pub orderby: Option<OrderByClause>,
@@ -224,7 +333,7 @@ impl ODataQuery {
                 let k = urlencoding::decode(k).unwrap_or_default().into_owned();
                 let v = urlencoding::decode(v).unwrap_or_default().into_owned();
                 match k.as_str() {
-                    "$filter" => q.filter = Some(v),
+                    "$filter" => q.filter = ODataFilterExpression::new(&v),
                     "$select" => {
                         q.select = v.split(',').map(|s| s.trim().to_string()).collect();
                     }
@@ -261,8 +370,8 @@ impl ODataQuery {
     /// Convert back to the HashMap<String, String> format that query.rs expects.
     pub fn to_query_map(&self) -> HashMap<String, String> {
         let mut map = HashMap::new();
-        if let Some(ref filter) = self.filter {
-            map.insert("$filter".to_string(), filter.clone());
+        if !self.filter.is_empty() {
+            map.insert("$filter".to_string(), self.filter.raw.clone());
         }
         if !self.select.is_empty() {
             map.insert("$select".to_string(), self.select.join(","));
@@ -394,14 +503,13 @@ pub trait DataStore: Send + Sync {
         set_name: &str,
         query: &ODataQuery,
         parent: Option<&ParentKey>,
-    ) -> Result<Value, StoreError>;
+    ) -> Result<Vec<Value>, StoreError>;
 
     /// Count the number of results that would be returned by an equivalent `get_collection` call (ignoring $top/$skip)
     fn count(&self, set_name: &str, query: &ODataQuery, parent: Option<&ParentKey>) -> usize;
 
     /// Retrieve a single entity record by key, with optional querying for draft read.
-    /// How is this draft handling controlled?
-    /// It needs to have an additional Key field for IsActiveEntity.
+    /// returns a single row only
     fn read_record(
         &self,
         set_name: &str,
@@ -463,16 +571,20 @@ pub trait DataStore: Send + Sync {
     /// Persist any pending changes to the underlying storage medium (e.g. write to disk).
     fn commit(&self);
 
+    // ------------ handle metadata ---------------------------------------
+
     /// Update the entity definitions in the store (e.g. after resolution or dynamic changes).?
     /// Why do we need this?
     fn update_entities(&self, entities: &[ODataEntity]);
 
-    /// Update the resolved entity metadata in the store (e.g. after resolution).
-    /// Do we need this, or can the store just read from the resolved entities in AppState?
-    fn update_resolved_entities(&self, _resolved_entities: Vec<ResolvedEntity>) {}
+    fn entities(&self) -> Vec<ODataEntity>;
 
     /// Initialize the store with a set of records for a given entity set, used for seeding synthetic records on startup.
     fn initialize_records(&self, set_name: &str, records: Vec<Value>);
+
+    fn record_count(&self, set_name: &str) -> usize {
+        self.count(set_name, &ODataQuery::empty(), None)
+    }
 }
 
 pub struct DraftDataStore {
@@ -494,7 +606,7 @@ impl DataStore for DraftDataStore {
         set_name: &str,
         query: &ODataQuery,
         parent: Option<&ParentKey>,
-    ) -> Result<Value, StoreError> {
+    ) -> Result<Vec<Value>, StoreError> {
         todo!()
     }
 
@@ -571,6 +683,10 @@ impl DataStore for DraftDataStore {
     }
 
     fn initialize_records(&self, set_name: &str, records: Vec<Value>) {
+        todo!()
+    }
+
+    fn entities(&self) -> Vec<ODataEntity> {
         todo!()
     }
 }
@@ -774,34 +890,33 @@ impl InMemoryDataStore {
             .unwrap_or(0)
     }
 
-    pub fn entities(&self) -> Vec<ODataEntity> {
-        self.entities.try_read().unwrap().clone()
-    }
-
     pub fn expand_record(&self, r: &mut Value, arg: &str) -> Result<(), StoreError> {
         eprintln!("expand record: {:#?}", r);
         Ok(())
     }
 
     fn query_collection_from(&self, query: &ODataQuery) -> Value {
-        if let Some(ref filter) = query.filter {
-            info!("filter: {}", filter);
-            let x = odata_params::filters::parse_str(filter);
-            info!("parsed filter: {:#?}", x);
-        }
+        let filter = &query.filter;
+        info!("query: {:?}", query);
+        let x = odata_params::filters::parse_str(&filter.raw);
+        info!("parsed filter: {:#?}", x);
+
         todo!("Implement {query:?}");
         json!([])
     }
 }
 
 impl DataStore for InMemoryDataStore {
-    #[tracing::instrument(skip(self, query, parent))]
+    fn entities(&self) -> Vec<ODataEntity> {
+        self.entities.try_read().unwrap().clone()
+    }
+
     fn get_collection(
         &self,
         set_name: &str,
         query: &ODataQuery,
         parent: Option<&ParentKey>,
-    ) -> Result<Value, StoreError> {
+    ) -> Result<Vec<Value>, StoreError> {
         let entity = self
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;
@@ -818,17 +933,15 @@ impl DataStore for InMemoryDataStore {
         match parent {
             Some(parent_ref) => todo!(),
             None => {
-                let records: Vec<Value> = store.get(set_name).cloned().unwrap_or_default();
-                let mut out = self.query_collection_from(query);
-                self.fallback_expand_collection(
-                    set_name,
-                    &mut out,
-                    &expand_refs,
-                    &entities_snap,
-                    &store,
-                    &resolved_entities,
-                );
-                Ok(out)
+                let records: Vec<Value> = store
+                    .get(set_name)
+                    .unwrap()
+                    .iter()
+                    .filter(|r| query.filter.eval(*r))
+                    .cloned()
+                    .collect();
+
+                Ok(records)
             }
         }
     }
@@ -1037,7 +1150,7 @@ impl DataStore for InMemoryDataStore {
             .push(new_record.clone());
         // Computed fields
         entity.compute_fields(&mut new_record);
-
+        inject_odata_context(&mut new_record, set_name);
         Ok(new_record)
     }
 
@@ -1222,10 +1335,6 @@ impl DataStore for InMemoryDataStore {
         }
         drop(store);
         *self.entities.write().unwrap() = new_entities.iter().cloned().collect::<Vec<_>>();
-    }
-
-    fn update_resolved_entities(&self, new_resolved_entities: Vec<ResolvedEntity>) {
-        *self.resolved_entities.write().unwrap() = new_resolved_entities;
     }
 
     fn initialize_records(&self, set_name: &str, records: Vec<Value>) {

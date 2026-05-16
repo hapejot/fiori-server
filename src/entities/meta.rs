@@ -805,8 +805,8 @@ mod tests {
             _: &str,
             _: &ODataQuery,
             _: Option<&ParentKey>,
-        ) -> Result<Value, StoreError> {
-            Ok(json!({"value": []}))
+        ) -> Result<Vec<Value>, StoreError> {
+            Ok(vec![])
         }
         fn count(&self, _: &str, _: &ODataQuery, _: Option<&ParentKey>) -> usize {
             0
@@ -854,6 +854,10 @@ mod tests {
         fn commit(&self) {}
         fn update_entities(&self, _: &[ODataEntity]) {}
         fn initialize_records(&self, _: &str, _: Vec<Value>) {}
+        
+        fn entities(&self) -> Vec<ODataEntity> {
+            todo!()
+        }
     }
 
     // ── generate_meta_data Tests ────────────────────────────────

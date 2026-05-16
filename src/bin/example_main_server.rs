@@ -9,9 +9,9 @@ use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
+use simple_fiori_server::settings::Settings;
 use simple_fiori_server::{app_state::AppState, entity::ODataEntity, spec, BASE_PATH};
 use simple_fiori_server::{entity::ODataEntityImp, runtime::handlers::*, NAMESPACE};
-use simple_fiori_server::settings::Settings;
 
 fn webapp_dir() -> PathBuf {
     std::env::current_dir().unwrap_or_default().join("webapp")
@@ -301,6 +301,8 @@ async fn main() {
             .route(&format!("{}/{}/$count", base, set), get(count_handler));
     }
 
+    let entity_sets = format!("{base}/{{*entity_set}}");
+    info!("entity sets route: {}", entity_sets);
     let app = Router::new()
         .route("/health", get(health_handler))
         .route(
@@ -313,7 +315,7 @@ async fn main() {
         )
         .route(base, get(service_document).head(service_document))
         .route(&format!("{}/$batch", base), post(batch_handler))
-        .merge(entity_routes)
+        .route(&entity_sets, get(collection_handler))
         .fallback(catch_all)
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);

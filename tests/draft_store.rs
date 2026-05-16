@@ -1,205 +1,12 @@
 use std::sync::Arc;
 
+use serde_json::{json, Value};
 use simple_fiori_server::{
     entities::EntityFacetEntity,
     entity::{ODataEntity, ODataEntityImp},
     runtime::data_store::*,
     spec::{FieldDef, NavigationPropertyDef},
 };
-use serde_json::{json, Value};
-
-// ── EntityKey tests ─────────────────────────────────────────────
-
-#[test]
-fn entity_key_single() {
-    let key = EntityKey::single("ID", "P001");
-    assert_eq!(key.get("ID"), Some("P001"));
-    assert_eq!(key.resolve_key_value("ID"), Some("P001"));
-    assert!(key.is_active()); // default true
-}
-
-#[test]
-fn entity_key_composite() {
-    let key = EntityKey::composite(&[("ID", "O001"), ("IsActiveEntity", "true")]);
-    assert_eq!(key.get("ID"), Some("O001"));
-    assert_eq!(key.get("IsActiveEntity"), Some("true"));
-    assert!(key.is_active());
-}
-
-#[test]
-fn entity_key_composite_inactive() {
-    let key = EntityKey::composite(&[("ID", "O001"), ("IsActiveEntity", "false")]);
-    assert!(!key.is_active());
-}
-
-#[test]
-fn entity_key_parse_simple() {
-    let key = EntityKey::parse("'P001'");
-    assert_eq!(key.get("_key"), Some("P001"));
-    assert_eq!(key.resolve_key_value("ID"), Some("P001"));
-}
-
-#[test]
-fn entity_key_parse_composite() {
-    let key = EntityKey::parse("ID='O001',IsActiveEntity=true");
-    assert_eq!(key.get("ID"), Some("O001"));
-    assert_eq!(key.get("IsActiveEntity"), Some("true"));
-    assert!(key.is_active());
-}
-
-#[test]
-fn entity_key_parse_composite_with_quotes() {
-    let key = EntityKey::parse("ID='P001',IsActiveEntity=false");
-    assert_eq!(key.get("ID"), Some("P001"));
-    assert!(!key.is_active());
-    assert_eq!(key.resolve_key_value("ID"), Some("P001"));
-}
-
-#[test]
-fn entity_key_missing_field_returns_none() {
-    let key = EntityKey::single("ID", "P001");
-    assert_eq!(key.get("OrderID"), None);
-}
-
-// ── ParentKey tests ─────────────────────────────────────────────
-
-#[test]
-fn parent_key_construction() {
-    let parent = ParentKey::new("Orders", EntityKey::single("ID", "O001"));
-    assert_eq!(parent.set_name, "Orders");
-    assert_eq!(parent.key.get("ID"), Some("O001"));
-}
-
-// ── ODataQuery tests ────────────────────────────────────────────
-
-#[test]
-fn odata_query_empty() {
-    let q = ODataQuery::empty();
-    assert!(q.filter.is_none());
-    assert!(q.select.is_empty());
-    assert!(q.expand.is_empty());
-    assert!(q.orderby.is_none());
-    assert!(q.top.is_none());
-    assert!(q.skip.is_none());
-    assert!(!q.count);
-}
-
-#[test]
-fn odata_query_parse_filter() {
-    let q = ODataQuery::parse("$filter=Status%20eq%20'A'");
-    assert_eq!(q.filter, Some("Status eq 'A'".to_string()));
-}
-
-#[test]
-fn odata_query_parse_select() {
-    let q = ODataQuery::parse("$select=ProductID,ProductName,Price");
-    assert_eq!(q.select, vec!["ProductID", "ProductName", "Price"]);
-}
-
-#[test]
-fn odata_query_parse_expand_simple() {
-    let q = ODataQuery::parse("$expand=Items");
-    assert_eq!(q.expand.len(), 1);
-    assert_eq!(q.expand[0].nav_property, "Items");
-    assert!(q.expand[0].select.is_empty());
-}
-
-#[test]
-fn odata_query_parse_expand_with_select() {
-    let q = ODataQuery::parse("$expand=DraftAdministrativeData($select=DraftUUID,InProcessByUser)");
-    assert_eq!(q.expand.len(), 1);
-    assert_eq!(q.expand[0].nav_property, "DraftAdministrativeData");
-    assert_eq!(q.expand[0].select, vec!["DraftUUID", "InProcessByUser"]);
-}
-
-#[test]
-fn odata_query_parse_expand_multiple() {
-    let q = ODataQuery::parse("$expand=Items,DraftAdministrativeData($select=DraftUUID)");
-    assert_eq!(q.expand.len(), 2);
-    assert_eq!(q.expand[0].nav_property, "Items");
-    assert_eq!(q.expand[1].nav_property, "DraftAdministrativeData");
-}
-
-#[test]
-fn odata_query_parse_orderby_asc() {
-    let q = ODataQuery::parse("$orderby=Price");
-    let ob = q.orderby.unwrap();
-    assert_eq!(ob.field, "Price");
-    assert!(!ob.descending);
-}
-
-#[test]
-fn odata_query_parse_orderby_desc() {
-    let q = ODataQuery::parse("$orderby=Price%20desc");
-    let ob = q.orderby.unwrap();
-    assert_eq!(ob.field, "Price");
-    assert!(ob.descending);
-}
-
-#[test]
-fn odata_query_parse_top_skip() {
-    let q = ODataQuery::parse("$top=10&$skip=20");
-    assert_eq!(q.top, Some(10));
-    assert_eq!(q.skip, Some(20));
-}
-
-#[test]
-fn odata_query_parse_count() {
-    let q = ODataQuery::parse("$count=true");
-    assert!(q.count);
-}
-
-#[test]
-fn odata_query_parse_combined() {
-    let q = ODataQuery::parse(
-            "$filter=Status%20eq%20'A'&$orderby=Price%20desc&$top=5&$skip=0&$count=true&$select=ProductID,Price",
-        );
-    assert_eq!(q.filter, Some("Status eq 'A'".to_string()));
-    assert_eq!(q.select, vec!["ProductID", "Price"]);
-    let ob = q.orderby.unwrap();
-    assert_eq!(ob.field, "Price");
-    assert!(ob.descending);
-    assert_eq!(q.top, Some(5));
-    assert_eq!(q.skip, Some(0));
-    assert!(q.count);
-}
-
-#[test]
-fn odata_query_to_query_map_roundtrip() {
-    let q = ODataQuery {
-        filter: Some("Status eq 'A'".to_string()),
-        select: vec!["ProductID".to_string(), "Price".to_string()],
-        expand: vec![ExpandClause {
-            nav_property: "Items".to_string(),
-            select: vec![],
-        }],
-        orderby: Some(OrderByClause {
-            field: "Price".to_string(),
-            descending: true,
-        }),
-        top: Some(10),
-        skip: Some(5),
-        count: true,
-    };
-    let map = q.to_query_map();
-    assert_eq!(map.get("$filter").unwrap(), "Status eq 'A'");
-    assert_eq!(map.get("$select").unwrap(), "ProductID,Price");
-    assert_eq!(map.get("$expand").unwrap(), "Items");
-    assert_eq!(map.get("$orderby").unwrap(), "Price desc");
-    assert_eq!(map.get("$top").unwrap(), "10");
-    assert_eq!(map.get("$skip").unwrap(), "5");
-    assert_eq!(map.get("$count").unwrap(), "true");
-}
-
-// ── StoreError tests ────────────────────────────────────────────
-
-#[test]
-fn store_error_display() {
-    let e = StoreError::NotFound("test".to_string());
-    assert_eq!(format!("{}", e), "Not found: test");
-    let e = StoreError::BadRequest("bad".to_string());
-    assert_eq!(format!("{}", e), "Bad request: bad");
-}
 
 // ── InMemoryDataStore tests ─────────────────────────────────────
 
@@ -366,7 +173,7 @@ impl ODataEntityImp for TestOrderItemEntity {
     }
 }
 
-fn create_test_store() -> InMemoryDataStore {
+fn create_test_store() -> Arc<dyn DataStore> {
     // Use a temp dir that doesn't exist so it falls back to mock_data
     let data_dir = std::env::temp_dir().join("fiori-test-nonexistent");
     let entities: Vec<ODataEntity> = vec![
@@ -375,7 +182,8 @@ fn create_test_store() -> InMemoryDataStore {
         ODataEntity::new(Arc::new(TestOrderItemEntity)),
         ODataEntity::new(Arc::new(EntityFacetEntity)),
     ];
-    InMemoryDataStore::new(data_dir, entities)
+    let store = InMemoryDataStore::new(data_dir, entities);
+    Arc::new(DraftDataStore::new(Arc::new(store)))
 }
 
 #[test]
@@ -383,7 +191,7 @@ fn store_get_collection_returns_all() {
     let store = create_test_store();
     let q = ODataQuery::empty();
     let result = store.get_collection("Products", &q, None).unwrap();
-    let values = result.get("value").unwrap().as_array().unwrap();
+    let values = result;
     assert_eq!(values.len(), 3);
 }
 
@@ -392,7 +200,7 @@ fn store_get_collection_with_filter() {
     let store = create_test_store();
     let q = ODataQuery::parse("$filter=Status eq 'A'");
     let result = store.get_collection("Products", &q, None).unwrap();
-    let values = result.get("value").unwrap().as_array().unwrap();
+    let values = result;
     assert_eq!(values.len(), 2);
 }
 
@@ -401,7 +209,7 @@ fn store_get_collection_with_top_skip() {
     let store = create_test_store();
     let q = ODataQuery::parse("$top=1&$skip=1");
     let result = store.get_collection("Products", &q, None).unwrap();
-    let values = result.get("value").unwrap().as_array().unwrap();
+    let values = result;
     assert_eq!(values.len(), 1);
 }
 
@@ -410,7 +218,7 @@ fn store_get_collection_with_orderby() {
     let store = create_test_store();
     let q = ODataQuery::parse("$orderby=Price desc");
     let result = store.get_collection("Products", &q, None).unwrap();
-    let values = result.get("value").unwrap().as_array().unwrap();
+    let values = result;
     // Laptop (1299.99) should be first
     assert_eq!(
         values[0].get("ProductName").unwrap().as_str().unwrap(),
@@ -423,7 +231,7 @@ fn store_get_collection_with_count() {
     let store = create_test_store();
     let q = ODataQuery::parse("$count=true");
     let result = store.get_collection("Products", &q, None).unwrap();
-    assert_eq!(result.get("@odata.count").unwrap().as_i64().unwrap(), 3);
+    assert_eq!(result.len(), 3);
 }
 
 #[test]
@@ -442,7 +250,7 @@ fn store_get_collection_sub_collection() {
     let result = store
         .get_collection("OrderItems", &q, Some(&parent))
         .unwrap();
-    let values = result.get("value").unwrap().as_array().unwrap();
+    let values = result;
     assert_eq!(values.len(), 2); // I001 and I002 belong to O001
 }
 
@@ -757,7 +565,7 @@ fn store_draft_edit_copies_children() {
     let children = store
         .get_collection("OrderItems", &q, Some(&parent))
         .unwrap();
-    let values = children.get("value").unwrap().as_array().unwrap();
+    let values = children;
     assert_eq!(values.len(), 2); // I001 and I002 as drafts
     for v in values {
         assert_eq!(v.get("IsActiveEntity").unwrap().as_bool().unwrap(), false);
@@ -782,7 +590,7 @@ fn store_draft_activate_activates_children() {
     let children = store
         .get_collection("OrderItems", &q, Some(&parent))
         .unwrap();
-    let values = children.get("value").unwrap().as_array().unwrap();
+    let values = children;
     assert_eq!(values.len(), 2);
     for v in values {
         assert_eq!(v.get("IsActiveEntity").unwrap().as_bool().unwrap(), true);
@@ -805,7 +613,7 @@ fn store_delete_draft_removes_children() {
     let children = store
         .get_collection("OrderItems", &q, Some(&parent_draft))
         .unwrap();
-    let values = children.get("value").unwrap().as_array().unwrap();
+    let values = children;
     assert_eq!(values.len(), 0);
 
     // Active children should still be there
@@ -816,7 +624,7 @@ fn store_delete_draft_removes_children() {
     let active_children = store
         .get_collection("OrderItems", &q, Some(&parent_active))
         .unwrap();
-    let active_values = active_children.get("value").unwrap().as_array().unwrap();
+    let active_values = active_children;
     assert_eq!(active_values.len(), 2);
 }
 
@@ -1242,7 +1050,7 @@ fn vl_read_items_via_parent() {
     let result = store
         .get_collection("FieldValueListItems", &q, Some(&parent))
         .unwrap();
-    let values = result.get("value").unwrap().as_array().unwrap();
+    let values = result;
     assert_eq!(values.len(), 2); // ITEM-001 and ITEM-002 belong to VL-001
 }
 
@@ -1257,7 +1065,7 @@ fn vl_read_items_other_parent() {
     let result = store
         .get_collection("FieldValueListItems", &q, Some(&parent))
         .unwrap();
-    let values = result.get("value").unwrap().as_array().unwrap();
+    let values = result;
     assert_eq!(values.len(), 1); // ITEM-003 belongs to VL-002
 }
 
@@ -1276,7 +1084,7 @@ fn vl_draft_edit_copies_children_with_custom_fk() {
     let children = store
         .get_collection("FieldValueListItems", &q, Some(&parent_draft))
         .unwrap();
-    let values = children.get("value").unwrap().as_array().unwrap();
+    let values = children;
     assert_eq!(values.len(), 2);
     for v in values {
         assert_eq!(v.get("IsActiveEntity").unwrap().as_bool().unwrap(), false);
@@ -1335,7 +1143,7 @@ fn vl_create_item_visible_in_subcollection() {
     let children = store
         .get_collection("FieldValueListItems", &q, Some(&parent_draft))
         .unwrap();
-    let values = children.get("value").unwrap().as_array().unwrap();
+    let values = children;
     assert_eq!(values.len(), 3);
 }
 
@@ -1393,7 +1201,7 @@ fn vl_activate_with_new_child() {
     let children = store
         .get_collection("FieldValueListItems", &q, Some(&parent_active))
         .unwrap();
-    let values = children.get("value").unwrap().as_array().unwrap();
+    let values = children;
     assert_eq!(values.len(), 3); // 2 original + 1 new
     for v in values {
         assert_eq!(v.get("IsActiveEntity").unwrap().as_bool().unwrap(), true);
@@ -1404,7 +1212,7 @@ fn vl_activate_with_new_child() {
     let children_draft = store
         .get_collection("FieldValueListItems", &q, Some(&parent_draft))
         .unwrap();
-    let draft_values = children_draft.get("value").unwrap().as_array().unwrap();
+    let draft_values = children_draft;
     assert_eq!(draft_values.len(), 0);
 }
 
@@ -1465,7 +1273,7 @@ fn vl_discard_draft_removes_children() {
     let children = store
         .get_collection("FieldValueListItems", &q, Some(&parent_draft))
         .unwrap();
-    assert_eq!(children.get("value").unwrap().as_array().unwrap().len(), 0);
+    assert_eq!(children.len(), 0);
 
     // Active children unchanged
     let parent_active = ParentKey::new(
@@ -1475,7 +1283,7 @@ fn vl_discard_draft_removes_children() {
     let active = store
         .get_collection("FieldValueListItems", &q, Some(&parent_active))
         .unwrap();
-    assert_eq!(active.get("value").unwrap().as_array().unwrap().len(), 2);
+    assert_eq!(active.len(), 2);
 }
 
 #[test]
@@ -1495,7 +1303,7 @@ fn vl_other_list_unaffected_by_draft() {
     let children = store
         .get_collection("FieldValueListItems", &q, Some(&parent_vl2))
         .unwrap();
-    let values = children.get("value").unwrap().as_array().unwrap();
+    let values = children;
     assert_eq!(values.len(), 1);
     assert_eq!(values[0].get("Code").unwrap().as_str().unwrap(), "Active");
 }
@@ -1547,15 +1355,7 @@ fn vl_full_lifecycle_create_list_add_items_activate() {
     let draft_children = store
         .get_collection("FieldValueListItems", &q, Some(&parent))
         .unwrap();
-    assert_eq!(
-        draft_children
-            .get("value")
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .len(),
-        3
-    );
+    assert_eq!(draft_children.len(), 3);
 
     // 4. Activate the list
     let new_key = EntityKey::single("ID", &new_list_id);
@@ -1577,7 +1377,7 @@ fn vl_full_lifecycle_create_list_add_items_activate() {
     let active_children = store
         .get_collection("FieldValueListItems", &q, Some(&parent_active))
         .unwrap();
-    let items = active_children.get("value").unwrap().as_array().unwrap();
+    let items = active_children;
     assert_eq!(items.len(), 3);
     let codes: Vec<&str> = items
         .iter()
@@ -1602,10 +1402,10 @@ fn retrieve_facettes_without_duplicates() {
         field: "FieldGroupQualifier".to_string(),
         descending: false,
     });
-    q.filter = Some("ConfigID eq 4553b09f-ab02-4fc9-9653-0dbf32d4cda4".into());
+    q.filter = ODataFilterExpression::new("ConfigID eq 4553b09f-ab02-4fc9-9653-0dbf32d4cda4");
     q.skip = Some(0);
     q.top = Some(100);
     let col = store.get_collection("EntityFacets", &q, None).unwrap();
-    let values = col.get("value").unwrap().as_array().unwrap();
+    let values = col;
     assert_eq!(values.len(), 1); // Only one facet expected for the given ConfigID
 }

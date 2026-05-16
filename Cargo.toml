@@ -22,3 +22,4 @@ uuid = { version = "1", features = ["v4", "v5"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "json"], optional = true }
 dotenvy = { version = "0.15", optional = true }
 odata-params = { git = "https://github.com/hapejot/odata-params.git" }
+peg = "0.8.6"
