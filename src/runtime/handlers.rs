@@ -12,7 +12,7 @@ use tracing::{error, info};
 
 use crate::app_state::AppState;
 use crate::entity::ODataEntity;
-use crate::odata::path_parser::parse_odata_resource_path;
+use crate::odata::path_parser::{parse_odata_resource_path, ODataPathSegment};
 use crate::runtime::data_store::{EntityKey, ODataQuery, ParentKey, StoreError};
 use crate::runtime::routing::{resolve_odata_path_with_resolved, ODataPath};
 use crate::BASE_PATH;
@@ -192,23 +192,51 @@ pub async fn collection_handler(
 ) -> Response {
     info!(path, ?uri, uri_path=?uri.path(), query=?uri.query(), "collection_handler");
 
-    let resource_path = parse_odata_resource_path(uri.path()).unwrap();
-    let query_str = uri.query().unwrap_or("");
-    let entities = state.entities.read().unwrap();
+    json_response(
+    handle_collection(&path, state,uri.query().unwrap_or("")))
+    // error_response(404, "Entity set not found")
+}
 
-    if let Some(e) = resource_path.iter().nth(0) {
-        match (e) {
-            crate::odata::path_parser::ODataPathSegment::EntitySet(set_name) => {
-                let query = ODataQuery::parse(query_str);
-                return store_result_to_response(
-                    state.data_store.get_collection(set_name, &query, None),
-                );
+fn handle_collection(path: &str, state: Arc<AppState>, query_str: &str) -> Value {
+    let mut resource_path = parse_odata_resource_path(&path).unwrap();
+
+    let main_resource = resource_path.remove(0);
+    match main_resource {
+        ODataPathSegment::EntitySet(set_name) => {
+            let query = ODataQuery::parse(query_str);
+            let r = match state.data_store.get_collection(&set_name, &query, None) {
+                Ok(v) => v,
+                Err(e) => return json!({"error": {"code": "500", "message": format!("Data store error: {}", e)}}),
+            };
+            while resource_path.len() > 0 {
+                let o = resource_path.remove(0);
+                match o {
+                    ODataPathSegment::EntitySet(_) => todo!(),
+                    ODataPathSegment::KeyPredicate(_, items) => todo!(),
+                    ODataPathSegment::NavigationProperty(_) => todo!(),
+                    ODataPathSegment::Count => {
+                        return json!({"@odata.count": r.len() })
+                    }
+                }
             }
-            crate::odata::path_parser::ODataPathSegment::KeyPredicate(_, items) => todo!(),
-            crate::odata::path_parser::ODataPathSegment::NavigationProperty(_) => todo!(),
+            return json!({"value": r, "@odata.count": r.len()});
         }
+        ODataPathSegment::KeyPredicate(set_name, items) => {
+            let pairs = items
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect::<Vec<_>>();
+            let key = &EntityKey::composite(&pairs);
+            let query = ODataQuery::parse(query_str);
+            let r = state.data_store.read_record(&set_name, key, &query);
+            if resource_path.len() > 0 {
+                return json!({"error": {"code": "400", "message": "Key predicate must be last segment in path"}});
+            }
+            return json!({"value": r.unwrap()})
+        }
+        ODataPathSegment::NavigationProperty(_) => todo!(),
+        x => todo!("segment {:?} not supported", x),
     }
-    error_response(404, "Entity set not found")
 }
 
 /// Generic $count handler for any EntitySet.
@@ -767,6 +795,9 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
 /// Generic batch GET – resolves paths via the entity registry.
 #[tracing::instrument(skip(state, rel_url))]
 fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
+  
+  return handle_collection(rel_url, state, "");
+  
     let entities = state.entities.read().unwrap();
     let resolved_entities = state.resolved_entities.read().unwrap();
     let parsed = resolve_odata_path_with_resolved(rel_url, &entities, &resolved_entities);

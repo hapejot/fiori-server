@@ -158,6 +158,13 @@ impl ODataEntityImp for ExampleOrderEntity {
             "OrderDate": "2026-05-01",
             "TotalAmount": 2499.00,
             "CustomerID": "33333333-3333-3333-3333-333333333333"
+        }),
+        json!({
+            "ID": "11111111-1111-1111-1111-222222222222",
+            "OrderName": "Widescreen Monitor",
+            "OrderDate": "2026-05-01",
+            "TotalAmount": 999.00,
+            "CustomerID": "33333333-3333-3333-3333-333333333333"
         })]
     }
 
@@ -298,7 +305,6 @@ async fn main() {
                 &format!("{}/{}", base, set),
                 get(collection_handler).head(collection_handler),
             )
-            .route(&format!("{}/{}/$count", base, set), get(count_handler));
     }
 
     let entity_sets = format!("{base}/{{*entity_set}}");

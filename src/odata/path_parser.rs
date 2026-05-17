@@ -12,6 +12,7 @@ pub enum ODataPathSegment {
     EntitySet(String),
     KeyPredicate(String, Vec<(String, String)>), // e.g., ID='P001'
     NavigationProperty(String),
+    Count,
 }
 
 pub fn parse_odata_resource_path(path: &str) -> Result<Vec<ODataPathSegment>, ParseError<LineCol>> {
@@ -81,6 +82,6 @@ peg::parser! {
         rule segment() -> Result<ODataPathSegment, ODataPathError>
             = key_predicate:identifier() "(" keys:key_predicate_list() ")" { Ok(ODataPathSegment::KeyPredicate(key_predicate, keys?)) }
             / entity_set:identifier() { Ok(ODataPathSegment::EntitySet(entity_set)) }
-
+            / "$count" { Ok(ODataPathSegment::Count) }
     }
 }

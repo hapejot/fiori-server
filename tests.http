@@ -12,8 +12,12 @@ Accept: application/xml
 GET {{server}}/odata/v4/Service/Orders?$top=1 HTTP/1.1
 Accept: application/json
 
+### 2b. Orders abrufen – Draft-Properties (IsActiveEntity, HasActiveEntity, HasDraftEntity)
+GET {{server}}/odata/v4/Service/Orders?$top=10 HTTP/1.1
+Accept: application/json
+
 ### 3. Composite Key Lookup – Orders(ProductID,IsActiveEntity)
-GET {{server}}/odata/v4/Service/Orders(ProductID='11111111-1111-1111-1111-111111111111',IsActiveEntity=true) HTTP/1.1
+GET {{server}}/odata/v4/Service/Orders(ID='11111111-1111-1111-1111-222222222222',IsActiveEntity=true) HTTP/1.1
 Accept: application/json
 
 ### 4. Boolean-Filter – $filter=IsActiveEntity eq true
