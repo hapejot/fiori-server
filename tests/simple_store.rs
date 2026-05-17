@@ -190,7 +190,7 @@ fn create_test_store() -> InMemoryDataStore {
 fn store_get_collection_returns_all() {
     let store = create_test_store();
     let q = ODataQuery::empty();
-    let result = store.get_collection("Products", &q, None).unwrap();
+    let result = store.get_collection("Products", &q, None, None).unwrap();
     let values = result;
     assert_eq!(values.len(), 3);
 }
@@ -199,7 +199,7 @@ fn store_get_collection_returns_all() {
 fn store_get_collection_with_filter() {
     let store = create_test_store();
     let q = ODataQuery::parse("$filter=Status eq 'A'");
-    let result = store.get_collection("Products", &q, None).unwrap();
+    let result = store.get_collection("Products", &q, None, None).unwrap();
     let values = result;
     assert_eq!(values.len(), 2);
 }
@@ -208,7 +208,7 @@ fn store_get_collection_with_filter() {
 fn store_get_collection_with_top_skip() {
     let store = create_test_store();
     let q = ODataQuery::parse("$top=1&$skip=1");
-    let result: Vec<Value> = store.get_collection("Products", &q, None).unwrap();
+    let result: Vec<Value> = store.get_collection("Products", &q, None,  None).unwrap();
     let values = result;
     assert_eq!(values.len(), 1);
 }
@@ -217,7 +217,7 @@ fn store_get_collection_with_top_skip() {
 fn store_get_collection_with_orderby() {
     let store = create_test_store();
     let q = ODataQuery::parse("$orderby=Price desc");
-    let result = store.get_collection("Products", &q, None).unwrap();
+    let result = store.get_collection("Products", &q, None, None).unwrap();
     let values = result;
     // Laptop (1299.99) should be first
     assert_eq!(
@@ -232,7 +232,7 @@ fn store_get_collection_with_count() {
 
     // let store = create_test_store();
     // let q = ODataQuery::parse("$count=true");
-    // let result = store.get_collection("Products", &q, None).unwrap();
+    // let result = store.get_collection("Products", &q, None, None).unwrap();
     // assert_eq!(result.get("@odata.count").unwrap().as_i64().unwrap(), 3);
 }
 
@@ -240,7 +240,7 @@ fn store_get_collection_with_count() {
 fn store_get_collection_not_found() {
     let store = create_test_store();
     let q = ODataQuery::empty();
-    let result = store.get_collection("NonExistent", &q, None);
+    let result = store.get_collection("NonExistent", &q, None, None);
     assert!(result.is_err());
 }
 

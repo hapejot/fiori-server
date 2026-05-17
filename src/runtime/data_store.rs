@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use odata_params::filters::{Expr, Value as FilterValue};
 use serde_json::{json, Map, Value};
-use tracing::info;
+use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::entity::ODataEntity;
@@ -282,7 +282,13 @@ fn evaluate_cond(expr: &Expr, record: &Map<String, Value>) -> bool {
 fn evaluate_value(expr: &Expr, record: &Map<String, Value>) -> FilterValue {
     match expr {
         Expr::Identifier(name) => {
-            let v = record.get(name).unwrap();
+            let v = match record.get(name) {
+                Some(value) => value,
+                None => {
+                    error!("Field '{}' not found in record: {:?}", name, record);
+                    return FilterValue::Null;
+                }
+            };
             match v {
                 Value::Null => FilterValue::Null,
                 Value::Bool(b) => FilterValue::Bool(*b),
@@ -503,6 +509,7 @@ pub trait DataStore: Send + Sync {
         set_name: &str,
         query: &ODataQuery,
         parent: Option<&ParentKey>,
+        default: Option<&Value>,
     ) -> Result<Vec<Value>, StoreError>;
 
     /// Count the number of results that would be returned by an equivalent `get_collection` call (ignoring $top/$skip)
@@ -606,8 +613,16 @@ impl DataStore for DraftDataStore {
         set_name: &str,
         query: &ODataQuery,
         parent: Option<&ParentKey>,
+        default: Option<&Value>,
     ) -> Result<Vec<Value>, StoreError> {
-        todo!()
+        // TODO: introduce default result row into get collection 
+        let default = json!({
+            "IsActiveEntity": true,
+            "HasActiveEntity": true,
+            "HasDraftEntity": false,
+        });
+        let mut r = self.parent.get_collection(set_name, query, parent, None)?;
+        Ok(r)
     }
 
     fn count(&self, set_name: &str, query: &ODataQuery, parent: Option<&ParentKey>) -> usize {
@@ -916,6 +931,7 @@ impl DataStore for InMemoryDataStore {
         set_name: &str,
         query: &ODataQuery,
         parent: Option<&ParentKey>,
+        _default: Option<&Value>,
     ) -> Result<Vec<Value>, StoreError> {
         let entity = self
             .find_entity(set_name)

@@ -198,13 +198,16 @@ pub async fn collection_handler(
 }
 
 fn handle_collection(path: &str, state: Arc<AppState>, query_str: &str) -> Value {
-    let mut resource_path = parse_odata_resource_path(&path).unwrap();
+    let mut resource_path = match parse_odata_resource_path(&path){
+        Ok(p) => p,
+        Err(e) => panic!("Failed to parse resource path '{}': {}", path, e),
+    };
 
     let main_resource = resource_path.remove(0);
     match main_resource {
         ODataPathSegment::EntitySet(set_name) => {
             let query = ODataQuery::parse(query_str);
-            let r = match state.data_store.get_collection(&set_name, &query, None) {
+            let r = match state.data_store.get_collection(&set_name, &query, None, None) {
                 Ok(v) => v,
                 Err(e) => return json!({"error": {"code": "500", "message": format!("Data store error: {}", e)}}),
             };
@@ -261,7 +264,7 @@ pub async fn count_handler(State(state): State<Arc<AppState>>, uri: Uri) -> Resp
 }
 
 /// Generischer Single-Entity-Handler: /SetName('key') or /SetName(Key='val',IsActiveEntity=true)
-fn handle_single_entity(path: &str, query_str: &str, state: &AppState) -> Response {
+fn handle_single_entity(path: &str, query_str: &str, state: Arc<AppState>) -> Response {
     let entities = state.entities.read().unwrap();
     let resolved_entities = state.resolved_entities.read().unwrap();
     let parsed = resolve_odata_path_with_resolved(path, &entities, &resolved_entities);
@@ -278,7 +281,7 @@ fn handle_single_entity(path: &str, query_str: &str, state: &AppState) -> Respon
 }
 
 /// Generic PATCH handler: /SetName(key) – updates fields in-memory.
-fn handle_patch_entity(path: &str, body: &Value, state: &AppState) -> Response {
+fn handle_patch_entity(path: &str, body: &Value, state: Arc<AppState>) -> Response {
     let entities = state.entities.read().unwrap();
     let resolved_entities = state.resolved_entities.read().unwrap();
     let parsed = resolve_odata_path_with_resolved(path, &entities, &resolved_entities);
@@ -295,7 +298,7 @@ fn handle_patch_entity(path: &str, body: &Value, state: &AppState) -> Response {
 
 /// Handler for DELETE: discard draft.
 /// DELETE /SetName(key) – removes draft and sets HasDraftEntity=false on the active entity.
-fn handle_delete_entity(path: &str, state: &AppState) -> Response {
+fn handle_delete_entity(path: &str, state: Arc<AppState>) -> Response {
     let entities = state.entities.read().unwrap();
     let resolved_entities = state.resolved_entities.read().unwrap();
     let parsed = resolve_odata_path_with_resolved(path, &entities, &resolved_entities);
@@ -312,7 +315,7 @@ fn handle_delete_entity(path: &str, state: &AppState) -> Response {
 
 /// Handler for draft actions: draftEdit, draftActivate, draftPrepare.
 /// POST /SetName(key)/Namespace.actionName
-fn handle_draft_action(path: &str, state: &AppState) -> Response {
+fn handle_draft_action(path: &str, state: Arc<AppState>) -> Response {
     // Extract action info under read lock, then release it so activate_config can write-lock
     let action_info = {
         let entities = state.entities.read().unwrap();
@@ -417,7 +420,7 @@ pub async fn batch_handler(
             continue;
         }
 
-        if segment.contains("multipart/mixed") {
+       if false && segment.contains("multipart/mixed") {
             let cs_boundary = segment
                 .lines()
                 .find_map(|line| {
@@ -453,10 +456,10 @@ pub async fn batch_handler(
                         let cs_body = extract_batch_body(cs_segment);
 
                         let (cs_status, cs_resp_json) = match cs_method {
-                            "GET" => (200, handle_batch_get(cs_rel_url, &state)),
-                            "PATCH" => handle_batch_patch(cs_rel_url, &cs_body, &state),
-                            "POST" => handle_batch_post(cs_rel_url, &cs_body, &state),
-                            "DELETE" => handle_batch_delete(cs_rel_url, &state),
+                            "GET" => (200, handle_batch_get(cs_rel_url, state.clone())),
+                            "PATCH" => handle_batch_patch(cs_rel_url, &cs_body, state.clone()),
+                            "POST" => handle_batch_post(cs_rel_url, &cs_body, state.clone()),
+                            "DELETE" => handle_batch_delete(cs_rel_url, state.clone()),
                             _ => (200, json!({})),
                         };
                         let cs_resp_body = serde_json::to_string(&cs_resp_json).unwrap_or_default();
@@ -514,7 +517,6 @@ pub async fn batch_handler(
                 || l.starts_with("DELETE ")
         });
         if let Some(request_line) = request_line {
-            // info!("+-- {}", request_line);
             let parts: Vec<&str> = request_line.split_whitespace().collect();
             let method = parts.first().copied().unwrap_or("");
             let rel_url = parts.get(1).copied().unwrap_or("");
@@ -522,13 +524,13 @@ pub async fn batch_handler(
             // Extract body from the segment (for POST/PATCH)
             let segment_body = extract_batch_body(segment);
 
-            info!("method: {method}");
+            info!("method: {method} {rel_url}");
             let (status, resp_json) = match method {
-                "GET" => (200, handle_batch_get(rel_url, &state)),
-                "PATCH" => handle_batch_patch(rel_url, &segment_body, &state),
-                "POST" => handle_batch_post(rel_url, &segment_body, &state),
-                "DELETE" => handle_batch_delete(rel_url, &state),
-                _ => (200, handle_batch_get(rel_url, &state)),
+                "GET" => (200, handle_batch_get(rel_url, state.clone())),
+                "PATCH" => handle_batch_patch(rel_url, &segment_body, state.clone()),
+                "POST" => handle_batch_post(rel_url, &segment_body, state.clone()),
+                "DELETE" => handle_batch_delete(rel_url, state.clone()),
+                _ => (200, handle_batch_get(rel_url, state.clone())),
             };
 
             let resp_body = serde_json::to_string(&resp_json).unwrap_or_default();
@@ -597,7 +599,7 @@ fn extract_batch_body(segment: &str) -> String {
 
 /// Batch PATCH: updates a single entity in the data store.
 #[tracing::instrument(skip(state, body))]
-fn handle_batch_patch(rel_url: &str, body: &str, state: &AppState) -> (u16, Value) {
+fn handle_batch_patch(rel_url: &str, body: &str, state: Arc<AppState>) -> (u16, Value) {
     let entities = state.entities.read().unwrap();
     let resolved_entities = state.resolved_entities.read().unwrap();
     let parsed = resolve_odata_path_with_resolved(rel_url, &entities, &resolved_entities);
@@ -626,7 +628,7 @@ fn handle_batch_patch(rel_url: &str, body: &str, state: &AppState) -> (u16, Valu
 
 /// Batch DELETE: discard draft within $batch.
 #[tracing::instrument(skip(state))]
-fn handle_batch_delete(rel_url: &str, state: &AppState) -> (u16, Value) {
+fn handle_batch_delete(rel_url: &str, state: Arc<AppState>) -> (u16, Value) {
     let entities = state.entities.read().unwrap();
     let resolved_entities = state.resolved_entities.read().unwrap();
     let parsed = resolve_odata_path_with_resolved(rel_url, &entities, &resolved_entities);
@@ -653,7 +655,7 @@ fn handle_batch_delete(rel_url: &str, state: &AppState) -> (u16, Value) {
 
 /// Batch POST: handles actions (draftEdit, draftActivate, draftPrepare) within $batch.
 #[tracing::instrument(skip(state, rel_url, body))]
-fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value) {
+fn handle_batch_post(rel_url: &str, body: &str, state: Arc<AppState>) -> (u16, Value) {
     // Extract routing info under read lock, then drop it so activate_config can write-lock
     enum PostTarget {
         Action {
@@ -794,9 +796,11 @@ fn handle_batch_post(rel_url: &str, body: &str, state: &AppState) -> (u16, Value
 
 /// Generic batch GET – resolves paths via the entity registry.
 #[tracing::instrument(skip(state, rel_url))]
-fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
-  
-  return handle_collection(rel_url, state, "");
+fn handle_batch_get(rel_url: &str, state: Arc<AppState>) -> Value {
+    assert!(!rel_url.starts_with('/'), "Batch GET URL must be relative and start with '/': {}", rel_url);
+
+  let (url,query) = rel_url.split_once('?').unwrap_or((rel_url,""));
+  return handle_collection(url, state, query);
   
     let entities = state.entities.read().unwrap();
     let resolved_entities = state.resolved_entities.read().unwrap();
@@ -817,7 +821,7 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
         ODataPath::Collection { entity } => {
             match state
                 .data_store
-                .get_collection(entity.set_name(), &query, None)
+                .get_collection(entity.set_name(), &query, None, None)
             {
                 Ok(val) => json!({"value": val, "@odata.count": val.len()}),
                 Err(e) => json!({"error": {"code": "404", "message": format!("{}", e)}}),
@@ -849,7 +853,7 @@ fn handle_batch_get(rel_url: &str, state: &AppState) -> Value {
             );
             match state
                 .data_store
-                .get_collection(child_entity.set_name(), &query, Some(&parent))
+                .get_collection(child_entity.set_name(), &query, Some(&parent), None)
             {
                 Ok(val) => json!({"value": val, "@odata.count": val.len()}),
                 Err(e) => json!({"error": {"code": "404", "message": format!("{}", e)}}),
@@ -891,7 +895,7 @@ fn handle_sub_collection(
     parent_key: &super::routing::EntityKeyInfo,
     child_entity: ODataEntity,
     query_str: &str,
-    state: &AppState,
+    state: Arc<AppState>,
 ) -> Response {
     let parent = ParentKey::new(
         parent_entity.set_name(),
@@ -902,6 +906,7 @@ fn handle_sub_collection(
         child_entity.set_name(),
         &query,
         Some(&parent),
+        None,
     ))
 }
 
@@ -931,7 +936,7 @@ fn serve_embedded_file(relative: &str) -> Option<Response> {
 
 // ── Static file serving ─────────────────────────────────────────────
 #[tracing::instrument(skip(state))]
-fn handle_file(path: &str, state: &AppState) -> Response {
+fn handle_file(path: &str, state: Arc<AppState>) -> Response {
     let raw_path = urlencoding::decode(path).unwrap_or_default().into_owned();
 
     let mut relative = raw_path
@@ -1193,18 +1198,18 @@ pub async fn catch_all(
     let parsed = resolve_odata_path_with_resolved(path, &entities, &resolved_entities);
     match parsed.path {
         ODataPath::Entity { .. } => match method {
-            Method::GET => handle_single_entity(path, query, &state),
+            Method::GET => handle_single_entity(path, query, state.clone()),
             Method::PATCH => {
                 let json_body: Value = match serde_json::from_slice(&body) {
                     Ok(v) => v,
                     Err(_) => return error_response(400, "Invalid JSON body"),
                 };
-                let resp = handle_patch_entity(path, &json_body, &state);
+                let resp = handle_patch_entity(path, &json_body, state.clone());
                 state.data_store.commit();
                 resp
             }
             Method::DELETE => {
-                let resp = handle_delete_entity(path, &state);
+                let resp = handle_delete_entity(path, state.clone());
                 state.data_store.commit();
                 resp
             }
@@ -1212,7 +1217,7 @@ pub async fn catch_all(
         },
         ODataPath::Action { .. } => {
             if method == Method::POST {
-                let resp = handle_draft_action(path, &state);
+                let resp = handle_draft_action(path, state.clone());
                 resp
             } else {
                 error_response(405, "Method not allowed")
@@ -1225,7 +1230,7 @@ pub async fn catch_all(
             ..
         } => match method {
             Method::GET => {
-                handle_sub_collection(parent_entity, &parent_key, child_entity, query, &state)
+                handle_sub_collection(parent_entity, &parent_key, child_entity, query, state.clone())
             }
             Method::POST => {
                 let body_str = String::from_utf8_lossy(&body);
@@ -1280,8 +1285,8 @@ pub async fn catch_all(
                 state.data_store.commit();
                 resp
             }
-            _ => handle_file(path, &state),
+            _ => handle_file(path, state.clone()),
         },
-        _ => handle_file(path, &state),
+        _ => handle_file(path, state.clone()),
     }
 }

@@ -190,7 +190,7 @@ fn create_test_store() -> Arc<dyn DataStore> {
 fn store_get_collection_returns_all() {
     let store = create_test_store();
     let q = ODataQuery::empty();
-    let result = store.get_collection("Products", &q, None).unwrap();
+    let result = store.get_collection("Products", &q, None, None).unwrap();
     let values = result;
     assert_eq!(values.len(), 3);
 }
@@ -199,7 +199,7 @@ fn store_get_collection_returns_all() {
 fn store_get_collection_with_filter() {
     let store = create_test_store();
     let q = ODataQuery::parse("$filter=Status eq 'A'");
-    let result = store.get_collection("Products", &q, None).unwrap();
+    let result = store.get_collection("Products", &q, None, None).unwrap();
     let values = result;
     assert_eq!(values.len(), 2);
 }
@@ -208,7 +208,7 @@ fn store_get_collection_with_filter() {
 fn store_get_collection_with_top_skip() {
     let store = create_test_store();
     let q = ODataQuery::parse("$top=1&$skip=1");
-    let result = store.get_collection("Products", &q, None).unwrap();
+    let result = store.get_collection("Products", &q, None, None).unwrap();
     let values = result;
     assert_eq!(values.len(), 1);
 }
@@ -217,7 +217,7 @@ fn store_get_collection_with_top_skip() {
 fn store_get_collection_with_orderby() {
     let store = create_test_store();
     let q = ODataQuery::parse("$orderby=Price desc");
-    let result = store.get_collection("Products", &q, None).unwrap();
+    let result = store.get_collection("Products", &q, None, None).unwrap();
     let values = result;
     // Laptop (1299.99) should be first
     assert_eq!(
@@ -230,7 +230,7 @@ fn store_get_collection_with_orderby() {
 fn store_get_collection_with_count() {
     let store = create_test_store();
     let q = ODataQuery::parse("$count=true");
-    let result = store.get_collection("Products", &q, None).unwrap();
+    let result = store.get_collection("Products", &q, None, None).unwrap();
     assert_eq!(result.len(), 3);
 }
 
@@ -238,7 +238,7 @@ fn store_get_collection_with_count() {
 fn store_get_collection_not_found() {
     let store = create_test_store();
     let q = ODataQuery::empty();
-    let result = store.get_collection("NonExistent", &q, None);
+    let result = store.get_collection("NonExistent", &q, None, None);
     assert!(result.is_err());
 }
 
@@ -248,7 +248,7 @@ fn store_get_collection_sub_collection() {
     let parent = ParentKey::new("Orders", EntityKey::single("ID", "O001"));
     let q = ODataQuery::empty();
     let result = store
-        .get_collection("OrderItems", &q, Some(&parent))
+        .get_collection("OrderItems", &q, Some(&parent), None)
         .unwrap();
     let values = result;
     assert_eq!(values.len(), 2); // I001 and I002 belong to O001
@@ -563,7 +563,7 @@ fn store_draft_edit_copies_children() {
     );
     let q = ODataQuery::empty();
     let children = store
-        .get_collection("OrderItems", &q, Some(&parent))
+        .get_collection("OrderItems", &q, Some(&parent), None)
         .unwrap();
     let values = children;
     assert_eq!(values.len(), 2); // I001 and I002 as drafts
@@ -588,7 +588,7 @@ fn store_draft_activate_activates_children() {
     );
     let q = ODataQuery::empty();
     let children = store
-        .get_collection("OrderItems", &q, Some(&parent))
+        .get_collection("OrderItems", &q, Some(&parent), None)
         .unwrap();
     let values = children;
     assert_eq!(values.len(), 2);
@@ -611,7 +611,7 @@ fn store_delete_draft_removes_children() {
     let parent_draft = ParentKey::new("Orders", draft_key.clone());
     let q = ODataQuery::empty();
     let children = store
-        .get_collection("OrderItems", &q, Some(&parent_draft))
+        .get_collection("OrderItems", &q, Some(&parent_draft), None)
         .unwrap();
     let values = children;
     assert_eq!(values.len(), 0);
@@ -622,7 +622,7 @@ fn store_delete_draft_removes_children() {
         EntityKey::composite(&[("ID", "O001"), ("IsActiveEntity", "true")]),
     );
     let active_children = store
-        .get_collection("OrderItems", &q, Some(&parent_active))
+        .get_collection("OrderItems", &q, Some(&parent_active), None)
         .unwrap();
     let active_values = active_children;
     assert_eq!(active_values.len(), 2);
@@ -1048,7 +1048,7 @@ fn vl_read_items_via_parent() {
     );
     let q = ODataQuery::empty();
     let result = store
-        .get_collection("FieldValueListItems", &q, Some(&parent))
+        .get_collection("FieldValueListItems", &q, Some(&parent), None)
         .unwrap();
     let values = result;
     assert_eq!(values.len(), 2); // ITEM-001 and ITEM-002 belong to VL-001
@@ -1063,7 +1063,7 @@ fn vl_read_items_other_parent() {
     );
     let q = ODataQuery::empty();
     let result = store
-        .get_collection("FieldValueListItems", &q, Some(&parent))
+        .get_collection("FieldValueListItems", &q, Some(&parent), None)
         .unwrap();
     let values = result;
     assert_eq!(values.len(), 1); // ITEM-003 belongs to VL-002
@@ -1082,7 +1082,7 @@ fn vl_draft_edit_copies_children_with_custom_fk() {
     );
     let q = ODataQuery::empty();
     let children = store
-        .get_collection("FieldValueListItems", &q, Some(&parent_draft))
+        .get_collection("FieldValueListItems", &q, Some(&parent_draft), None)
         .unwrap();
     let values = children;
     assert_eq!(values.len(), 2);
@@ -1141,7 +1141,7 @@ fn vl_create_item_visible_in_subcollection() {
     // Should now have 3 draft items (2 copied + 1 new)
     let q = ODataQuery::empty();
     let children = store
-        .get_collection("FieldValueListItems", &q, Some(&parent_draft))
+        .get_collection("FieldValueListItems", &q, Some(&parent_draft), None)
         .unwrap();
     let values = children;
     assert_eq!(values.len(), 3);
@@ -1199,7 +1199,7 @@ fn vl_activate_with_new_child() {
         EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "true")]),
     );
     let children = store
-        .get_collection("FieldValueListItems", &q, Some(&parent_active))
+        .get_collection("FieldValueListItems", &q, Some(&parent_active), None)
         .unwrap();
     let values = children;
     assert_eq!(values.len(), 3); // 2 original + 1 new
@@ -1210,7 +1210,7 @@ fn vl_activate_with_new_child() {
 
     // 5. No draft children remain
     let children_draft = store
-        .get_collection("FieldValueListItems", &q, Some(&parent_draft))
+        .get_collection("FieldValueListItems", &q, Some(&parent_draft), None)
         .unwrap();
     let draft_values = children_draft;
     assert_eq!(draft_values.len(), 0);
@@ -1271,7 +1271,7 @@ fn vl_discard_draft_removes_children() {
 
     // Draft children gone
     let children = store
-        .get_collection("FieldValueListItems", &q, Some(&parent_draft))
+        .get_collection("FieldValueListItems", &q, Some(&parent_draft), None)
         .unwrap();
     assert_eq!(children.len(), 0);
 
@@ -1281,7 +1281,7 @@ fn vl_discard_draft_removes_children() {
         EntityKey::composite(&[("ID", "VL-001"), ("IsActiveEntity", "true")]),
     );
     let active = store
-        .get_collection("FieldValueListItems", &q, Some(&parent_active))
+        .get_collection("FieldValueListItems", &q, Some(&parent_active), None)
         .unwrap();
     assert_eq!(active.len(), 2);
 }
@@ -1301,7 +1301,7 @@ fn vl_other_list_unaffected_by_draft() {
         EntityKey::composite(&[("ID", "VL-002"), ("IsActiveEntity", "true")]),
     );
     let children = store
-        .get_collection("FieldValueListItems", &q, Some(&parent_vl2))
+        .get_collection("FieldValueListItems", &q, Some(&parent_vl2), None)
         .unwrap();
     let values = children;
     assert_eq!(values.len(), 1);
@@ -1353,7 +1353,7 @@ fn vl_full_lifecycle_create_list_add_items_activate() {
 
     // 3. Verify draft items
     let draft_children = store
-        .get_collection("FieldValueListItems", &q, Some(&parent))
+        .get_collection("FieldValueListItems", &q, Some(&parent), None)
         .unwrap();
     assert_eq!(draft_children.len(), 3);
 
@@ -1375,7 +1375,7 @@ fn vl_full_lifecycle_create_list_add_items_activate() {
         EntityKey::composite(&[("ID", &new_list_id), ("IsActiveEntity", "true")]),
     );
     let active_children = store
-        .get_collection("FieldValueListItems", &q, Some(&parent_active))
+        .get_collection("FieldValueListItems", &q, Some(&parent_active), None)
         .unwrap();
     let items = active_children;
     assert_eq!(items.len(), 3);
@@ -1405,7 +1405,7 @@ fn retrieve_facettes_without_duplicates() {
     q.filter = ODataFilterExpression::new("ConfigID eq 4553b09f-ab02-4fc9-9653-0dbf32d4cda4");
     q.skip = Some(0);
     q.top = Some(100);
-    let col = store.get_collection("EntityFacets", &q, None).unwrap();
+    let col = store.get_collection("EntityFacets", &q, None, None).unwrap();
     let values = col;
     assert_eq!(values.len(), 1); // Only one facet expected for the given ConfigID
 }

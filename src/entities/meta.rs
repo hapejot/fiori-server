@@ -576,7 +576,6 @@ mod tests {
     use super::*;
     use crate::runtime::data_store::*;
     use crate::entity::ODataEntity;
-    use serde_json::json;
     use std::collections::HashMap;
     use std::sync::RwLock;
 
@@ -805,6 +804,7 @@ mod tests {
             _: &str,
             _: &ODataQuery,
             _: Option<&ParentKey>,
+            _: Option<&Value>,
         ) -> Result<Vec<Value>, StoreError> {
             Ok(vec![])
         }

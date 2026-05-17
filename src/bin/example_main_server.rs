@@ -9,9 +9,12 @@ use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
-use simple_fiori_server::settings::Settings;
 use simple_fiori_server::{app_state::AppState, entity::ODataEntity, spec, BASE_PATH};
 use simple_fiori_server::{entity::ODataEntityImp, runtime::handlers::*, NAMESPACE};
+use simple_fiori_server::{
+    runtime::data_store::{DraftDataStore, InMemoryDataStore},
+    settings::Settings,
+};
 
 fn webapp_dir() -> PathBuf {
     std::env::current_dir().unwrap_or_default().join("webapp")
@@ -152,20 +155,22 @@ impl ODataEntityImp for ExampleOrderEntity {
     }
 
     fn initial_data(&self) -> Vec<Value> {
-        vec![json!({
-            "ID": "11111111-1111-1111-1111-111111111111",
-            "OrderName": "Laptop Bundle",
-            "OrderDate": "2026-05-01",
-            "TotalAmount": 2499.00,
-            "CustomerID": "33333333-3333-3333-3333-333333333333"
-        }),
-        json!({
-            "ID": "11111111-1111-1111-1111-222222222222",
-            "OrderName": "Widescreen Monitor",
-            "OrderDate": "2026-05-01",
-            "TotalAmount": 999.00,
-            "CustomerID": "33333333-3333-3333-3333-333333333333"
-        })]
+        vec![
+            json!({
+                "ID": "11111111-1111-1111-1111-111111111111",
+                "OrderName": "Laptop Bundle",
+                "OrderDate": "2026-05-01",
+                "TotalAmount": 2499.00,
+                "CustomerID": "33333333-3333-3333-3333-333333333333"
+            }),
+            json!({
+                "ID": "11111111-1111-1111-1111-222222222222",
+                "OrderName": "Widescreen Monitor",
+                "OrderDate": "2026-05-01",
+                "TotalAmount": 999.00,
+                "CustomerID": "33333333-3333-3333-3333-333333333333"
+            }),
+        ]
     }
 
     fn entity_spec(&self) -> Option<EntitySpec> {
@@ -282,30 +287,35 @@ async fn main() {
     println!("  Storage      : In-Memory");
     println!("{}", "=".repeat(60));
     println!("  Press Ctrl+C to stop\n");
-    let order_item_entity = ExampleOrderItemEntity::new();
     let data_dir = std::env::current_dir().unwrap_or_default().join("data");
+    let entities: Vec<ODataEntity> = vec![
+        ODataEntity::new(Arc::new(ExampleOrderEntity)),
+        ODataEntity::new(Arc::new(ExampleOrderItemEntity::new())),
+        ODataEntity::new(Arc::new(ExampleCustomerEntity)),
+    ];
+    let store = DraftDataStore::new(Arc::new(InMemoryDataStore::new(data_dir, entities)));
     let builder = AppState::builder()
         .settings(settings)
-        .data_dir(&data_dir)
+        .data_store(Box::new(store))
         .entity(ODataEntity::new(Arc::new(ExampleOrderEntity)))
-        .entity(ODataEntity::new(Arc::new(order_item_entity)))
+        .entity(ODataEntity::new(Arc::new(ExampleOrderItemEntity::new())))
         .entity(ODataEntity::new(Arc::new(ExampleCustomerEntity)))
         .relationships(relationships());
 
     let app_state = Arc::new(builder.build());
 
     let base = BASE_PATH;
-    let mut entity_routes = Router::new();
+    // let mut entity_routes = Router::new();
 
-    for entity in app_state.entities.read().unwrap().iter() {
-        info!("Registering EntitySet: {}", entity.set_name());
-        let set = entity.set_name();
-        entity_routes = entity_routes
-            .route(
-                &format!("{}/{}", base, set),
-                get(collection_handler).head(collection_handler),
-            )
-    }
+    // for entity in app_state.entities.read().unwrap().iter() {
+    //     info!("Registering EntitySet: {}", entity.set_name());
+    //     let set = entity.set_name();
+    //     entity_routes = entity_routes
+    //         .route(
+    //             &format!("{}/{}", base, set),
+    //             get(collection_handler).head(collection_handler),
+    //         )
+    // }
 
     let entity_sets = format!("{base}/{{*entity_set}}");
     info!("entity sets route: {}", entity_sets);
