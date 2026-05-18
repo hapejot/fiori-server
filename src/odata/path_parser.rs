@@ -58,12 +58,22 @@ peg::parser! {
 
         rule literal() -> Result<String, ODataPathError>
             = s:string_value() { s }
+            / v:uuid_value() { v }
             / "true" { Ok("true".to_string()) }
             / "false" { Ok("false".to_string()) }
 
-                    /// Parses a string value enclosed in single quotes.
+        /// Parses a string value enclosed in single quotes.
         rule string_value() -> Result<String, ODataPathError>
             = "'" s:quote_escaped_string_content()* "'" { Ok(s.into_iter().collect::<Result<String, _>>()?) }
+
+        /// Parses a uuid value.
+        rule uuid_value() -> Result<String, ODataPathError>
+            = id:$(hex()*<8> "-" hex()*<4> "-" hex()*<4> "-" hex()*<4> "-" hex()*<12> ) { Ok(id.to_string()) }
+
+
+        /// Parses a single hexadecimal digit.
+        rule hex() -> char
+            = ['0'..='9'|'a'..='f'|'A'..='F']
 
         rule quote_escaped_string_content() -> Result<char, ODataPathError>
             = r"\" e:escape_character() { e }

@@ -651,7 +651,7 @@ impl DataStore for DraftDataStore {
         key: &EntityKey,
         query: &ODataQuery,
     ) -> Result<Value, StoreError> {
-        todo!()
+        self.parent.read_record(set_name, key, query)
     }
 
     fn create_entity(

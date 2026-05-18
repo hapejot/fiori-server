@@ -30,7 +30,7 @@ fn parse_uri() {
         Err(e) => panic!("Failed to parse URI: {}", e),
     }
 
-    let s = "Orders(ProductID='11111111-1111-1111-1111-111111111111',IsActiveEntity=true)";
+    let s = "Orders(ProductID=11111111-1111-1111-1111-111111111111,IsActiveEntity=true)";
     let x = parse_odata_resource_path(s);
     match x {
         Ok(u) => {
