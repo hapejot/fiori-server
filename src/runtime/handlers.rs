@@ -192,13 +192,12 @@ pub async fn collection_handler(
 ) -> Response {
     info!(path, ?uri, uri_path=?uri.path(), query=?uri.query(), "collection_handler");
 
-    json_response(
-    handle_collection(&path, state,uri.query().unwrap_or("")))
+    json_response(handle_collection(&path, state, uri.query().unwrap_or("")))
     // error_response(404, "Entity set not found")
 }
 
 fn handle_collection(path: &str, state: Arc<AppState>, query_str: &str) -> Value {
-    let mut resource_path = match parse_odata_resource_path(&path){
+    let mut resource_path = match parse_odata_resource_path(&path) {
         Ok(p) => p,
         Err(e) => panic!("Failed to parse resource path '{}': {}", path, e),
     };
@@ -207,9 +206,14 @@ fn handle_collection(path: &str, state: Arc<AppState>, query_str: &str) -> Value
     match main_resource {
         ODataPathSegment::EntitySet(set_name) => {
             let query = ODataQuery::parse(query_str);
-            let r = match state.data_store.get_collection(&set_name, &query, None, None) {
+            let r = match state
+                .data_store
+                .get_collection(&set_name, &query, None, None)
+            {
                 Ok(v) => v,
-                Err(e) => return json!({"error": {"code": "500", "message": format!("Data store error: {}", e)}}),
+                Err(e) => {
+                    return json!({"error": {"code": "500", "message": format!("Data store error: {}", e)}})
+                }
             };
             while resource_path.len() > 0 {
                 let o = resource_path.remove(0);
@@ -217,9 +221,7 @@ fn handle_collection(path: &str, state: Arc<AppState>, query_str: &str) -> Value
                     ODataPathSegment::EntitySet(_) => todo!(),
                     ODataPathSegment::KeyPredicate(_, items) => todo!(),
                     ODataPathSegment::NavigationProperty(_) => todo!(),
-                    ODataPathSegment::Count => {
-                        return json!({"@odata.count": r.len() })
-                    }
+                    ODataPathSegment::Count => return json!({"@odata.count": r.len() }),
                 }
             }
             return json!({"value": r, "@odata.count": r.len()});
@@ -235,7 +237,7 @@ fn handle_collection(path: &str, state: Arc<AppState>, query_str: &str) -> Value
             if resource_path.len() > 0 {
                 return json!({"error": {"code": "400", "message": "Key predicate must be last segment in path"}});
             }
-            return json!({"value": r.unwrap()})
+            return json!({"value": r.unwrap()});
         }
         ODataPathSegment::NavigationProperty(_) => todo!(),
         x => todo!("segment {:?} not supported", x),
@@ -420,7 +422,7 @@ pub async fn batch_handler(
             continue;
         }
 
-       if false && segment.contains("multipart/mixed") {
+        if false && segment.contains("multipart/mixed") {
             let cs_boundary = segment
                 .lines()
                 .find_map(|line| {
@@ -797,11 +799,15 @@ fn handle_batch_post(rel_url: &str, body: &str, state: Arc<AppState>) -> (u16, V
 /// Generic batch GET – resolves paths via the entity registry.
 #[tracing::instrument(skip(state, rel_url))]
 fn handle_batch_get(rel_url: &str, state: Arc<AppState>) -> Value {
-    assert!(!rel_url.starts_with('/'), "Batch GET URL must be relative and start with '/': {}", rel_url);
+    assert!(
+        !rel_url.starts_with('/'),
+        "Batch GET URL must be relative and start with '/': {}",
+        rel_url
+    );
 
-  let (url,query) = rel_url.split_once('?').unwrap_or((rel_url,""));
-  return handle_collection(url, state, query);
-  
+    let (url, query) = rel_url.split_once('?').unwrap_or((rel_url, ""));
+    return handle_collection(url, state, query);
+
     let entities = state.entities.read().unwrap();
     let resolved_entities = state.resolved_entities.read().unwrap();
     let parsed = resolve_odata_path_with_resolved(rel_url, &entities, &resolved_entities);
@@ -851,10 +857,12 @@ fn handle_batch_get(rel_url: &str, state: Arc<AppState>) -> Value {
                 parent_entity.set_name(),
                 entity_key_from_routing(&parent_key),
             );
-            match state
-                .data_store
-                .get_collection(child_entity.set_name(), &query, Some(&parent), None)
-            {
+            match state.data_store.get_collection(
+                child_entity.set_name(),
+                &query,
+                Some(&parent),
+                None,
+            ) {
                 Ok(val) => json!({"value": val, "@odata.count": val.len()}),
                 Err(e) => json!({"error": {"code": "404", "message": format!("{}", e)}}),
             }
@@ -1229,9 +1237,13 @@ pub async fn catch_all(
             child_entity,
             ..
         } => match method {
-            Method::GET => {
-                handle_sub_collection(parent_entity, &parent_key, child_entity, query, state.clone())
-            }
+            Method::GET => handle_sub_collection(
+                parent_entity,
+                &parent_key,
+                child_entity,
+                query,
+                state.clone(),
+            ),
             Method::POST => {
                 let body_str = String::from_utf8_lossy(&body);
                 let data: Value = serde_json::from_str(&body_str).unwrap_or(json!({}));

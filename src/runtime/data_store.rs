@@ -615,13 +615,29 @@ impl DataStore for DraftDataStore {
         parent: Option<&ParentKey>,
         default: Option<&Value>,
     ) -> Result<Vec<Value>, StoreError> {
-        // TODO: introduce default result row into get collection 
-        let default = json!({
-            "IsActiveEntity": true,
-            "HasActiveEntity": true,
-            "HasDraftEntity": false,
-        });
-        let mut r = self.parent.get_collection(set_name, query, parent, None)?;
+        // TODO: introduce default result row into get collection
+        let default = if let Some(default) = default {
+            if let Some(default_obj) = default.clone().as_object_mut() {
+                default_obj.insert("IsActiveEntity".into(), true.into());
+                default_obj.insert("HasActiveEntity".into(), true.into());
+                default_obj.insert("HasDraftEntity".into(), false.into());
+                json!(default_obj)
+            } else {
+                return Err(StoreError::BadRequest(
+                    "Default value must be a JSON object".into(),
+                ));
+            }
+        } else {
+            json!({
+                "IsActiveEntity": true,
+                "HasActiveEntity": true,
+                "HasDraftEntity": false,
+            })
+        };
+
+        let r = self
+            .parent
+            .get_collection(set_name, query, parent, Some(&default))?;
         Ok(r)
     }
 
@@ -939,24 +955,33 @@ impl DataStore for InMemoryDataStore {
         let entities_snap = self.entities_snapshot();
         let resolved_entities = self.resolved_entities_snapshot();
         let store = self.store.read().unwrap();
+        let default = match _default {
+            Some(d) => d.clone(),
+            None => json!(serde_json::Map::<String, Value>::new()),
+        };
+        let default = default.as_object().unwrap();
+
         // let qs = query.to_query_map();
         let expand_names: Vec<String> = query
             .expand
             .iter()
             .map(|e| e.nav_property.clone())
             .collect();
-        let expand_refs: Vec<&str> = expand_names.iter().map(|s| s.as_str()).collect();
+        let _expand_refs: Vec<&str> = expand_names.iter().map(|s| s.as_str()).collect();
         match parent {
-            Some(parent_ref) => todo!(),
+            Some(_parent_ref) => todo!(),
             None => {
                 let records: Vec<Value> = store
                     .get(set_name)
                     .unwrap()
                     .iter()
-                    .filter(|r| query.filter.eval(*r))
-                    .cloned()
+                    .map(|x| {
+                        let mut record = default.clone();
+                        record.extend(x.as_object().unwrap().clone());
+                        Value::Object(record)
+                    })
+                    .filter(|r| query.filter.eval(r))
                     .collect();
-
                 Ok(records)
             }
         }
