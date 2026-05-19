@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::ops::Index;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
@@ -645,13 +646,38 @@ impl DataStore for DraftDataStore {
         todo!()
     }
 
+    #[tracing::instrument(skip(self, query, key))]
     fn read_record(
         &self,
         set_name: &str,
         key: &EntityKey,
         query: &ODataQuery,
     ) -> Result<Value, StoreError> {
-        self.parent.read_record(set_name, key, query)
+        info!("reading record from parent query: {:#?}", query);
+        let mut select = query.select.clone();
+        let mut expand = query.expand.clone();
+
+        let sel_draft_admin = select
+            .iter()
+            .position(|s| s == "DraftAdministrativeData")
+            .map(|i| {
+                select.remove(i);
+            })
+            .is_some();
+        let removed = expand
+            .iter()
+            .position(|x| x.nav_property == "DraftAdministrativeData")
+            .map(|i| expand.swap_remove(i));
+        let sub_query = ODataQuery {
+            filter: query.filter.clone(),
+            select,
+            expand,
+            orderby: query.orderby.clone(),
+            top: query.top,
+            skip: query.skip,
+            count: query.count,
+        };
+        self.parent.read_record(set_name, key, &sub_query)
     }
 
     fn create_entity(
@@ -1039,6 +1065,7 @@ impl DataStore for InMemoryDataStore {
         key: &EntityKey,
         query: &ODataQuery,
     ) -> Result<Value, StoreError> {
+        info!("read record");
         let entity = self
             .find_entity(set_name)
             .ok_or_else(|| StoreError::NotFound(format!("Entity set '{}' not found", set_name)))?;

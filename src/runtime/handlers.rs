@@ -234,9 +234,6 @@ fn handle_collection(path: &str, state: Arc<AppState>, query_str: &str) -> Value
             let key = &EntityKey::composite(&pairs);
             let query = ODataQuery::parse(query_str);
             let r = state.data_store.read_record(&set_name, key, &query);
-            if resource_path.len() > 0 {
-                return json!({"error": {"code": "400", "message": "Key predicate must be last segment in path"}});
-            }
             return json!({"value": r.unwrap()});
         }
         ODataPathSegment::NavigationProperty(_) => todo!(),
